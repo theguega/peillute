@@ -3,16 +3,16 @@
 Ce projet est une application répartie en Rust utilisant TCP pour la communication entre les nœuds.
 L'objectif est d'implémenter manuellement des mécanismes comme les horloges vectorielles, la gestion des réplicats et la prise de snapshots.
 
-tokio : Pour la gestion asynchrone et les connexions TCP.
-serde et bincode : Pour la sérialisation et la désérialisation des messages entre les nœuds.
-clap : Pour la gestion des arguments de la ligne de commande.
-tracing : Pour les logs détaillés.
+`tokio` : Pour la gestion asynchrone et les connexions TCP.  
+`serde` et `bincode` : Pour la sérialisation et la désérialisation des messages entre les nœuds.  
+`clap` : Pour la gestion des arguments de la ligne de commande.  
+`tracing` : Pour les logs détaillés.
 
 ## 🚀 Installation
 
 ### 1. Cloner le dépôt
 ```sh
-
+https://gitlab.utc.fr/guegathe/peillute.git -j8
 ```
 
 ### 2. Installer les dépendances
