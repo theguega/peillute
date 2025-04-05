@@ -3,14 +3,14 @@
 Ce projet est une application répartie en Rust utilisant TCP pour la communication entre les nœuds.
 L'objectif est d'implémenter manuellement des mécanismes comme les horloges vectorielles, la gestion des réplicats et la prise de snapshots.
 
-`tokio` : Pour la gestion asynchrone et les connexions TCP.  
-`serde` et `bincode` : Pour la sérialisation et la désérialisation des messages entre les nœuds.  
-`clap` : Pour la gestion des arguments de la ligne de commande.  
+`tokio` : Pour la gestion asynchrone et les connexions TCP.
+`serde` et `bincode` : Pour la sérialisation et la désérialisation des messages entre les nœuds.
+`clap` : Pour la gestion des arguments de la ligne de commande.
 `tracing` : Pour les logs détaillés.
 
 ## 🚀 Installation
 
-### 1. Cloner le dépôt
+### 1. Cloner le repo
 ```sh
 https://gitlab.utc.fr/guegathe/peillute.git -j8
 ```
@@ -23,13 +23,16 @@ cargo build
 
 ## 📡 Lancer un nœud
 
-Chaque instance fonctionne comme un nœud sur le réseau local. Pour en lancer un :
+Chaque instance fonctionne comme un nœud sur le réseau local. Exemple pour lancer 3 nœuds :
 ```sh
-cargo run -- <adresse_ip> <port>
-```
-Exemple :
-```sh
-cargo run -- 127.0.0.1 8080
+# Terminal 1
+RUST_LOG=info cargo run -- --id 1 --port 8000 --peers 127.0.0.1:8001,127.0.0.1:8002
+
+# Terminal 2
+RUST_LOG=info cargo run -- --id 2 --port 8001 --peers 127.0.0.1:8000,127.0.0.1:8002
+
+# Terminal 3
+RUST_LOG=info cargo run -- --id 3 --port 8002 --peers 127.0.0.1:8000,127.0.0.1:8001
 ```
 
 ## 🛠️ Développement et Tests
@@ -38,10 +41,3 @@ cargo run -- 127.0.0.1 8080
 ```sh
 cargo test
 ```
-
-## 📜 Fonctionnalités prévues
-- [ ] Communication pair-à-pair via TCP
-- [ ] Gestion de la cohérence des réplicats
-- [ ] Algorithme d’exclusion mutuelle
-- [ ] Implémentation des horloges vectorielles
-- [ ] Snapshots distribués
