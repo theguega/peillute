@@ -8,4 +8,3 @@ test:
     - cargo test --verbose
   only:
     - branches
-

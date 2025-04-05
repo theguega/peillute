@@ -4,9 +4,12 @@ Ce projet est une application répartie en Rust utilisant TCP pour la communicat
 L'objectif est d'implémenter manuellement des mécanismes comme les horloges vectorielles, la gestion des réplicats et la prise de snapshots.
 
 `tokio` : Pour la gestion asynchrone et les connexions TCP.
+
 `serde` et `bincode` : Pour la sérialisation et la désérialisation des messages entre les nœuds.
+
 `clap` : Pour la gestion des arguments de la ligne de commande.
-`tracing` : Pour les logs détaillés.
+
+`env_logger` : Pour la gestion des logs en console.
 
 ## 🚀 Installation
 
