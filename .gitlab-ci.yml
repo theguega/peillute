@@ -1,0 +1,11 @@
+stages:
+  - test
+
+test:
+  stage: test
+  image: rust:latest
+  script:
+    - cargo test --verbose
+  only:
+    - branches
+
