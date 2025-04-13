@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 
+#[allow(unused)]
 #[derive(Debug)]
 pub struct AppState {
     // --- Site Info ---

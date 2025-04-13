@@ -3,9 +3,11 @@ use log::info;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::task;
 
 mod clock;
 mod message;
+mod network;
 mod state;
 
 use state::AppState;
@@ -53,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         site_id, local_addr, peer_addrs
     );
 
-    // Shared state initialization
+    // Shared state initialization - not used yet
     #[allow(unused_variables)]
     let shared_state = Arc::new(Mutex::new(AppState::new(
         site_id,
@@ -61,6 +63,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         peer_addrs.clone(),
     )));
 
+    let local_addr_clone = local_addr.clone();
+
+    // Start listening for incoming connections
+    task::spawn(async move {
+        if let Err(e) = network::start_listening(&local_addr_clone.to_string()).await {
+            eprintln!("Error starting listener: {}", e);
+        }
+    });
+
+    // Send a message to all peers
+    println!("waiting some time to let user lauch the peers");
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    println!("sending message to peers");
+    let hello_id_site = format!("Hello from site {}", site_id);
+    for peer_addr in peer_addrs.clone() {
+        let peer_addr_str = peer_addr.to_string();
+        if let Err(e) = network::send_message(&peer_addr_str, hello_id_site.as_str()).await {
+            eprintln!("Error sending message to {}: {}", peer_addr_str, e);
+        }
+    }
+
+    // Wait some time to receive messages from peers
+    for _ in 0..100 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    //maybe we need to add a shut down strategy here
     info!("Shutting down site {}.", site_id);
     Ok(())
 }

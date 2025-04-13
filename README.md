@@ -25,7 +25,7 @@ Assurez-vous d'avoir Rust et Cargo installés, puis exécutez :
 cargo check && cargo test
 
 # Build
-cargo build --release
+cargo build
 ```
 
 ## 📡 Lancer un nœud

@@ -3,7 +3,8 @@ use log::trace;
 use std::sync::atomic::Ordering;
 
 // --- Vector Clock ---
-
+#[allow(unused)]
+#[allow(dead_code)]
 pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
     let site_id = state.site_id;
     if site_id < state.vector_clock.len() {
@@ -21,6 +22,8 @@ pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
     get_vector_clock(state)
 }
 
+#[allow(unused)]
+#[allow(dead_code)]
 pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Vec<u64> {
     let site_id = state.site_id;
     trace!(
@@ -73,12 +76,14 @@ pub fn get_vector_clock(state: &AppState) -> Vec<u64> {
 }
 
 // --- Lamport Clock ---
-
+#[allow(unused)]
+#[allow(dead_code)]
 pub fn increment_lamport_clock(state: &mut AppState) -> u64 {
     state.lamport_clock.fetch_add(1, Ordering::SeqCst);
     state.lamport_clock.load(Ordering::SeqCst)
 }
-
+#[allow(unused)]
+#[allow(dead_code)]
 pub fn get_lamport_clock(state: &AppState) -> u64 {
     state.lamport_clock.load(Ordering::SeqCst)
 }
@@ -88,7 +93,6 @@ mod tests {
     use super::*;
     use crate::state::AppState;
     use std::net::SocketAddr;
-    use std::sync::atomic::Ordering;
 
     #[test]
     fn test_increment_vector() {
