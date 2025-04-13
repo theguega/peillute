@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 
 #[derive(Debug)]
-pub struct SharedState {
+pub struct AppState {
     // --- Site Info ---
     pub site_id: usize,
     pub num_sites: usize,
@@ -13,13 +13,11 @@ pub struct SharedState {
     // --- Logical Clocks ---
     pub vector_clock: Vec<AtomicU64>,
     pub lamport_clock: AtomicU64,
-    // --- Mutual Exclusion ---
-    // mutex to ensure mutual exclusion
     // --- Snapshot ---
     // snapshot of the state
 }
 
-impl SharedState {
+impl AppState {
     pub fn new(site_id: usize, num_sites: usize, peer_addrs: Vec<SocketAddr>) -> Self {
         let vector_clock: Vec<AtomicU64> = (0..num_sites).map(|_| AtomicU64::new(0)).collect();
 
@@ -45,7 +43,7 @@ mod tests {
             "127.0.0.1:8081".parse().unwrap(),
             "127.0.0.1:8082".parse().unwrap(),
         ];
-        let shared_state = SharedState::new(site_id, num_sites, peer_addrs.clone());
+        let shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
 
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.num_sites, num_sites);

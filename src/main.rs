@@ -8,7 +8,7 @@ mod clock;
 mod message;
 mod state;
 
-use state::SharedState;
+use state::AppState;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Shared state initialization
     #[allow(unused_variables)]
-    let shared_state = Arc::new(Mutex::new(SharedState::new(
+    let shared_state = Arc::new(Mutex::new(AppState::new(
         site_id,
         num_sites,
         peer_addrs.clone(),

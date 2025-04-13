@@ -1,10 +1,10 @@
-use crate::state::SharedState;
+use crate::state::AppState;
 use log::trace;
 use std::sync::atomic::Ordering;
 
 // --- Vector Clock ---
 
-pub fn increment_vector(state: &mut SharedState) -> Vec<u64> {
+pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
     let site_id = state.site_id;
     if site_id < state.vector_clock.len() {
         state.vector_clock[site_id].fetch_add(1, Ordering::SeqCst);
@@ -21,7 +21,7 @@ pub fn increment_vector(state: &mut SharedState) -> Vec<u64> {
     get_vector_clock(state)
 }
 
-pub fn update_vector_on_receive(state: &mut SharedState, received_vc: &[u64]) -> Vec<u64> {
+pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Vec<u64> {
     let site_id = state.site_id;
     trace!(
         "Site {}: Updating vector clock on receive. Received VC: {:?}. Current VC: {:?}",
@@ -64,7 +64,7 @@ pub fn update_vector_on_receive(state: &mut SharedState, received_vc: &[u64]) ->
     get_vector_clock(state)
 }
 
-pub fn get_vector_clock(state: &SharedState) -> Vec<u64> {
+pub fn get_vector_clock(state: &AppState) -> Vec<u64> {
     state
         .vector_clock
         .iter()
@@ -74,19 +74,19 @@ pub fn get_vector_clock(state: &SharedState) -> Vec<u64> {
 
 // --- Lamport Clock ---
 
-pub fn increment_lamport_clock(state: &mut SharedState) -> u64 {
+pub fn increment_lamport_clock(state: &mut AppState) -> u64 {
     state.lamport_clock.fetch_add(1, Ordering::SeqCst);
     state.lamport_clock.load(Ordering::SeqCst)
 }
 
-pub fn get_lamport_clock(state: &SharedState) -> u64 {
+pub fn get_lamport_clock(state: &AppState) -> u64 {
     state.lamport_clock.load(Ordering::SeqCst)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::SharedState;
+    use crate::state::AppState;
     use std::net::SocketAddr;
     use std::sync::atomic::Ordering;
 
@@ -95,7 +95,7 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = SharedState::new(site_id, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
 
         let initial_clock = get_vector_clock(&shared_state);
         let updated_clock = increment_vector(&mut shared_state);
@@ -108,7 +108,7 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = SharedState::new(site_id, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
 
         let mut received_vc = vec![0; num_sites];
         received_vc[0] = 2;
@@ -125,7 +125,7 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = SharedState::new(site_id, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
 
         let initial_clock = get_lamport_clock(&shared_state);
         let updated_clock = increment_lamport_clock(&mut shared_state);
@@ -138,7 +138,7 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let shared_state = SharedState::new(site_id, num_sites, peer_addrs.clone());
+        let shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
 
         assert_eq!(get_lamport_clock(&shared_state), 0);
     }
