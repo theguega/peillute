@@ -21,7 +21,11 @@ https://gitlab.utc.fr/guegathe/peillute.git -j8
 ### 2. Installer les dépendances
 Assurez-vous d'avoir Rust et Cargo installés, puis exécutez :
 ```sh
-cargo build
+# Check & Test
+cargo check && cargo test
+
+# Build
+cargo build --release
 ```
 
 ## 📡 Lancer un nœud
