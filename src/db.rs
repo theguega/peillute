@@ -10,6 +10,8 @@ struct Transaction {
     optional_msg: Option<String>,
 }
 
+const NULL: &str = "NULL";
+
 use std::io;
 use std::io::{Write, BufReader, BufRead, ErrorKind};
 use std::fs::File;
@@ -129,7 +131,7 @@ fn create_user(conn: &rusqlite::Connection, unique_name: &str) -> rusqlite::Resu
 
 fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amount: f64, lamport_time: &mut i64, source_node: &str, optional_msg: &str) -> rusqlite::Result<()> {
     
-    if from_user!="NULL"{
+    if from_user!=NULL{
         let from_solde=calculate_solde(from_user)?;
         if from_solde<amount{
             // not enought money #broke
@@ -154,7 +156,7 @@ fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lam
         // amount should be >0
         return Err(rusqlite::Error::InvalidQuery);
     }
-    create_tsx(&conn, "NULL", unique_name, amount, lamport_time, source_node, "Deposit");
+    create_tsx(&conn, NULL, unique_name, amount, lamport_time, source_node, "Deposit");
 
     update_solde(&conn,unique_name);
     
@@ -175,7 +177,7 @@ fn withdraw_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, la
         return Err(rusqlite::Error::InvalidQuery);
     }
 
-    create_tsx(&conn, unique_name, "NULL", amount, lamport_time, source_node, "Withdraw");
+    create_tsx(&conn, unique_name, NULL, amount, lamport_time, source_node, "Withdraw");
 
     update_solde(&conn, unique_name);
     
