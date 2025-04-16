@@ -7,7 +7,6 @@ use std::cmp::Ordering;
 use rusqlite::ffi::SQLITE_NULL;
 use rusqlite::{params, Connection, Result};
 
-
 fn main() -> Result<()> {
 
     
@@ -19,7 +18,6 @@ fn main() -> Result<()> {
     //tests()
     Ok(())
 }
-
 
 fn calculate_solde(name: &str) -> Result<f64> {
     let conn: Connection = Connection::open("database.db")?;
@@ -58,7 +56,8 @@ fn drop() -> Result<()> {
 fn scenario2() -> Result<()>{
 
     let noeud = "A"; // noeud non mutable
-    let mut local_lamport_time: &mut i64 =&mut 0; // temps de lamport local qui est incrémenté à chaque action
+    // let mut local_lamport_time: &mut i64 =&mut 0; // temps de lamport local qui est incrémenté à chaque action
+    let mut local_lamport_time = 0;
 
     let conn: Connection = rusqlite::Connection::open("database.db")?;
     drop_table(&conn);
@@ -67,21 +66,19 @@ fn scenario2() -> Result<()>{
     create_user(&conn, "Bob")?;
     print_users(&conn)?;
 
-    deposit_user(&conn, "Alice", 150.0, local_lamport_time, noeud,);
-    deposit_user(&conn, "Bob", 250.0, local_lamport_time, noeud,);
+    deposit_user(&conn, "Alice", 150.0, &mut local_lamport_time, noeud,);
+    deposit_user(&conn, "Bob", 250.0, &mut local_lamport_time, noeud,);
 
 
-    create_tsx(&conn, "Alice", "Bob", 100.0, local_lamport_time, noeud, "Cookie");
-    create_tsx(&conn, "Bob", "Alice", 79.0, local_lamport_time, noeud, "Pizza party");
-
-    calculate_solde("Alice");
-    calculate_solde("Bob");
+    create_tsx(&conn, "Alice", "Bob", 100.0, &mut local_lamport_time, noeud, "Cookie");
+    create_tsx(&conn, "Bob", "Alice", 79.0, &mut local_lamport_time, noeud, "Pizza party");
 
     print_tsx(&conn)?;
     print_users(&conn)?;
 
     Ok(())
 }
+
 fn scenario1() -> Result<()>{
 
     let noeud = "A"; // noeud non mutable
@@ -133,7 +130,6 @@ fn drop_table(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-
 fn create_user(conn: &rusqlite::Connection, unique_name: &str) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO User (unique_name, solde) VALUES (?1,0)",
@@ -156,7 +152,6 @@ fn create_user_solde(conn: &rusqlite::Connection, unique_name: &str, solde: f64,
     Ok(())
 }
 
-
 fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> rusqlite::Result<()> {
     if amount<0.0{
         // amount should be >0
@@ -171,7 +166,6 @@ fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lam
     Ok(())
 }
 
-
 fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amount: f64, lamport_time: &mut i64, source_node: &str, optionnal_msg: &str) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optionnal_msg) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -185,7 +179,6 @@ fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amoun
 
     Ok(())
 }
-
 
 fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
@@ -242,7 +235,6 @@ fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 
     Ok(())
 }
-
 
 fn init_db() -> Result<()> {
     // création/connection à la db
