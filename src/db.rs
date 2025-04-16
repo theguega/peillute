@@ -21,28 +21,31 @@ fn main() -> Result<()> {
 }
 
 
-fn calculate_solde(name: &str) -> Result<()> {
-    let conn = Connection::open("database.db")?;
+fn calculate_solde(name: &str) -> Result<f64> {
+    let conn: Connection = Connection::open("database.db")?;
 
     let mut stmt = conn.prepare(
         "SELECT
             IFNULL((SELECT SUM(amount) FROM Transactions WHERE to_user = ?1), 0) -
             IFNULL((SELECT SUM(amount) FROM Transactions WHERE from_user = ?1), 0)
-
         AS difference;"
     )?;
 
     let solde: f64 = stmt.query_row(params![name], |row| row.get(0))?;
-    println!("User '{}' has a calculated solde of {}€", name, solde);
-
-    Ok(())
+    Ok(solde)
 }
 
-fn update_solde() -> Result<()> {
+fn update_solde(name: &str) -> Result<()> {
+    let conn = Connection::open("database.db")?;
 
-    
+    let solde = calculate_solde(name)?; // get the f64 value or return error
+
+    conn.execute(
+        "UPDATE User SET solde = ?1 WHERE name = ?2",
+        params![solde, name],
+    )?;
+
     Ok(())
-
 }
 
 fn drop() -> Result<()> {
@@ -146,6 +149,7 @@ fn create_user_solde(conn: &rusqlite::Connection, unique_name: &str, solde: f64,
     )?;
 
     create_tsx(&conn, "", unique_name, solde, lamport_time, source_node, "Deposit");
+    update_solde(unique_name);
 
     println!("User '{}' added with solde {}", unique_name, solde);
     Ok(())
@@ -159,11 +163,7 @@ fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lam
     }
     create_tsx(&conn, "NULL", unique_name, amount, lamport_time, source_node, "Deposit");
 
-    conn.execute(
-        "UPDATE User SET solde = solde + ? WHERE unique_name = ?",
-        rusqlite::params![amount, unique_name],
-    )?;
-
+    update_solde(unique_name);
     
     println!("User '{}' deposed {}€ in User", unique_name, amount);
 
@@ -178,6 +178,10 @@ fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amoun
     )?;
     println!("from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optionnal_msg: {}", from_user, to_user, amount, lamport_time, source_node, optionnal_msg);
     *lamport_time+=1;
+    update_solde(from_user);
+    update_solde(to_user);
+
+
     Ok(())
 }
 
@@ -190,12 +194,14 @@ fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;
 
-    println!("--- Users ---");
+    println!("------ Users ------");
     // boucle d'affichage
     for user in user_iter {
         let (name, solde) = user?;
         println!("Name: {}, Solde: {}", name, solde);
     }
+    println!("-------------------");
+
     Ok(())
 }
 
@@ -203,22 +209,24 @@ fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(
         "SELECT from_user, to_user, amount, lamport_time, source_node, optionnal_msg FROM Transactions"
     )?;
-    
+
     // récupère les transactions dans tsx_iter
     let tsx_iter = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(1)?,     // from_user
-            row.get::<_, String>(2)?,     // to_user
-            row.get::<_, f64>(3)?,        // amount
-            row.get::<_, i64>(4)?,        // lamport_time
-            row.get::<_, String>(5)?,     // source_node
-            row.get::<_, Option<String>>(6)?, // optionnal_msg (peut être NULL)
+            row.get::<_, String>(0)?,     // from_user
+            row.get::<_, String>(1)?,     // to_user
+            row.get::<_, f64>(2)?,        // amount
+            row.get::<_, i64>(3)?,        // lamport_time
+            row.get::<_, String>(4)?,     // source_node
+            row.get::<_, Option<String>>(5)?, // optionnal_msg (peut être NULL)
         ))
     })?;
 
     println!("--- Transactions ---");
     for tsx in tsx_iter {
+
         let (from_user, to_user, amount, lamport_time, source_node, optionnal_msg) = tsx?;
+
         println!(
             "from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optionnal_msg: {}",
             from_user,
@@ -229,6 +237,8 @@ fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             optionnal_msg.unwrap_or_else(|| "None".to_string())
         );
     }
+    println!("-------------------");
+
     Ok(())
 }
 
