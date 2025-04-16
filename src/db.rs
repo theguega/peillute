@@ -8,19 +8,73 @@ use rusqlite::{params, Connection, Result};
 
 
 fn main() -> Result<()> {
+
+    
+
+    scenario1();
+
+    //drop()
+    //tests()
+
+    Ok(())
+}
+
+fn drop() -> Result<()> {
+
+    let conn: Connection = rusqlite::Connection::open("database.db")?;
+
+    drop_table(&conn);
+    Ok(())
+}
+
+fn scenario1() -> Result<()>{
+
+    let noeud = "A"; // noeud non mutable
+    let mut local_lamport_time=0; // temps de lamport local qui est incrémenté à chaque action
+
+    let conn: Connection = rusqlite::Connection::open("database.db")?;
+    init_db();
+
+    create_user(&conn, "Alice", 153.0)?;
+    create_user(&conn, "Bob", 212.0)?;
+    print_users(&conn)?;
+
+    let (from_user, to_user, amount, lamport_time, source_node, optionnal_msg)=("Alice", "Bob", 100.0, 0, "A", "Cadeau");
+
+    create_tsx(&conn, from_user, to_user, amount, lamport_time, source_node, optionnal_msg);
+
+    print_tsx(&conn)?;
+    Ok(())
+}
+
+fn tests()  -> Result<()>{
+
     // connection à la DB dans le main
-    let conn = rusqlite::Connection::open("database.db")?;
+    let conn: Connection = rusqlite::Connection::open("database.db")?;
+    drop_table(&conn);
+    println!("Table dropped");
     // initialisation de la DB
     let res = init_db();
     println!("{}","ok");
     // création d'un user
-    create_user(&conn, "Clem", 150.0)?;
-    println!("Users : ");
+    create_user(&conn, "Alice", 150.0)?;
+    //println!("Users : ");
     print_users(&conn)?;
-    println!("Transactions : ");
+    //println!("Transactions : ");
     print_tsx(&conn)?;
+    //deposit_user(&conn, "Alex", 10000.0); 
+    print_users(&conn)?;
+    Ok(())
+
+}
+
+fn drop_table(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
+    conn.execute("DROP TABLE IF EXISTS User;", [])?;
+    println!("Tables dropped successfully.");
     Ok(())
 }
+
 
 fn create_user(conn: &rusqlite::Connection, unique_name: &str, solde: f64) -> rusqlite::Result<()> {
     conn.execute(
@@ -30,6 +84,33 @@ fn create_user(conn: &rusqlite::Connection, unique_name: &str, solde: f64) -> ru
     println!("User '{}' added with solde {}", unique_name, solde);
     Ok(())
 }
+
+fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64) -> rusqlite::Result<()> {
+    if amount<0.0{
+        // amount should be >0
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    conn.execute(
+        "UPDATE User SET solde = solde + ? WHERE unique_name = ?",
+        rusqlite::params![amount, unique_name],
+    )?;
+    
+    println!("User '{}' deposed {}€ in User", unique_name, amount);
+
+    Ok(())
+}
+
+
+fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amount: f64, lamport_time: i64, source_node: &str, optionnal_msg: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optionnal_msg) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![from_user, to_user, amount, lamport_time, source_node, optionnal_msg],
+    )?;
+    println!("from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optionnal_msg: {}", from_user, to_user, amount, lamport_time, source_node, optionnal_msg);
+
+    Ok(())
+}
+
 
 fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
@@ -50,13 +131,12 @@ fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 
 fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT tx_id, from_user, to_user, amount, lamport_time, source_node, optionnal_msg FROM Transactions"
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optionnal_msg FROM Transactions"
     )?;
     
     // récupère les transactions dans tsx_iter
     let tsx_iter = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,     // tx_id
             row.get::<_, String>(1)?,     // from_user
             row.get::<_, String>(2)?,     // to_user
             row.get::<_, f64>(3)?,        // amount
@@ -68,10 +148,9 @@ fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 
     println!("--- Transactions ---");
     for tsx in tsx_iter {
-        let (tx_id, from_user, to_user, amount, lamport_time, source_node, optionnal_msg) = tsx?;
+        let (from_user, to_user, amount, lamport_time, source_node, optionnal_msg) = tsx?;
         println!(
-            "tx_id: {}, from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optionnal_msg: {}",
-            tx_id,
+            "from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optionnal_msg: {}",
             from_user,
             to_user,
             amount,
@@ -92,7 +171,7 @@ fn init_db() -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS User (
             unique_name TEXT PRIMARY KEY,
-            solde REAL NOT NULL
+            solde FLOAT NOT NULL
         )",
         [],
     )?;
@@ -101,15 +180,15 @@ fn init_db() -> Result<()> {
     // Attention : le mot Transaction sans S est reservé dans SQL donc on en peut pas l'utiliser (comme Select par exemple)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS Transactions (
-            tx_id TEXT PRIMARY KEY,
             from_user TEXT NOT NULL,
             to_user TEXT NOT NULL,
-            amount REAL NOT NULL,
+            amount FLOAT NOT NULL,
             lamport_time INTEGER NOT NULL,
             source_node TEXT NOT NULL,
             optionnal_msg TEXT,
             FOREIGN KEY(from_user) REFERENCES User(unique_name),
-            FOREIGN KEY(to_user) REFERENCES User(unique_name)
+            FOREIGN KEY(to_user) REFERENCES User(unique_name),
+            PRIMARY KEY(lamport_time,source_node)
         )",
         [],
     )?;
