@@ -108,13 +108,24 @@ fn init_db() -> Result<()> {
 }
 
 fn create_user(conn: &rusqlite::Connection, unique_name: &str) -> rusqlite::Result<()> {
+
+    // vérifie si l'utilisateur existe déjà
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
+    let user_exists: i64 = stmt.query_row(rusqlite::params![unique_name], |row| row.get(0))?;
+
+    if user_exists > 0 {
+        println!("User '{}' already exists.", unique_name);
+        return Ok(());
+    }
+
     conn.execute(
-        "INSERT INTO User (unique_name, solde) VALUES (?1,0)",
+        "INSERT INTO User (unique_name, solde) VALUES (?1, 0)",
         rusqlite::params![unique_name],
     )?;
     println!("User '{}' added with solde 0", unique_name);
     Ok(())
 }
+
 
 fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amount: f64, lamport_time: &mut i64, source_node: &str, optional_msg: &str) -> rusqlite::Result<()> {
     
@@ -199,6 +210,16 @@ fn update_solde(conn: &rusqlite::Connection, name: &str) -> Result<()> {
 }
 
 fn create_user_solde(conn: &rusqlite::Connection, unique_name: &str, solde: f64, lamport_time: &mut i64, source_node: &str ) -> rusqlite::Result<()> {
+    
+    // vérifie si l'utilisateur existe déjà
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
+    let user_exists: i64 = stmt.query_row(rusqlite::params![unique_name], |row| row.get(0))?;
+
+    if user_exists > 0 {
+        println!("User '{}' already exists.", unique_name);
+        return Ok(());
+    }
+    
     conn.execute(
         "INSERT INTO User (unique_name, solde) VALUES (?1, ?2)",
         rusqlite::params![unique_name, solde],
