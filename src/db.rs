@@ -73,6 +73,8 @@ fn scenario2() -> Result<()>{
     create_tsx(&conn, "Alice", "Bob", 100.0, &mut local_lamport_time, noeud, "Cookie");
     create_tsx(&conn, "Bob", "Alice", 79.0, &mut local_lamport_time, noeud, "Pizza party");
 
+    withdraw_user(&conn, "Bob", 100.0, &mut local_lamport_time, noeud);
+
     print_tsx(&conn)?;
     print_users(&conn)?;
 
@@ -162,6 +164,27 @@ fn deposit_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lam
     update_solde(unique_name);
     
     println!("User '{}' deposed {}€ in User", unique_name, amount);
+
+    Ok(())
+}
+
+fn withdraw_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> rusqlite::Result<()> {
+    if amount<0.0{
+        // amount should be >0
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    let solde = calculate_solde(unique_name)?;
+    if solde<amount{
+        // not enought money #broke
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+
+    create_tsx(&conn, unique_name, "NULL", amount, lamport_time, source_node, "Withdraw");
+
+    update_solde(unique_name);
+    
+    println!("User '{}' withdrawed {}€", unique_name, amount);
 
     Ok(())
 }
