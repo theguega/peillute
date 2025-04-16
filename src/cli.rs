@@ -1,25 +1,29 @@
-use std::io::{self, Write};
-use tokio::io::{self, AsyncBufReadExt, BufReader};
+use std::io::{self as std_io, Write};
+use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
 use tokio::select;
-use tokio::time::{sleep, Duration};
 
-/*
-To do : rendre la boucle asynchrone avec les intérruptions
-Pour l'instant, pas asynchrone, le but est d'avoir d'une première ébauche
- */
+
+#[allow(unused)]
+#[allow(dead_code)]
 async fn main_loop(){
 
-    let stdin = BufReader::new(io::stdin());
-    let mut lines = stdin.lines();
+    let stdin = tokio_io::stdin();
+    let reader = BufReader::new(stdin);
+    let mut lines = reader.lines();
 
-    print!("Welcome on peillute, write /help to get the command list.");
-    print!(">");
+    println!("Welcome on peillute, write /help to get the command list.");
+    print!("> ");
+    std_io::stdout().flush().unwrap();
 
     loop {
         select! {
             line = lines.next_line() => {
                 match line {
-                    Ok(Some(cmd)) => handle_command(cmd);
+                    Ok(Some(cmd)) => {
+                        handle_command(cmd);
+                        print!("> ");
+                        std_io::stdout().flush().unwrap();
+                    }
                     Ok(None) => {
                         break;
                     }
@@ -33,14 +37,16 @@ async fn main_loop(){
     }
 }
 
+#[allow(unused)]
+#[allow(dead_code)]
 async fn handle_command(cmd: String) -> (){
     match cmd.as_str() {
         "/create_user" => {
             // To do, création de l'utilisateur en bdd
             let mut input = String::new();
             print!("Username > ");
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap();
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
             // create_user(name);
         }
@@ -49,8 +55,8 @@ async fn handle_command(cmd: String) -> (){
         "/deposit" => {
             let mut input = String::new();
             print!("Deposit amount > ");
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap();
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f32>().unwrap();
             // make_deposit(amount);
         }
@@ -59,8 +65,8 @@ async fn handle_command(cmd: String) -> (){
         "/withdraw" => {
             let mut input = String::new();
             print!("Withdraw amount > ");
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap();
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f32>().unwrap();
             // to do : verifications
             // make_withdraw(amount);
@@ -70,8 +76,8 @@ async fn handle_command(cmd: String) -> (){
         "/transfer" => {
             let mut input = String::new();
             print!("Transfer amount > ");
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap();
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f32>().unwrap();
             // to do : vérifications
             // make_withdraw(amount);
@@ -81,8 +87,8 @@ async fn handle_command(cmd: String) -> (){
         "/pay" => {
             let mut input = String::new();
             print!("Payment amount > ");
-            io::stdout().flush().unwrap();
-            io::stdin().read_line(&mut input).unwrap();
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f32>().unwrap();
             // to do : vérifications
             // make_withdraw(amount);
