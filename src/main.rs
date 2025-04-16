@@ -9,6 +9,8 @@ mod clock;
 mod message;
 mod network;
 mod state;
+mod cli;
+mod control;
 
 use state::AppState;
 
