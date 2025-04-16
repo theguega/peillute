@@ -39,9 +39,8 @@ fn update_solde(name: &str) -> Result<()> {
     let conn = Connection::open("database.db")?;
 
     let solde = calculate_solde(name)?; // get the f64 value or return error
-
     conn.execute(
-        "UPDATE User SET solde = ?1 WHERE name = ?2",
+        "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
         params![solde, name],
     )?;
 
@@ -79,6 +78,8 @@ fn scenario2() -> Result<()>{
     calculate_solde("Bob");
 
     print_tsx(&conn)?;
+    print_users(&conn)?;
+
     Ok(())
 }
 fn scenario1() -> Result<()>{
