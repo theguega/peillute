@@ -1,5 +1,16 @@
 #![allow(unused)]
 
+#[derive(Debug)]
+struct Transaction {
+    from_user: String,
+    to_user: String,
+    amount: f64,
+    lamport_time: i64,
+    source_node: String,
+    optional_msg: Option<String>,
+}
+
+
 use std::io;
 use std::io::{Write, BufReader, BufRead, ErrorKind};
 use std::fs::File;
@@ -11,11 +22,83 @@ fn main() -> Result<()> {
 
     
 
-    scenario2();
+    scenario4();
+
+
     //let name="Alice";
     //calculate_solde(name);
     //drop();
     //tests()
+
+
+    Ok(())
+}
+
+fn scenario4() -> Result<()> {
+
+    let noeud = "A"; // noeud non mutable
+    // let mut local_lamport_time: &mut i64 =&mut 0; // temps de lamport local qui est incrémenté à chaque action
+    let mut local_lamport_time = 0;
+
+    let conn: Connection = rusqlite::Connection::open("database.db")?;
+    drop_table(&conn);
+    init_db();
+    create_user(&conn, "Alice")?;
+    create_user(&conn, "Bob")?;
+    print_users(&conn)?;
+
+    deposit_user(&conn, "Alice", 150.0, &mut local_lamport_time, noeud,);
+    deposit_user(&conn, "Bob", 250.0, &mut local_lamport_time, noeud,);
+
+
+    create_tsx(&conn, "Alice", "Bob", 100.0, &mut local_lamport_time, noeud, "Cookie");
+    create_tsx(&conn, "Bob", "Alice", 79.0, &mut local_lamport_time, noeud, "Pizza party");
+
+    withdraw_user(&conn, "Bob", 100.0, &mut local_lamport_time, noeud);
+
+    print_tsx(&conn)?;
+    print_users(&conn)?;
+
+    refund(&conn, 3 , "A", &mut local_lamport_time, noeud);
+
+    print_users(&conn);
+    print_tsx(&conn);
+
+    Ok(())
+
+}
+
+
+
+fn scenario3() -> Result<()> {
+    scenario2();
+    let conn: Connection = Connection::open("database.db")?;
+    //let tsx = get_transac(&conn, 2, "A")?;
+
+    match get_transac(&conn, 2, "A")? {
+        Some(tx) => {
+            println!(
+                "Transaction from {} to {} of {}€ at time {} from node {}. Message: {:?}",
+                tx.from_user, tx.to_user, tx.amount, tx.lamport_time, tx.source_node, tx.optional_msg
+            );
+        }
+        None => {
+            println!("No transaction found for the specified time and node.");
+        }
+    }
+
+    match get_transac(&conn, 42, "ABC")? {
+        Some(tx) => {
+            println!(
+                "Transaction from {} to {} of {}€ at time {} from node {}. Message: {:?}",
+                tx.from_user, tx.to_user, tx.amount, tx.lamport_time, tx.source_node, tx.optional_msg
+            );
+        }
+        None => {
+            println!("No transaction found for the specified time and node.");
+        }
+    }
+    
     Ok(())
 }
 
@@ -190,6 +273,15 @@ fn withdraw_user(conn: &rusqlite::Connection, unique_name: &str, amount: f64, la
 }
 
 fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amount: f64, lamport_time: &mut i64, source_node: &str, optionnal_msg: &str) -> rusqlite::Result<()> {
+    
+    if from_user!="NULL"{
+        let from_solde=calculate_solde(from_user)?;
+        if from_solde<amount{
+            // not enought money #broke
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    
     conn.execute(
         "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optionnal_msg) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![from_user, to_user, amount, *lamport_time, source_node, optionnal_msg],
@@ -198,6 +290,86 @@ fn create_tsx(conn: &rusqlite::Connection, from_user: &str, to_user: &str, amoun
     *lamport_time+=1;
     update_solde(from_user);
     update_solde(to_user);
+
+    Ok(())
+}
+
+/*
+fn get_transac(conn: &rusqlite::Connection, transac_time: &str, node: &str, lamport_time: &mut i64, source_node: &str) -> rusqlite::Result<()> {
+
+    let mut stmt = conn.prepare(
+        "SELECT * FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2",
+    )?;
+
+    let tsx_iter = stmt.query_map(params![transac_time, node], |row| {
+        Ok((
+            row.get::<_, String>(0)?,     // from_user
+            row.get::<_, String>(1)?,     // to_user
+            row.get::<_, f64>(2)?,        // amount
+            row.get::<_, i64>(3)?,        // lamport_time
+            row.get::<_, String>(4)?,     // source_node
+            row.get::<_, Option<String>>(5)?, // optionnal_msg (peut être NULL)
+        ))
+    })?;
+
+
+    println!("Transaction : {}")
+    Ok(())
+}*/
+
+fn get_transac(
+    conn: &rusqlite::Connection,
+    transac_time: i64,
+    node: &str
+) -> rusqlite::Result<Option<Transaction>> {
+    let mut stmt = conn.prepare(
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optionnal_msg 
+         FROM Transactions 
+         WHERE lamport_time = ?1 AND source_node = ?2",
+    )?;
+
+    let transaction = stmt.query_row(params![transac_time, node], |row| {
+        Ok(Transaction {
+            from_user: row.get(0)?,
+            to_user: row.get(1)?,
+            amount: row.get(2)?,
+            lamport_time: row.get(3)?,
+            source_node: row.get(4)?,
+            optional_msg: row.get(5)?,
+        })
+    });
+
+    match transaction {
+        Ok(t) => Ok(Some(t)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+
+
+
+fn refund(conn: &rusqlite::Connection, transac_time:i64 , node: &str, lamport_time: &mut i64, source_node: &str) -> rusqlite::Result<()> {
+    
+    match get_transac(&conn, transac_time, node)? {
+        Some(tx) => {
+            create_tsx(&conn, &tx.to_user, &tx.from_user, tx.amount, lamport_time, source_node, "Refunding");
+
+            println!(
+                "Refunded transaction from {} to {} of {}€ at time {} from node {}. Message: {:?}",
+                tx.from_user, tx.to_user, tx.amount, tx.lamport_time, tx.source_node, tx.optional_msg
+            );
+
+            update_solde(&tx.from_user);
+            update_solde(&tx.to_user);
+        
+        }
+        None => {
+            println!("No transaction found for the specified time and node. Can not refund");
+        }
+    }
+    
+    
 
 
     Ok(())
