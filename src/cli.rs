@@ -1,11 +1,19 @@
+use std::ffi::c_int;
 use std::io::{self as std_io, Write};
 use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
 use tokio::select;
-
-
+use rusqlite::{Connection, Result};
+use rusqlite::types::Type::Null;
+use super::db;
 #[allow(unused)]
 #[allow(dead_code)]
-async fn main_loop(){
+async fn main_loop()->Result<()>{
+
+    let conn: Connection = Connection::open("database.db")?;
+    db::drop_table();
+    db::init_db();
+    let noeud = "A";
+    let mut local_lamport_time: i64 = 0;
 
     let stdin = tokio_io::stdin();
     let reader = BufReader::new(stdin);
@@ -20,16 +28,16 @@ async fn main_loop(){
             line = lines.next_line() => {
                 match line {
                     Ok(Some(cmd)) => {
-                        handle_command(cmd);
+                        handle_command(&conn, &mut local_lamport_time,&noeud, cmd);
                         print!("> ");
                         std_io::stdout().flush().unwrap();
                     }
                     Ok(None) => {
-                        break;
+                        break Ok(());
                     }
                     Err(e) => {
                         eprintln!("Erreur de lecture stdin : {}", e);
-                        break;
+                        break Ok(());
                     }
                 }
             }
@@ -39,7 +47,7 @@ async fn main_loop(){
 
 #[allow(unused)]
 #[allow(dead_code)]
-async fn handle_command(cmd: String) -> (){
+fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd: String) -> (){
     match cmd.as_str() {
         "/create_user" => {
             // To do, création de l'utilisateur en bdd
@@ -48,55 +56,110 @@ async fn handle_command(cmd: String) -> (){
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
-            // create_user(name);
+            db::create_user(&conn,name).unwrap()
         }
 
         // Déposer de l'argent
         "/deposit" => {
             let mut input = String::new();
+            print!("Username > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let name = input.trim();
+
+            let mut input = String::new();
             print!("Deposit amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f32>().unwrap();
-            // make_deposit(amount);
+            let amount = input.trim().parse::<f64>().unwrap();
+            db::deposit_user(&conn,name,amount,lamport_time,noeud).unwrap();
         }
 
         // Retirer de l'argent
         "/withdraw" => {
             let mut input = String::new();
-            print!("Withdraw amount > ");
+            print!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f32>().unwrap();
+            let name = input.trim();
+
+            let mut input = String::new();
+            print!("Deposit amount > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let amount = input.trim().parse::<f64>().unwrap();
             // to do : verifications
-            // make_withdraw(amount);
+            db::withdraw_user(&conn,name,amount,lamport_time,noeud).unwrap();
         }
 
         // Faire un virement à qqn d'autre
         "/transfer" => {
             let mut input = String::new();
+            print!("Username > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let name = input.trim();
+
+            let mut input = String::new();
             print!("Transfer amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f32>().unwrap();
-            // to do : vérifications
-            // make_withdraw(amount);
+            let amount : f64 = input.trim().parse::<f64>().unwrap();
+
+            db::print_users(&conn);
+
+            let mut input = String::new();
+            print!("Beneficiary > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let beneficiary = input.trim();
+
+            db::create_tsx(&conn,name,beneficiary,amount,lamport_time,noeud,"").unwrap();
+
         }
 
         // Payer
         "/pay" => {
             let mut input = String::new();
+            print!("Username > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let name = input.trim();
+
+            let mut input = String::new();
             print!("Payment amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f32>().unwrap();
-            // to do : vérifications
-            // make_withdraw(amount);
+            let amount : f64 = input.trim().parse::<f64>().unwrap();
+
+            db::create_tsx(&conn,name,Null,amount,lamport_time,noeud,"").unwrap();
         }
 
         // Se faire rembourser
         "/refund" => {
-            // Affichage de l'historique et choix du remboursement à avoir
+            let mut input = String::new();
+            print!("Username > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let name = input.trim();
+
+            db::print_tsx(&conn).unwrap();
+
+            let mut input = String::new();
+            print!("Lamport time > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let lamport_time = input.trim().parse::<i64>().unwrap();
+
+            let mut input = String::new();
+            print!("Node > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let noeud = input.trim();
+
+            // To do : revert_tsx(lamport_time,node)
+
+
         }
 
         "/help" => {
@@ -115,4 +178,13 @@ async fn handle_command(cmd: String) -> (){
         }
         _ => println!("❓ Unknown command  : {}", cmd)
     }
+}
+
+#[allow(unused)]
+#[allow(dead_code)]
+async fn main() -> Result<()> {
+
+    let _ = main_loop().await;
+
+    Ok(())
 }
