@@ -94,7 +94,7 @@ pub async fn handle_connection(
                 // envoyer une réponse de découverte
                 println!("Sending discovery response to: {}", reponse_adress);
                 let ack_code = crate::message::NetworkMessageCode::Acknowledgment;
-                send_message(&reponse_adress.to_string(), ack_code.code()).await;
+                let _ = send_message(&reponse_adress.to_string(), ack_code.code()).await;
                 // add to list of peers
                 {
                     let mut state = GLOBAL_APP_STATE.lock().await;
@@ -179,7 +179,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         // Send the message
-        let send_result = send_message(address, message,address).await;
+        let send_result = send_message(address, message).await;
         assert!(send_result.is_ok());
     }
 }

@@ -100,7 +100,8 @@ mod tests {
             "127.0.0.1:8081".parse().unwrap(),
             "127.0.0.1:8082".parse().unwrap(),
         ];
-        let shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
+        let local_addr = "127.0.0.1:8080".parse().unwrap();
+        let shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
 
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.num_sites, num_sites);
