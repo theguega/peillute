@@ -9,6 +9,43 @@ pub struct Transaction {
     pub description: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum NetworkMessageCode {
+    Discovery,
+    Transaction,
+    Acknowledgment,
+    Error,
+    Disconnect,
+    Sync,
+}
+
+impl NetworkMessageCode {
+    pub fn code(&self) -> &'static str {
+        match self {
+            NetworkMessageCode::Discovery => "discovery",
+            NetworkMessageCode::Transaction => "transaction",
+            NetworkMessageCode::Acknowledgment => "acknowledgment",
+            NetworkMessageCode::Error => "error",
+            NetworkMessageCode::Disconnect => "disconnect",
+            NetworkMessageCode::Sync => "sync",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "discovery" => Some(NetworkMessageCode::Discovery),
+            "transaction" => Some(NetworkMessageCode::Transaction),
+            "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
+            "error" => Some(NetworkMessageCode::Error),
+            "disconnect" => Some(NetworkMessageCode::Disconnect),
+            "sync" => Some(NetworkMessageCode::Sync),
+            _ => None,
+        }
+    }
+}
+
+// TODO : add message status (failed, success, etc.)
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender_id: usize,

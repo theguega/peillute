@@ -1,16 +1,17 @@
 use clap::Parser;
 use log::info;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::task;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 mod clock;
-mod message;
 mod network;
 mod state;
+mod message;
 
-use state::AppState;
+// singleton
+use crate::state::{GLOBAL_APP_STATE, AppState};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -39,31 +40,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         id => id,
     };
 
-    let local_addr: SocketAddr = format!("0.0.0.0:{}", args.port).parse()?;
-
-    let peer_addrs: Vec<SocketAddr> = args
-        .peers
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        // Ensure we don't list ourselves as a peer
-        .filter(|addr| *addr != local_addr)
-        .collect();
-
-    let num_sites = peer_addrs.len() + 1; // +1 for self
-    info!(
-        "Starting site {}/{num_sites} on {} with peers: {:?}",
-        site_id, local_addr, peer_addrs
-    );
-
-    // Shared state initialization - not used yet
-    #[allow(unused_variables)]
-    let shared_state = Arc::new(Mutex::new(AppState::new(
-        site_id,
-        num_sites,
-        peer_addrs.clone(),
-    )));
-
+    let local_addr: SocketAddr = format!("127.0.0.1:{}", args.port).parse()?;
+    let num_sites = 1; //1 for self then it will be managed by communications between peers
     let local_addr_clone = local_addr.clone();
+
+    {
+        let mut state = GLOBAL_APP_STATE.lock().await;
+        state.site_id = site_id;
+        state.local_addr = local_addr;
+        state.num_sites = num_sites;
+        state.vector_clock = (0..num_sites).map(|_| std::sync::atomic::AtomicU64::new(0)).collect();
+    }
+
+    network::announce("127.0.0.1",5000,6000).await;
+
+    let state = GLOBAL_APP_STATE.lock().await;
+    let peer_addrs: Vec<SocketAddr> = state.get_peers();
+
+    println!("Peers:");
+    for peer in &peer_addrs {
+        println!("{}", peer);
+    }
 
     // Start listening for incoming connections
     task::spawn(async move {
@@ -72,26 +69,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Send a message to all peers
-    println!("waiting some time to let user lauch the peers");
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    println!("sending message to peers");
-    let hello_id_site = format!("Hello from site {}", site_id);
-    for peer_addr in peer_addrs.clone() {
-        let peer_addr_str = peer_addr.to_string();
-        if let Err(e) = network::send_message(&peer_addr_str, hello_id_site.as_str()).await {
-            eprintln!("Error sending message to {}: {}", peer_addr_str, e);
+
+    let state_clone = GLOBAL_APP_STATE.clone();
+    tokio::select! {
+        _ = main_loop(state_clone) => {},
+        _ = tokio::signal::ctrl_c() => {
+            disconnect(site_id, peer_addrs.clone()).await;
         }
     }
 
-    // Wait some time to receive messages from peers
-    for _ in 0..100 {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-
-    //maybe we need to add a shut down strategy here
-    info!("Shutting down site {}.", site_id);
     Ok(())
+}
+
+
+async fn main_loop(_state: Arc<Mutex<AppState>>) {
+    loop {
+        // Logic
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+async fn disconnect(site_id: usize, peer_addrs: Vec<SocketAddr>) {
+    let code = message::NetworkMessageCode::Disconnect;
+    info!("Shutting down site {}.", site_id);
+    let msg = format!("{}", code.code());
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        if let Err(e) = network::send_message(&peer_addr_str, &msg).await {
+            eprintln!("Error sending message to {}: {}", peer_addr_str, e);
+        }
+    }
 }
 
 #[cfg(test)]
