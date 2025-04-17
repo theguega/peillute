@@ -402,7 +402,7 @@ fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Result<(
         ))
     })?;
 
-    println!("--- Transactions ---");
+    println!("--- Transactions of {} ---",name);
     for tsx in tsx_iter {
 
         let (from_user, to_user, amount, lamport_time, source_node, optional_msg) = tsx?;
