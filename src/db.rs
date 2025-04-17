@@ -385,7 +385,7 @@ pub fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Result<()> {
+pub fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Result<()> {
     let mut stmt = conn.prepare(
         "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions WHERE from_user=?1 OR to_user=?1"
     )?;

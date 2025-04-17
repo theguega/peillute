@@ -1,13 +1,11 @@
-use std::ffi::c_int;
 use std::io::{self as std_io, Write};
 use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
 use tokio::select;
 use rusqlite::{Connection, Result};
-use rusqlite::types::Type::Null;
 use super::db;
 #[allow(unused)]
 #[allow(dead_code)]
-async fn main_loop()->Result<()>{
+pub async fn main_loop()->Result<()>{
 
     let conn: Connection = Connection::open("database.db")?;
     db::drop_table();
@@ -36,8 +34,7 @@ async fn main_loop()->Result<()>{
                         break Ok(());
                     }
                     Err(e) => {
-                        eprintln!("Erreur de lecture stdin : {}", e);
-                        break Ok(());
+                        eprintln!("Erreur de lecture stdin : {}", e);/
                     }
                 }
             }
@@ -50,13 +47,29 @@ async fn main_loop()->Result<()>{
 fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd: String) -> (){
     match cmd.as_str() {
         "/create_user" => {
-            // To do, création de l'utilisateur en bdd
             let mut input = String::new();
             print!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
             db::create_user(&conn,name).unwrap()
+        }
+
+        "/user_accounts" => {
+            db::print_users(&conn).unwrap();
+        }
+
+        "/print_user_tsx" => {
+            let mut input = String::new();
+            print!("Username > ");
+            std_io::stdout().flush().unwrap();
+            std_io::stdin().read_line(&mut input).unwrap();
+            let name = input.trim();
+            db::print_tsx_user(&conn, name).unwrap();
+        }
+
+        "/print_tsx" => {
+            db::print_tsx(&conn).unwrap();
         }
 
         // Déposer de l'argent
@@ -84,7 +97,7 @@ fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd:
             let name = input.trim();
 
             let mut input = String::new();
-            print!("Deposit amount > ");
+            print!("Withdraw amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f64>().unwrap();
@@ -132,7 +145,7 @@ fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd:
             std_io::stdin().read_line(&mut input).unwrap();
             let amount : f64 = input.trim().parse::<f64>().unwrap();
 
-            db::create_tsx(&conn,name,Null,amount,lamport_time,noeud,"").unwrap();
+            db::create_tsx(&conn,name,"NULL",amount,lamport_time,noeud,"").unwrap();
         }
 
         // Se faire rembourser
@@ -143,21 +156,21 @@ fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd:
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
 
-            db::print_tsx(&conn).unwrap();
+            db::print_tsx_user(&conn,name).unwrap();
 
             let mut input = String::new();
             print!("Lamport time > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let lamport_time = input.trim().parse::<i64>().unwrap();
+            let transac_time = input.trim().parse::<i64>().unwrap();
 
             let mut input = String::new();
             print!("Node > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
-            let noeud = input.trim();
+            let transac_node = input.trim();
 
-            // To do : revert_tsx(lamport_time,node)
+            db::refund(&conn,transac_time,transac_node,lamport_time,noeud).unwrap();
 
 
         }
@@ -165,6 +178,9 @@ fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd:
         "/help" => {
             println!("Command list : ");
             println!("/create_user : create the user personnal account");
+            println!("/user_accounts : list all users");
+            println!("/print_user_tsx : print the user's transactions");
+            println!("/print_tsx : print the system's transactions time");
             println!("/deposit : make a deposit on your personnal account.");
             println!("/withdraw : make a withdraw on your personnal account.");
             println!("/transfer : make a transfer from your personnal account to an other user account.");
@@ -178,13 +194,4 @@ fn handle_command(conn : &Connection, lamport_time: &mut i64, noeud : &str, cmd:
         }
         _ => println!("❓ Unknown command  : {}", cmd)
     }
-}
-
-#[allow(unused)]
-#[allow(dead_code)]
-async fn main() -> Result<()> {
-
-    let _ = main_loop().await;
-
-    Ok(())
 }
