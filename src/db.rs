@@ -384,3 +384,40 @@ pub fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
 
     Ok(())
 }
+
+fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions WHERE from_user=?1 OR to_user=?1"
+    )?;
+
+    // récupère les transactions dans tsx_iter
+    let tsx_iter = stmt.query_map([name], |row| {
+        Ok((
+            row.get::<_, String>(0)?,     // from_user
+            row.get::<_, String>(1)?,     // to_user
+            row.get::<_, f64>(2)?,        // amount
+            row.get::<_, i64>(3)?,        // lamport_time
+            row.get::<_, String>(4)?,     // source_node
+            row.get::<_, Option<String>>(5)?, // optional_msg (peut être NULL)
+        ))
+    })?;
+
+    println!("--- Transactions ---");
+    for tsx in tsx_iter {
+
+        let (from_user, to_user, amount, lamport_time, source_node, optional_msg) = tsx?;
+
+        println!(
+            "from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optional_msg: {}",
+            from_user,
+            to_user,
+            amount,
+            lamport_time,
+            source_node,
+            optional_msg.unwrap_or_else(|| "None".to_string())
+        );
+    }
+    println!("-------------------");
+
+    Ok(())
+}
