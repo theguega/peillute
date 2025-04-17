@@ -17,11 +17,11 @@ use crate::state::{GLOBAL_APP_STATE, AppState};
 #[command(author, version, about, long_about = None)]
 struct Args {
     // Site ID
-    #[arg(long)]
+    #[arg(long, default_value_t = 0)]
     id: usize,
 
     // Port number for this site to listen on
-    #[arg(long)]
+    #[arg(long, default_value_t = 0)]
     port: u16,
 
     // Comma-separated list of peer addresses (ip:port)
@@ -36,11 +36,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let site_id = match args.id {
-        0 => return Err("Site ID must be non-zero".into()),
+        0 => std::process::id() as usize, // if none is provided, use the process id
         id => id,
     };
 
-    let local_addr: SocketAddr = format!("127.0.0.1:{}", args.port).parse()?;
+    // if none port was provided, try to find a free port in the range 8000-9000
+    let port_range = 8000..=9000;
+    let mut selected_port = args.port;
+
+    if selected_port == 0 {
+        for port in port_range {
+            if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
+                selected_port = port;
+                drop(listener);
+                break;
+            }
+        }
+    }
+
+
+
+    let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
     let num_sites = 1; //1 for self then it will be managed by communications between peers
     let local_addr_clone = local_addr.clone();
 
@@ -52,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.vector_clock = (0..num_sites).map(|_| std::sync::atomic::AtomicU64::new(0)).collect();
     }
 
-    network::announce("127.0.0.1",5000,6000).await;
+    network::announce("127.0.0.1",8000,9000).await;
 
     // Start listening for incoming connections
     task::spawn(async move {
