@@ -9,6 +9,12 @@ use crate::state::GLOBAL_APP_STATE;
 pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
     let mut tasks = vec![];
 
+    // lock just to get the local address and site id
+    let (local_addr, site_id) = {
+        let state = GLOBAL_APP_STATE.lock().await;
+        (state.get_local_addr().to_string(), state.get_site_id().to_string())
+    };
+
     for port in start_port..=end_port {
         let address = format!("{}:{}", ip, port);
         let message = format!(
@@ -16,8 +22,11 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
             crate::message::NetworkMessageCode::Discovery.code()
         );
 
+        let local_addr_clone = local_addr.clone();
+        let site_id_clone = site_id.clone();
+
         let task = tokio::spawn(async move {
-            let _ = send_message(&address, &message).await;
+            let _ = send_message(&address, &message, &local_addr_clone, &site_id_clone).await;
         });
 
         tasks.push(task);
@@ -63,17 +72,17 @@ pub async fn handle_connection(
 
         // msg format : [site_id]-[local_addr]|[code]
         // for now site_id not used here
-        let (site_id, reponse_adress, code) = match message.split_once('|') {
+        let (_, reponse_adress, code) = match message.split_once('|') {
             Some((left, code)) => {
                 match left.rsplit_once('-') {
                     Some((site_id, response_adr)) => (site_id.to_string(), response_adr.to_string(), code.to_string()),
-                    None => {
+                    _none => {
                         eprintln!("Malformed message (missing '-')");
                         return Ok(()); 
                     }
                 }
             },
-            None => {
+            _none => {
                 eprintln!("Malformed message (missing '|')");
                 return Ok(());
             }
@@ -81,23 +90,25 @@ pub async fn handle_connection(
 
         let code = match crate::message::NetworkMessageCode::from_code(&code) {
             Some(c) => c,
-            None => {
+            _none => {
                 eprintln!("Unknown message code: {}", code);
                 return Ok(());
             }
         };
         
+
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         match code {
             crate::message::NetworkMessageCode::Discovery => {
-                println!("New peer connected : {:?}", addr);
-                // envoyer une réponse de découverte
-                println!("Sending discovery response to: {}", reponse_adress);
-                let ack_code = crate::message::NetworkMessageCode::Acknowledgment;
-                let _ = send_message(&reponse_adress.to_string(), ack_code.code()).await;
-                // add to list of peers
                 {
                     let mut state = GLOBAL_APP_STATE.lock().await;
+                    // envoyer une réponse de découverte
+                    println!("Sending discovery response to: {}", reponse_adress);
+                    let ack_code = crate::message::NetworkMessageCode::Acknowledgment;
+                    let _ = send_message(&reponse_adress.to_string(), ack_code.code(),&state.get_local_addr(), &state.get_site_id().to_string()).await;
+                    println!("DEBUG");
+                    // add to list of peers
+
                     state.add_peer(&reponse_adress);
                 }
             },
@@ -133,20 +144,31 @@ pub async fn handle_connection(
 
     }
 
+
+    let state = GLOBAL_APP_STATE.lock().await;
+    let peer_addrs: Vec<SocketAddr> = state.get_peers();
+    for peer in &peer_addrs {
+        println!("{}", peer);
+    }
+
     Ok(())
 }
 
-pub async fn send_message(address: &str, message: &str) -> Result<(), Box<dyn Error>> {
+pub async fn send_message(address: &str, message: &str, local_addr:&str, local_site:&str) -> Result<(), Box<dyn Error>> {
 
-    let state = GLOBAL_APP_STATE.lock().await;
-    let local_addr = state.get_local_addr();
-    let local_site = state.get_site_id();
+    // DO NOT LOCK THE GLOBAL APP STATE HERE
+    // (or do it at your own risk lol but not my problem anymore)
 
-    let addr = address.parse::<SocketAddr>()?;
+    let addr = match address.parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(e) => {
+            eprintln!("Failed to parse address {}: {}", address, e);
+            return Err(Box::new(e));
+        }
+    };
     let mut stream = TcpStream::connect(addr).await?;
-
     // add local_addr to the message
-    let message = format!("{}-{}|{}",local_site, local_addr, message);
+    let message = format!("{}-{}|{}", local_site, local_addr, message);
     stream.write_all(message.as_bytes()).await?;
     println!("Sent '{}' to {}", message, address);
 
@@ -168,7 +190,8 @@ mod tests {
     async fn test_send_message() {
         let address = "127.0.0.1:8081";
         let message = "hello";
-
+        let local_addr = "127.0.0.1:8080";
+        let local_site = "1";
         // Start a listener in a separate task
         tokio::spawn(async move {
             let listener_result = start_listening(address).await;
@@ -179,7 +202,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         // Send the message
-        let send_result = send_message(address, message).await;
+        let send_result = send_message(address, message, local_addr,local_site).await;
         assert!(send_result.is_ok());
     }
 }

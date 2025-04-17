@@ -54,14 +54,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     network::announce("127.0.0.1",5000,6000).await;
 
-    let state = GLOBAL_APP_STATE.lock().await;
-    let peer_addrs: Vec<SocketAddr> = state.get_peers();
-
-    println!("Peers:");
-    for peer in &peer_addrs {
-        println!("{}", peer);
-    }
-
     // Start listening for incoming connections
     task::spawn(async move {
         if let Err(e) = network::start_listening(&local_addr_clone.to_string()).await {
@@ -75,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::select! {
         _ = main_loop(state_clone) => {},
         _ = tokio::signal::ctrl_c() => {
-            disconnect(site_id, peer_addrs.clone()).await;
+            disconnect().await;
         }
     }
 
@@ -90,13 +82,24 @@ async fn main_loop(_state: Arc<Mutex<AppState>>) {
     }
 }
 
-async fn disconnect(site_id: usize, peer_addrs: Vec<SocketAddr>) {
+async fn disconnect() {
+
+    // lock just to get the local address and site id
+    let (local_addr, site_id, peer_addrs) = {
+        let state = GLOBAL_APP_STATE.lock().await;
+        (
+            state.get_local_addr().to_string(),
+            state.get_site_id().to_string(),
+            state.get_peers(),
+        )
+    };
+
     let code = message::NetworkMessageCode::Disconnect;
     info!("Shutting down site {}.", site_id);
     let msg = format!("{}", code.code());
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
-        if let Err(e) = network::send_message(&peer_addr_str, &msg).await {
+        if let Err(e) = network::send_message(&peer_addr_str, &msg , &local_addr, &site_id).await {
             eprintln!("Error sending message to {}: {}", peer_addr_str, e);
         }
     }
