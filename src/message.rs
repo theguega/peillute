@@ -9,11 +9,53 @@ pub struct Transaction {
     pub description: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum NetworkMessageCode {
+    Discovery,
+    Transaction,
+    Acknowledgment,
+    Error,
+    Disconnect,
+    Sync,
+}
+
+impl NetworkMessageCode {
+    #[allow(unused)]
+    #[allow(dead_code)]
+    pub fn code(&self) -> &'static str {
+        match self {
+            NetworkMessageCode::Discovery => "discovery",
+            NetworkMessageCode::Transaction => "transaction",
+            NetworkMessageCode::Acknowledgment => "acknowledgment",
+            NetworkMessageCode::Error => "error",
+            NetworkMessageCode::Disconnect => "disconnect",
+            NetworkMessageCode::Sync => "sync",
+        }
+    }
+    #[allow(unused)]
+    #[allow(dead_code)]
+    pub fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "discovery" => Some(NetworkMessageCode::Discovery),
+            "transaction" => Some(NetworkMessageCode::Transaction),
+            "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
+            "error" => Some(NetworkMessageCode::Error),
+            "disconnect" => Some(NetworkMessageCode::Disconnect),
+            "sync" => Some(NetworkMessageCode::Sync),
+            _ => None,
+        }
+    }
+}
+
+// TODO : add message status (failed, success, etc.)
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender_id: usize,
     pub sender_addr: SocketAddr,
     pub sender_vc: Vec<u64>,
+    pub message: String,
+    pub code: NetworkMessageCode,
 }
 
 #[cfg(test)]
@@ -40,10 +82,21 @@ mod tests {
             sender_id: 1,
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
             sender_vc: vec![1, 2, 3],
+            message: "Test message".to_string(),
+            code: NetworkMessageCode::Transaction,
         };
-        assert_eq!(
-            format!("{:?}", message).split(",").collect::<Vec<&str>>()[0],
-            "Message { sender_id: 1"
-        );
+        assert!(format!("{:?}", message).contains("Message { sender_id: 1"));
+    }
+
+    #[test]
+    fn test_network_message_code_conversion() {
+        let code = NetworkMessageCode::Transaction;
+        assert_eq!(code.code(), "transaction");
+
+        let from_code = NetworkMessageCode::from_code("transaction");
+        assert_eq!(from_code, Some(NetworkMessageCode::Transaction));
+
+        let invalid_code = NetworkMessageCode::from_code("invalid");
+        assert_eq!(invalid_code, None);
     }
 }

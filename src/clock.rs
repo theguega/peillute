@@ -99,7 +99,8 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
+        let local_addr = "127.0.0.1:8080".parse().unwrap();
+        let mut shared_state = AppState::new(site_id, local_addr,num_sites, peer_addrs.clone());
 
         let initial_clock = get_vector_clock(&shared_state);
         let updated_clock = increment_vector(&mut shared_state);
@@ -112,7 +113,8 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
+        let local_addr = "127.0.0.1:8080".parse().unwrap();
+        let mut shared_state = AppState::new(site_id,local_addr, num_sites, peer_addrs.clone());
 
         let mut received_vc = vec![0; num_sites];
         received_vc[0] = 2;
@@ -129,7 +131,8 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let mut shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
+        let local_addr = "127.0.0.1:8080".parse().unwrap();
+        let mut shared_state = AppState::new(site_id,local_addr, num_sites, peer_addrs.clone());
 
         let initial_clock = get_lamport_clock(&shared_state);
         let updated_clock = increment_lamport_clock(&mut shared_state);
@@ -142,7 +145,8 @@ mod tests {
         let site_id = 1;
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
-        let shared_state = AppState::new(site_id, num_sites, peer_addrs.clone());
+        let local_addr = "127.0.0.1:8080".parse().unwrap();
+        let shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
 
         assert_eq!(get_lamport_clock(&shared_state), 0);
     }
