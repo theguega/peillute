@@ -101,21 +101,20 @@ async fn main_loop(_state: Arc<Mutex<AppState>>) {
 async fn disconnect() {
 
     // lock just to get the local address and site id
-    let (local_addr, site_id, peer_addrs) = {
+    let (local_addr, site_id, peer_addrs, local_vc) = {
         let state = GLOBAL_APP_STATE.lock().await;
         (
             state.get_local_addr().to_string(),
             state.get_site_id().to_string(),
             state.get_peers(),
+            state.get_vector_clock().clone(),
         )
     };
 
-    let code = message::NetworkMessageCode::Disconnect;
     info!("Shutting down site {}.", site_id);
-    let msg = format!("{}", code.code());
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
-        if let Err(e) = network::send_message(&peer_addr_str, &msg , &local_addr, &site_id).await {
+        if let Err(e) = network::send_message(&peer_addr_str, "" ,message::NetworkMessageCode::Disconnect, &local_addr, &site_id, &local_vc).await {
             eprintln!("Error sending message to {}: {}", peer_addr_str, e);
         }
     }

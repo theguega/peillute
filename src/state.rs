@@ -23,6 +23,8 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[allow(unused)]
+    #[allow(dead_code)]
     pub fn new(site_id: usize, local_addr :SocketAddr, num_sites: usize, peer_addrs: Vec<SocketAddr>) -> Self {
         let vector_clock: Vec<AtomicU64> = (0..num_sites).map(|_| AtomicU64::new(0)).collect();
 
@@ -63,12 +65,18 @@ impl AppState {
         self.site_id
     }
 
+    #[allow(unused)]
+    #[allow(dead_code)]
     pub fn get_site(&self) -> usize {
         self.site_id
     }
 
     pub fn get_peers(&self) -> Vec<SocketAddr> {
         self.peer_addrs.clone()
+    }
+
+    pub fn get_vector_clock(&self) -> Vec<u64> {
+        self.vector_clock.iter().map(|vc| vc.load(std::sync::atomic::Ordering::SeqCst)).collect()
     }
 
 
