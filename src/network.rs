@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -5,9 +6,69 @@ use tokio::net::{TcpListener, TcpStream};
 use futures::future::join_all;
 use crate::state::GLOBAL_APP_STATE;
 use rmp_serde::{encode, decode};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc;
 
 use crate::message::Message;
 
+pub struct PeerConnection {
+    pub sender: Sender<Vec<u8>>,
+}
+pub struct NetworkManager {
+    pub nb_active_connections: u16,
+    pub connection_pool: HashMap<SocketAddr, PeerConnection>,
+}
+
+impl NetworkManager {
+    pub fn new() -> Self {
+        NetworkManager {
+            nb_active_connections: 0,
+            connection_pool: HashMap::new(),
+        }
+    }
+    pub fn add_connection(&mut self, addr: SocketAddr, sender: Sender<Vec<u8>>) {
+        self.connection_pool.insert(addr, PeerConnection { sender });
+        self.nb_active_connections += 1;
+    }
+
+    pub async fn create_connection(&mut self, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
+        let stream = TcpStream::connect(addr).await?;
+        let (tx, rx) = mpsc::channel(256);
+        spawn_writer_task(stream, rx).await;
+        self.add_connection(addr, tx);
+        Ok(())
+    }
+
+    pub fn get_sender(&self, addr: &SocketAddr) -> Option<Sender<Vec<u8>>> {
+        self.connection_pool.get(addr).map(|p| p.sender.clone())
+    }
+    #[allow(unused)]
+    #[allow(dead_code)]
+    pub fn get_all_connections(&self) -> Vec<SocketAddr> {
+        self.connection_pool.keys().cloned().collect()
+    }
+
+}
+
+lazy_static::lazy_static! {
+    pub static ref NETWORK_MANAGER: Arc<Mutex<NetworkManager>> = Arc::new(Mutex::new(NetworkManager::new()));
+}
+
+// create new async task to handle the writing (unique strema)
+// async way to do it 
+pub async fn spawn_writer_task(mut stream: TcpStream, mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>) {
+    tokio::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            if let Err(e) = stream.write_all(&data).await {
+                eprintln!("Failed to send message: {}", e);
+                break; // connection closed
+            }
+        }
+        println!("Writer task closed.");
+    });
+}
 
 pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
     let mut tasks = vec![];
@@ -45,9 +106,12 @@ pub async fn start_listening(address: &str) -> Result<(), Box<dyn Error>> {
 
         println!("Accepted connection from: {}", addr);
 
-        if let Err(e) = handle_connection(stream, addr).await {
-            eprintln!("Error handling connection from {}: {}", addr, e);
-        }
+        // Spawn a new task to handle the connection
+        tokio::spawn(async move {
+            if let Err(e) = handle_connection(stream, addr).await {
+                eprintln!("Error handling connection from {}: {}", addr, e);
+            }
+        });
     }
 }
 
@@ -79,7 +143,6 @@ pub async fn handle_connection(
                     println!("Sending discovery response to: {}", message.sender_addr);
                     let ack_code = crate::message::NetworkMessageCode::Acknowledgment;
                     let _ = send_message(&message.sender_addr.to_string(), "", ack_code,&state.get_local_addr(), &state.get_site_id().to_string(),&state.get_vector_clock()).await;
-                    println!("DEBUG");
                     // add to list of peers
 
                     state.add_peer(&message.sender_addr.to_string());
@@ -116,7 +179,6 @@ pub async fn handle_connection(
 
     }
 
-
     let state = GLOBAL_APP_STATE.lock().await;
     let peer_addrs: Vec<SocketAddr> = state.get_peers();
     for peer in &peer_addrs {
@@ -126,20 +188,19 @@ pub async fn handle_connection(
     Ok(())
 }
 
-pub async fn send_message(address: &str, message: &str, code :crate::message::NetworkMessageCode, local_addr:&str, local_site:&str, local_vc :&Vec<u64>) -> Result<(), Box<dyn Error>> {
 
-    // DO NOT LOCK THE GLOBAL APP STATE HERE
-    // (or do it at your own risk lol but not my problem anymore)
 
-    let addr = match address.parse::<SocketAddr>() {
-        Ok(addr) => addr,
-        Err(e) => {
-            eprintln!("Failed to parse address {}: {}", address, e);
-            return Err(Box::new(e));
-        }
-    };
+pub async fn send_message(
+    address: &str,
+    message: &str,
+    code: crate::message::NetworkMessageCode,
+    local_addr: &str,
+    local_site: &str,
+    local_vc: &Vec<u64>,
+) -> Result<(), Box<dyn Error>> {
+    let addr = address.parse::<SocketAddr>()?;
 
-    let message = Message {
+    let msg = Message {
         sender_id: local_site.parse().unwrap(),
         sender_addr: local_addr.parse().unwrap(),
         sender_vc: local_vc.clone(),
@@ -147,14 +208,21 @@ pub async fn send_message(address: &str, message: &str, code :crate::message::Ne
         code: code.clone(),
     };
 
-    let buf = encode::to_vec(&message).unwrap();
+    let buf = encode::to_vec(&msg)?;
 
-    let mut stream = TcpStream::connect(addr).await?;
-    // add local_addr to the message
+    let mut manager = NETWORK_MANAGER.lock().await;
 
-    // serialization
-    stream.write_all(&buf).await?;
-    println!("Sent message {:?} to {}", &message, address);
+    let sender = match manager.get_sender(&addr) {
+        Some(s) => s,
+        None => {
+            manager.create_connection(addr).await?;
+            manager.get_sender(&addr).unwrap()
+        }
+    };
+
+    sender.send(buf).await?;
+
+    println!("Sent message {:?} to {}", &msg, address);
     Ok(())
 }
 
