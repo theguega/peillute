@@ -200,6 +200,9 @@ pub async fn send_message(
 ) -> Result<(), Box<dyn Error>> {
     let addr = address.parse::<SocketAddr>()?;
 
+    /* !!!! DO NOT LOCK APPSTATE HERE !!!! */
+    /* or do it at your own risks but im no longer responnsible lol */
+
     let msg = Message {
         sender_id: local_site.parse().unwrap(),
         sender_addr: local_addr.parse().unwrap(),
