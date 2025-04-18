@@ -29,7 +29,6 @@ pub async fn handle_connection(
 
     loop {
         let n = stream.read(&mut buf).await?;
-
         if n == 0 {
             println!("Connection closed by: {}", addr);
             break;
