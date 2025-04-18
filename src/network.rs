@@ -10,7 +10,6 @@ pub async fn start_listening(address: &str) -> Result<(), Box<dyn Error>> {
 
     loop {
         let (stream, addr) = listener.accept().await?;
-
         println!("Accepted connection from: {}", addr);
 
         tokio::spawn(async move {
