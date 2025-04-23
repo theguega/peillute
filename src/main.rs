@@ -9,9 +9,12 @@ mod clock;
 mod message;
 mod network;
 mod state;
+mod db;
+mod cli;
 
 // singleton
 use crate::state::{AppState, GLOBAL_APP_STATE};
+use cli::main_loop;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -31,6 +34,11 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    //test main_loop()
+    if let Err(e) = main_loop().await {
+        eprintln!("Erreur dans la boucle principale : {}", e);
+    }
+
     env_logger::init();
 
     let args = Args::parse();
