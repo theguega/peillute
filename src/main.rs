@@ -1,5 +1,5 @@
 use clap::Parser;
-use cli::run_cli;
+use control::run_cli;
 use log::info;
 use rusqlite::{Connection, Result};
 use std::io::{self as std_io, Write};
@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 use tokio::select;
 use tokio::sync::Mutex;
 
-mod cli;
+mod control;
 mod clock;
 mod db;
 mod message;
