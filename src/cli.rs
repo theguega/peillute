@@ -7,9 +7,9 @@ use tokio::select;
 #[allow(unused)]
 #[allow(dead_code)]
 pub async fn main_loop() -> Result<()> {
-    let conn: Connection = Connection::open("database.db")?;
-    db::drop_table();
-    db::init_db();
+    let conn: Connection = Connection::open("peillute.db")?;
+    db::drop_table(&conn);
+    db::init_db(&conn);
     let noeud = "A";
     let mut local_lamport_time: i64 = 0;
 

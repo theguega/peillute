@@ -19,79 +19,7 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 
-fn main() -> Result<()> {
-    test();
-
-    Ok(())
-}
-
-fn test() -> Result<()> {
-    // initialisation du noeud et de l'horloge
-    let noeud = "A"; // noeud non mutable
-    let mut local_lamport_time = 0;
-
-    // initialisation de la connexion
-    let conn: Connection = rusqlite::Connection::open("database.db")?;
-    // on supprime la db déjà existante pour des tests clean
-    drop_table();
-    // initialisation de la db (create table)
-    init_db();
-    // création des users Alice et Bob
-    create_user(&conn, "Alice")?;
-    create_user(&conn, "Bob")?;
-    // verification
-    print_users(&conn)?;
-
-    // premier dépot des utilisateurs, horodatés par l'heure véctorielle de lamport
-    deposit_user(&conn, "Alice", 150.0, &mut local_lamport_time, noeud);
-    deposit_user(&conn, "Bob", 250.0, &mut local_lamport_time, noeud);
-
-    // transactions entre les utilisateurs
-    create_tsx(
-        &conn,
-        "Alice",
-        "Bob",
-        100.0,
-        &mut local_lamport_time,
-        noeud,
-        "Cookie",
-    );
-    create_tsx(
-        &conn,
-        "Bob",
-        "Alice",
-        79.0,
-        &mut local_lamport_time,
-        noeud,
-        "Pizza party",
-    );
-
-    // retrait de Bob
-    withdraw_user(&conn, "Bob", 100.0, &mut local_lamport_time, noeud);
-
-    // remboursement de la transaction A3 : Alice-> Bob 79 pour les pizzas
-    refund(&conn, 3, "A", &mut local_lamport_time, noeud);
-
-    // print la table user et la table transaction
-    log::debug!("");
-    print_users(&conn);
-    print_tsx(&conn);
-
-    Ok(())
-}
-
-pub fn drop_table() -> rusqlite::Result<()> {
-    let conn: Connection = rusqlite::Connection::open("database.db")?;
-    conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
-    conn.execute("DROP TABLE IF EXISTS User;", [])?;
-    log::debug!("Tables dropped successfully.");
-    Ok(())
-}
-
-pub fn init_db() -> Result<()> {
-    // création/connection à la db
-    let conn = Connection::open("database.db")?;
-
+pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
     // Création de la table User
     conn.execute(
         "CREATE TABLE IF NOT EXISTS User (
@@ -119,6 +47,13 @@ pub fn init_db() -> Result<()> {
     )?;
 
     log::debug!("Database initialized successfully.");
+    Ok(())
+}
+
+pub fn drop_table(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
+    conn.execute("DROP TABLE IF EXISTS User;", [])?;
+    log::debug!("Tables dropped successfully.");
     Ok(())
 }
 
@@ -289,7 +224,7 @@ pub fn withdraw_user(
 }
 
 pub fn calculate_solde(name: &str) -> Result<f64> {
-    let conn: Connection = Connection::open("database.db")?;
+    let conn: Connection = Connection::open("peillute.db")?;
 
     // if user don't exist, default return 0
 
@@ -516,4 +451,25 @@ pub fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Resu
     log::debug!("-------------------");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn test_create_user() -> rusqlite::Result<()> {
+        let conn = Connection::open_in_memory()?;
+        init_db(&conn)?;
+
+        create_user(&conn, "Charlie")?;
+
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
+        let user_exists: i64 = stmt.query_row(rusqlite::params!["Charlie"], |row| row.get(0))?;
+
+        assert_eq!(user_exists, 1);
+
+        Ok(())
+    }
 }
