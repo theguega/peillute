@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 #[allow(unused)]
 #[allow(dead_code)]
 pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
-    let site_id = state.site_id;
+    let site_id = state.site_id as usize;
     if site_id < state.vector_clock.len() {
         state.vector_clock[site_id].fetch_add(1, Ordering::SeqCst);
         log::debug!(
@@ -25,7 +25,7 @@ pub fn increment_vector(state: &mut AppState) -> Vec<u64> {
 #[allow(unused)]
 #[allow(dead_code)]
 pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Vec<u64> {
-    let site_id = state.site_id;
+    let site_id = state.site_id as usize;
     log::debug!(
         "Site {}: Updating vector clock on receive. Received VC: {:?}. Current VC: {:?}",
         site_id,
@@ -41,7 +41,7 @@ pub fn update_vector_on_receive(state: &mut AppState, received_vc: &[u64]) -> Ve
             state.vector_clock.len()
         );
     } else {
-        for i in 0..state.num_sites {
+        for i in 0..state.nb_sites_on_network {
             if i != site_id {
                 let current_val = state.vector_clock[i].load(Ordering::SeqCst);
                 let received_val = received_vc[i];
@@ -101,12 +101,15 @@ mod tests {
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
 
         let initial_clock = get_vector_clock(&shared_state);
         let updated_clock = increment_vector(&mut shared_state);
 
-        assert_eq!(updated_clock[site_id], initial_clock[site_id] + 1);
+        assert_eq!(
+            updated_clock[site_id as usize],
+            initial_clock[site_id as usize] + 1
+        );
     }
 
     #[test]
@@ -115,7 +118,7 @@ mod tests {
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
 
         let mut received_vc = vec![0; num_sites];
         received_vc[0] = 2;
@@ -123,7 +126,10 @@ mod tests {
         let initial_clock = get_vector_clock(&shared_state);
         let updated_clock = update_vector_on_receive(&mut shared_state, &received_vc);
 
-        assert_eq!(updated_clock[site_id], initial_clock[site_id] + 1);
+        assert_eq!(
+            updated_clock[site_id as usize],
+            initial_clock[site_id as usize] + 1
+        );
         assert_eq!(updated_clock[0], 2);
     }
 
@@ -133,7 +139,7 @@ mod tests {
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
+        let mut shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
 
         let initial_clock = get_lamport_clock(&shared_state);
         let updated_clock = increment_lamport_clock(&mut shared_state);
@@ -147,8 +153,8 @@ mod tests {
         let num_sites = 3;
         let peer_addrs: Vec<SocketAddr> = Vec::new();
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let shared_state = AppState::new(site_id, local_addr, num_sites, peer_addrs.clone());
+        let shared_state = AppState::new(site_id, num_sites, local_addr, peer_addrs.clone());
 
-        assert_eq!(get_lamport_clock(&shared_state), 0);
+        assert_eq!(get_lamport_clock(&shared_state), site_id);
     }
 }

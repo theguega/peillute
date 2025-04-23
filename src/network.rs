@@ -155,7 +155,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                                         &state.get_vector_clock(),
                                     ).await;
 
-                                    state.add_peer(&message.sender_addr.to_string());
+                                    state.add_peer(message.sender_addr);
                                 }
                             }
                             crate::message::NetworkMessageCode::Transaction => {
@@ -165,7 +165,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                                 log::debug!("Acknowledgment message received: {:?}", message);
                                 {
                                     let mut state = GLOBAL_APP_STATE.lock().await;
-                                    state.add_peer(&message.sender_addr.to_string());
+                                    state.add_peer(message.sender_addr);
                                 }
                             }
                             crate::message::NetworkMessageCode::Error => {
@@ -175,7 +175,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                                 log::debug!("Disconnect message received: {:?}", message);
                                 {
                                     let mut state = GLOBAL_APP_STATE.lock().await;
-                                    state.remove_peer(&message.sender_addr.to_string());
+                                    state.remove_peer(message.sender_addr);
                                 }
                             }
                             crate::message::NetworkMessageCode::Sync => {
