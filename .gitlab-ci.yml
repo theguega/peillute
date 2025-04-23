@@ -1,10 +1,43 @@
 stages:
   - test
+  - build
 
 test:
   stage: test
-  image: rust:latest
+  image: rust
   script:
-    - cargo test --verbose
+    - cargo test
+
+build:amd64:
+  stage: build
+  image: rust
+  script:
+    - cargo build --release
+  artifacts:
+    paths:
+      - target/release/peillute
+
+rustdoc:
+  stage: build
+  image: rust
+  script:
+    - cargo doc
+  artifacts:
+    paths:
+      - target/doc
+
+pages:
+  stage: publish
+  image: alpine
+  dependencies:
+    - build:amd64
+    - rustdoc
+  script:
+    - mkdir -p public
+    - mv target/doc public/doc
+    - mv target/release/rust-gitlab-example
+  artifacts:
+    paths:
+      - public
   only:
-    - branches
+    - master
