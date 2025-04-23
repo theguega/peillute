@@ -1,17 +1,17 @@
 use clap::Parser;
 use log::info;
 use std::net::SocketAddr;
-use tokio::task;
-use tokio::sync::Mutex;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::task;
 
 mod clock;
+mod message;
 mod network;
 mod state;
-mod message;
 
 // singleton
-use crate::state::{GLOBAL_APP_STATE, AppState};
+use crate::state::{AppState, GLOBAL_APP_STATE};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -54,8 +54,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-
-
     let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
     let num_sites = 1; //1 for self then it will be managed by communications between peers
     let local_addr_clone = local_addr.clone();
@@ -65,15 +63,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.site_id = site_id;
         state.local_addr = local_addr;
         state.num_sites = num_sites;
-        state.vector_clock = (0..num_sites).map(|_| std::sync::atomic::AtomicU64::new(0)).collect();
+        state.vector_clock = (0..num_sites)
+            .map(|_| std::sync::atomic::AtomicU64::new(0))
+            .collect();
     }
 
-    network::announce("127.0.0.1",8000,9000).await;
+    network::announce("127.0.0.1", 8000, 9000).await;
 
     // Start listening for incoming connections
     task::spawn(async move {
         if let Err(e) = network::start_listening(&local_addr_clone.to_string()).await {
-            eprintln!("Error starting listener: {}", e);
+            log::error!("Error starting listener: {}", e);
         }
     });
 
@@ -90,7 +90,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 async fn main_loop(_state: Arc<Mutex<AppState>>) {
     loop {
         // Logic
@@ -99,7 +98,6 @@ async fn main_loop(_state: Arc<Mutex<AppState>>) {
 }
 
 async fn disconnect() {
-
     // lock just to get the local address and site id
     let (local_addr, site_id, peer_addrs, local_vc) = {
         let state = GLOBAL_APP_STATE.lock().await;
@@ -114,8 +112,17 @@ async fn disconnect() {
     info!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
-        if let Err(e) = network::send_message(&peer_addr_str, "" ,message::NetworkMessageCode::Disconnect, &local_addr, &site_id, &local_vc).await {
-            eprintln!("Error sending message to {}: {}", peer_addr_str, e);
+        if let Err(e) = network::send_message(
+            &peer_addr_str,
+            "",
+            message::NetworkMessageCode::Disconnect,
+            &local_addr,
+            &site_id,
+            &local_vc,
+        )
+        .await
+        {
+            log::error!("Error sending message to {}: {}", peer_addr_str, e);
         }
     }
 }
