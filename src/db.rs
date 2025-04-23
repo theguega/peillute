@@ -172,7 +172,7 @@ pub fn deposit_user(
 
     update_solde(&conn, unique_name);
 
-    // println!("User '{}' deposed {}€ in User", unique_name, amount);
+    // log::info!("User '{}' deposed {}€ in User", unique_name, amount);
 
     Ok(())
 }
@@ -218,7 +218,7 @@ pub fn withdraw_user(
 
     update_solde(&conn, unique_name);
 
-    // println!("User '{}' withdrawed {}€", unique_name, amount);
+    // log::info!("User '{}' withdrawed {}€", unique_name, amount);
 
     Ok(())
 }
@@ -340,7 +340,7 @@ pub fn refund(
                 "Refunding",
             );
 
-            /* println!(
+            /* log::info!(
                 "Refunded transaction from {} to {} of {}€ at time {} from node {}. Message: {:?}",
                 tx.from_user, tx.to_user, tx.amount, tx.lamport_time, tx.source_node, tx.optional_msg
             ); */

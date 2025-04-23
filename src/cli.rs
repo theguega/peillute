@@ -18,7 +18,7 @@ pub async fn main_loop() -> Result<()> {
     let mut lines = reader.lines();
 
     log::info!("Welcome on peillute, write /help to get the command list.");
-    print!("> ");
+    log::info!("> ");
     std_io::stdout().flush().unwrap();
 
     loop {
@@ -27,7 +27,7 @@ pub async fn main_loop() -> Result<()> {
                 match line {
                     Ok(Some(cmd)) => {
                         handle_command(&conn, &mut local_lamport_time,&noeud, cmd);
-                        print!("> ");
+                        log::info!("> ");
                         std_io::stdout().flush().unwrap();
                     }
                     Ok(None) => {
@@ -48,7 +48,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
     match cmd.as_str() {
         "/create_user" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
@@ -61,7 +61,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
 
         "/print_user_tsx" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
@@ -75,13 +75,13 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         // Déposer de l'argent
         "/deposit" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
 
             let mut input = String::new();
-            print!("Deposit amount > ");
+            log::info!("Deposit amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f64>().unwrap();
@@ -91,13 +91,13 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         // Retirer de l'argent
         "/withdraw" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
 
             let mut input = String::new();
-            print!("Withdraw amount > ");
+            log::info!("Withdraw amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f64>().unwrap();
@@ -108,13 +108,13 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         // Faire un virement à qqn d'autre
         "/transfer" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
 
             let mut input = String::new();
-            print!("Transfer amount > ");
+            log::info!("Transfer amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount: f64 = input.trim().parse::<f64>().unwrap();
@@ -122,7 +122,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             db::print_users(&conn);
 
             let mut input = String::new();
-            print!("Beneficiary > ");
+            log::info!("Beneficiary > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let beneficiary = input.trim();
@@ -133,13 +133,13 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         // Payer
         "/pay" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
 
             let mut input = String::new();
-            print!("Payment amount > ");
+            log::info!("Payment amount > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount: f64 = input.trim().parse::<f64>().unwrap();
@@ -150,7 +150,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         // Se faire rembourser
         "/refund" => {
             let mut input = String::new();
-            print!("Username > ");
+            log::info!("Username > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let name = input.trim();
@@ -158,13 +158,13 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             db::print_tsx_user(&conn, name).unwrap();
 
             let mut input = String::new();
-            print!("Lamport time > ");
+            log::info!("Lamport time > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let transac_time = input.trim().parse::<i64>().unwrap();
 
             let mut input = String::new();
-            print!("Node > ");
+            log::info!("Node > ");
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let transac_node = input.trim();
