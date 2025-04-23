@@ -2,10 +2,15 @@ use super::db;
 use rusqlite::Connection;
 use std::io::{self as std_io, Write};
 
-pub fn run_cli(line: Result<Option<String>, std::io::Error>, conn: &Connection, mut local_lamport_time: &mut i64, noeud: &str) -> u8 {
+pub fn run_cli(
+    line: Result<Option<String>, std::io::Error>,
+    conn: &Connection,
+    mut local_lamport_time: &mut i64,
+    node_name: &str,
+) -> u8 {
     match line {
         Ok(Some(cmd)) => {
-            handle_command(&conn, &mut local_lamport_time,&noeud, cmd);
+            handle_command(&conn, &mut local_lamport_time, &node_name, cmd);
             print!("> ");
             std_io::stdout().flush().unwrap();
             return 0;
@@ -62,14 +67,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdout().flush().unwrap();
             std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f64>().unwrap();
-            db::deposit_user(
-                &conn,
-                name,
-                amount,
-                lamport_time,
-                noeud,
-            )
-            .unwrap();
+            db::deposit_user(&conn, name, amount, lamport_time, noeud).unwrap();
         }
 
         // Retirer de l'argent
@@ -86,14 +84,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdin().read_line(&mut input).unwrap();
             let amount = input.trim().parse::<f64>().unwrap();
             // to do : verifications
-            db::withdraw_user(
-                &conn,
-                name,
-                amount,
-                lamport_time,
-                noeud,
-            )
-            .unwrap();
+            db::withdraw_user(&conn, name, amount, lamport_time, noeud).unwrap();
         }
 
         // Faire un virement à qqn d'autre
@@ -118,16 +109,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdin().read_line(&mut input).unwrap();
             let beneficiary = input.trim();
 
-            db::create_tsx(
-                &conn,
-                name,
-                beneficiary,
-                amount,
-                lamport_time,
-                noeud,
-                "",
-            )
-            .unwrap();
+            db::create_tsx(&conn, name, beneficiary, amount, lamport_time, noeud, "").unwrap();
         }
 
         // Payer
@@ -144,16 +126,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdin().read_line(&mut input).unwrap();
             let amount: f64 = input.trim().parse::<f64>().unwrap();
 
-            db::create_tsx(
-                &conn,
-                name,
-                "NULL",
-                amount,
-                lamport_time,
-                noeud,
-                "",
-            )
-            .unwrap();
+            db::create_tsx(&conn, name, "NULL", amount, lamport_time, noeud, "").unwrap();
         }
 
         // Se faire rembourser
@@ -178,44 +151,22 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdin().read_line(&mut input).unwrap();
             let transac_node = input.trim();
 
-            db::refund(
-                &conn,
-                transac_time,
-                transac_node,
-                lamport_time,
-                noeud,
-            )
-            .unwrap();
+            db::refund(&conn, transac_time, transac_node, lamport_time, noeud).unwrap();
         }
 
         "/help" => {
             log::info!("Command list : ");
-            log::info!(
-                "/create_user : create the user personnal account"
-            );
+            log::info!("/create_user : create the user personnal account");
             log::info!("/user_accounts : list all users");
-            log::info!(
-                "/print_user_tsx : print the user's transactions"
-            );
-            log::info!(
-                "/print_tsx : print the system's transactions time"
-            );
+            log::info!("/print_user_tsx : print the user's transactions");
+            log::info!("/print_tsx : print the system's transactions time");
             log::info!("/deposit : make a deposit on your personnal account.");
             log::info!("/withdraw : make a withdraw on your personnal account.");
             log::info!(
                 "/transfer : make a transfer from your personnal account to an other user account."
             );
-            log::info!(
-                "/pay : make a pay from your personnal account."
-            );
-            log::info!(
-                "/refund : get a refund on your personnal account."
-            );
-        }
-
-        "/quit" => {
-            log::info!("👋 Bye !");
-            std::process::exit(0);
+            log::info!("/pay : make a pay from your personnal account.");
+            log::info!("/refund : get a refund on your personnal account.");
         }
         _ => log::info!("❓ Unknown command  : {}", cmd),
     }

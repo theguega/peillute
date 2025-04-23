@@ -28,16 +28,12 @@ impl NetworkManager {
             connection_pool: HashMap::new(),
         }
     }
-    pub fn add_connection(
-        &mut self, addr: SocketAddr, sender: Sender<Vec<u8>>,
-    ) {
+    pub fn add_connection(&mut self, addr: SocketAddr, sender: Sender<Vec<u8>>) {
         self.connection_pool.insert(addr, PeerConnection { sender });
         self.nb_active_connections += 1;
     }
 
-    pub async fn create_connection(
-        &mut self, addr: SocketAddr,
-    ) -> Result<(), Box<dyn Error>> {
+    pub async fn create_connection(&mut self, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
         let stream = TcpStream::connect(addr).await?;
         let (tx, rx) = mpsc::channel(256);
         spawn_writer_task(stream, rx).await;
@@ -45,9 +41,7 @@ impl NetworkManager {
         Ok(())
     }
 
-    pub fn get_sender(
-        &self, addr: &SocketAddr,
-    ) -> Option<Sender<Vec<u8>>> {
+    pub fn get_sender(&self, addr: &SocketAddr) -> Option<Sender<Vec<u8>>> {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
     }
     #[allow(unused)]
@@ -115,7 +109,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
     join_all(tasks).await;
 }
 
-pub async fn start_listening(stream: TcpStream, addr: SocketAddr)  {
+pub async fn start_listening(stream: TcpStream, addr: SocketAddr) {
     log::debug!("Accepted connection from: {}", addr);
 
     tokio::spawn(async move {
@@ -123,13 +117,9 @@ pub async fn start_listening(stream: TcpStream, addr: SocketAddr)  {
             log::error!("Error handling connection from {}: {}", addr, e);
         }
     });
-
 }
 
-pub async fn handle_message(
-    mut stream: TcpStream,
-    addr: SocketAddr,
-) -> Result<(), Box<dyn Error>> {
+pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
     let mut buf = vec![0; 1024];
     loop {
         tokio::select! {
@@ -205,9 +195,12 @@ pub async fn handle_message(
 }
 
 pub async fn send_message(
-    address: &str, message: &str,
-    code: crate::message::NetworkMessageCode, local_addr: &str,
-    local_site: &str, local_vc: &Vec<u64>,
+    address: &str,
+    message: &str,
+    code: crate::message::NetworkMessageCode,
+    local_addr: &str,
+    local_site: &str,
+    local_vc: &Vec<u64>,
 ) -> Result<(), Box<dyn Error>> {
     let addr = address.parse::<SocketAddr>()?;
 
@@ -259,16 +252,13 @@ mod tests {
         let _listener = TcpListener::bind(address).await?;
 
         // Give the listener some time to start
-        tokio::time::sleep(std::time::Duration::from_millis(100))
-            .await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         let code = crate::message::NetworkMessageCode::Discovery;
 
         // Send the message
-        let send_result = send_message(
-            address, message, code, local_addr, local_site, &local_vc,
-        )
-        .await;
+        let send_result =
+            send_message(address, message, code, local_addr, local_site, &local_vc).await;
         assert!(send_result.is_ok());
         Ok(())
     }
