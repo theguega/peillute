@@ -1,9 +1,14 @@
 use clap::Parser;
+use cli::run_cli;
 use log::info;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::task;
+use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
+use tokio::net::TcpListener;
+use tokio::select;
+use rusqlite::{Connection, Result};
+use std::io::{self as std_io, Write};
 
 mod cli;
 mod clock;
@@ -48,7 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut selected_port = args.port;
     if selected_port == 0 {
         for port in port_range {
-            if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
+            if let Ok(listener) =
+                std::net::TcpListener::bind(("127.0.0.1", port))
+            {
                 selected_port = port;
                 drop(listener);
                 break;
@@ -56,7 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
+    let local_addr: SocketAddr =
+        format!("127.0.0.1:{}", selected_port).parse()?;
     let num_sites = 1; //1 for self then it will be managed by communications between peers
 
     {
@@ -73,17 +81,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // start listening for incoming connections
     let network_listener_local_addr = local_addr.clone();
-    task::spawn(async move {
-        if let Err(e) = network::start_listening(&network_listener_local_addr.to_string()).await {
-            log::error!("Error starting listener: {}", e);
-        }
-    });
+    //task::spawn(async move {
+    //    if let Err(e) = network::start_listening(&network_listener_local_addr.to_string()).await {
+    //        log::error!("Error starting listener: {}", e);
+    //    }
+    //});
 
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
+    log::debug!("Listening on: {}", network_listener_local_addr);
+
+    let conn: Connection = Connection::open("peillute.db").unwrap();
+    let _ = db::drop_table(&conn);
+    let _ = db::init_db(&conn);
+    let noeud = "A";
+    let mut local_lamport_time: i64 = 0;
+
+    let stdin: tokio_io::Stdin = tokio_io::stdin();
+    let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
+    let mut lines: tokio_io::Lines<BufReader<tokio_io::Stdin>> = reader.lines();
+
+    log::info!("Welcome on peillute, write /help to get the command list.");
+    print!("> ");
+    std_io::stdout().flush().unwrap();
+
 
     let main_loop_app_state = GLOBAL_APP_STATE.clone();
     tokio::select! {
-        _ = main_loop(main_loop_app_state) => {},
+        _ = main_loop(main_loop_app_state, &mut lines, &conn, &mut local_lamport_time, noeud, listener) => {},
         _ = tokio::signal::ctrl_c() => {
             disconnect().await;
         }
@@ -92,11 +116,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn main_loop(_state: Arc<Mutex<AppState>>) {
+async fn main_loop(_state: Arc<Mutex<AppState>>, lines : &mut tokio_io::Lines<BufReader<tokio_io::Stdin>>, conn: &Connection, local_lamport_time: &mut i64, noeud: &str,listener: TcpListener) {
+
     loop {
-        // Logic
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        select! {
+            line = lines.next_line() => {
+                let _ = run_cli(line, &conn,local_lamport_time, noeud);
+            }
+            Ok((stream, addr)) = listener.accept() => {
+                let _ = network::start_listening(stream, addr).await;
+            }
+
+        }
     }
+
 }
 
 async fn disconnect() {
@@ -124,7 +157,11 @@ async fn disconnect() {
         )
         .await
         {
-            log::error!("Error sending message to {}: {}", peer_addr_str, e);
+            log::error!(
+                "Error sending message to {}: {}",
+                peer_addr_str,
+                e
+            );
         }
     }
 }
@@ -153,7 +190,13 @@ mod tests {
 
     #[test]
     fn test_args_parsing_no_peers() {
-        let args = Args::parse_from(vec!["my_program", "--id", "1", "--port", "8080"]);
+        let args = Args::parse_from(vec![
+            "my_program",
+            "--id",
+            "1",
+            "--port",
+            "8080",
+        ]);
         assert_eq!(args.id, 1);
         assert_eq!(args.port, 8080);
         assert_eq!(args.peers.len(), 0);
