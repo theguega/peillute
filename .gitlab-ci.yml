@@ -3,9 +3,6 @@ stages:
   - build
   - publish
 
-before_script:
-  - git config --global --add safe.directory /home/gitlab-runner/builds/t3_zuxyfa/0/guegathe/peillute
-
 test:
   stage: test
   image: rust
