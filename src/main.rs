@@ -33,24 +33,19 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //test main_loop()
-    if let Err(e) = cli::main_loop().await {
-        log::error!("Erreur dans la boucle principale : {}", e);
-    }
-
     env_logger::init();
 
     let args = Args::parse();
 
+    // if none is provided, use the process id
     let site_id = match args.id {
-        0 => std::process::id() as usize, // if none is provided, use the process id
+        0 => std::process::id() as usize,
         id => id,
     };
 
     // if none port was provided, try to find a free port in the range 8000-9000
     let port_range = 8000..=9000;
     let mut selected_port = args.port;
-
     if selected_port == 0 {
         for port in port_range {
             if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
@@ -63,7 +58,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
     let num_sites = 1; //1 for self then it will be managed by communications between peers
-    let local_addr_clone = local_addr.clone();
 
     {
         let mut state = GLOBAL_APP_STATE.lock().await;
@@ -77,18 +71,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     network::announce("127.0.0.1", 8000, 9000).await;
 
-    // Start listening for incoming connections
+    // start listening for incoming connections
+    let network_listener_local_addr = local_addr.clone();
     task::spawn(async move {
-        if let Err(e) = network::start_listening(&local_addr_clone.to_string()).await {
+        if let Err(e) = network::start_listening(&network_listener_local_addr.to_string()).await {
             log::error!("Error starting listener: {}", e);
         }
     });
 
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
-    let state_clone = GLOBAL_APP_STATE.clone();
+    let main_loop_app_state = GLOBAL_APP_STATE.clone();
     tokio::select! {
-        _ = main_loop(state_clone) => {},
+        _ = main_loop(main_loop_app_state) => {},
         _ = tokio::signal::ctrl_c() => {
             disconnect().await;
         }

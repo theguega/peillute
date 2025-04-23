@@ -161,8 +161,8 @@ pub async fn handle_connection(
                         &state.get_vector_clock(),
                     )
                     .await;
-                    // add to list of peers
 
+                    // add to list of peers
                     state.add_peer(&message.sender_addr.to_string());
                 }
             }
@@ -214,8 +214,7 @@ pub async fn send_message(
 ) -> Result<(), Box<dyn Error>> {
     let addr = address.parse::<SocketAddr>()?;
 
-    /* !!!! DO NOT LOCK APPSTATE HERE !!!! */
-    /* or do it at your own risks but im no longer responnsible lol */
+    /* !!!! DO NOT LOCK APPSTATE HERE, ALREADY LOCKED IN handle_connection !!!! */
 
     let msg = Message {
         sender_id: local_site.parse().unwrap(),
