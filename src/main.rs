@@ -12,19 +12,19 @@ mod state;
 mod db;
 mod cli;
 
-use state::AppState;
+// singleton
+use crate::state::{AppState, GLOBAL_APP_STATE};
 use cli::main_loop;
-
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     // Site ID
-    #[arg(long)]
+    #[arg(long, default_value_t = 0)]
     id: usize,
 
     // Port number for this site to listen on
-    #[arg(long)]
+    #[arg(long, default_value_t = 0)]
     port: u16,
 
     // Comma-separated list of peer addresses (ip:port)
@@ -44,63 +44,95 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let site_id = match args.id {
-        0 => return Err("Site ID must be non-zero".into()),
+        0 => std::process::id() as usize, // if none is provided, use the process id
         id => id,
     };
 
-    let local_addr: SocketAddr = format!("0.0.0.0:{}", args.port).parse()?;
+    // if none port was provided, try to find a free port in the range 8000-9000
+    let port_range = 8000..=9000;
+    let mut selected_port = args.port;
 
-    let peer_addrs: Vec<SocketAddr> = args
-        .peers
-        .iter()
-        .filter_map(|s| s.parse().ok())
-        // Ensure we don't list ourselves as a peer
-        .filter(|addr| *addr != local_addr)
-        .collect();
+    if selected_port == 0 {
+        for port in port_range {
+            if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
+                selected_port = port;
+                drop(listener);
+                break;
+            }
+        }
+    }
 
-    let num_sites = peer_addrs.len() + 1; // +1 for self
-    info!(
-        "Starting site {}/{num_sites} on {} with peers: {:?}",
-        site_id, local_addr, peer_addrs
-    );
-
-    // Shared state initialization - not used yet
-    #[allow(unused_variables)]
-    let shared_state = Arc::new(Mutex::new(AppState::new(
-        site_id,
-        num_sites,
-        peer_addrs.clone(),
-    )));
-
+    let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
+    let num_sites = 1; //1 for self then it will be managed by communications between peers
     let local_addr_clone = local_addr.clone();
+
+    {
+        let mut state = GLOBAL_APP_STATE.lock().await;
+        state.site_id = site_id;
+        state.local_addr = local_addr;
+        state.num_sites = num_sites;
+        state.vector_clock = (0..num_sites)
+            .map(|_| std::sync::atomic::AtomicU64::new(0))
+            .collect();
+    }
+
+    network::announce("127.0.0.1", 8000, 9000).await;
 
     // Start listening for incoming connections
     task::spawn(async move {
         if let Err(e) = network::start_listening(&local_addr_clone.to_string()).await {
-            eprintln!("Error starting listener: {}", e);
+            log::error!("Error starting listener: {}", e);
         }
     });
 
-    // Send a message to all peers
-    println!("waiting some time to let user lauch the peers");
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    println!("sending message to peers");
-    let hello_id_site = format!("Hello from site {}", site_id);
-    for peer_addr in peer_addrs.clone() {
-        let peer_addr_str = peer_addr.to_string();
-        if let Err(e) = network::send_message(&peer_addr_str, hello_id_site.as_str()).await {
-            eprintln!("Error sending message to {}: {}", peer_addr_str, e);
+
+    let state_clone = GLOBAL_APP_STATE.clone();
+    tokio::select! {
+        _ = main_loop(state_clone) => {},
+        _ = tokio::signal::ctrl_c() => {
+            disconnect().await;
         }
     }
 
-    // Wait some time to receive messages from peers
-    for _ in 0..100 {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-
-    //maybe we need to add a shut down strategy here
-    info!("Shutting down site {}.", site_id);
     Ok(())
+}
+
+async fn main_loop(_state: Arc<Mutex<AppState>>) {
+    loop {
+        // Logic
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+async fn disconnect() {
+    // lock just to get the local address and site id
+    let (local_addr, site_id, peer_addrs, local_vc) = {
+        let state = GLOBAL_APP_STATE.lock().await;
+        (
+            state.get_local_addr().to_string(),
+            state.get_site_id().to_string(),
+            state.get_peers(),
+            state.get_vector_clock().clone(),
+        )
+    };
+
+    info!("Shutting down site {}.", site_id);
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        if let Err(e) = network::send_message(
+            &peer_addr_str,
+            "",
+            message::NetworkMessageCode::Disconnect,
+            &local_addr,
+            &site_id,
+            &local_vc,
+        )
+        .await
+        {
+            log::error!("Error sending message to {}: {}", peer_addr_str, e);
+        }
+    }
 }
 
 #[cfg(test)]
