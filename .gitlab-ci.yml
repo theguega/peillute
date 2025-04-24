@@ -6,8 +6,9 @@ stages:
 variables:
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
 
-before_script:
-  - git config --global --add safe.directory "$CI_PROJECT_DIR"
+default:
+  before_script:
+    - git config --global --add safe.directory /home/gitlab-runner/builds/t3_zuxyfa/0/guegathe/peillute
 
 test:
   stage: test
@@ -18,8 +19,6 @@ test:
 rustdoc:
   stage: build
   image: rust:1.76-bullseye
-  before_script:
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   script:
     - cargo doc --no-deps
   artifacts:
@@ -33,7 +32,7 @@ pages:
     - rustdoc
   before_script:
     - apt-get update && apt-get install -y coreutils bash
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+    - git config --global --add safe.directory /home/gitlab-runner/builds/t3_zuxyfa/0/guegathe/peillute
   script:
     - mkdir -p public
     - mv target/doc public/doc
