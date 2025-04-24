@@ -8,7 +8,7 @@ variables:
 
 test:
   stage: test
-  image: rust:nightly
+  image: rustlang/rust:nightly-2024-04-20
   script:
     - cargo test
   rules:
@@ -16,7 +16,7 @@ test:
 
 rustdoc:
   stage: build
-  image: rust:nightly
+  image: rustlang/rust:nightly-2024-04-20
   script:
     - cargo doc --no-deps
   artifacts:
