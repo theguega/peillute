@@ -1,5 +1,39 @@
+stages:
+  - test
+  - build
+  - publish
+
+variables:
+  CARGO_HOME: /usr/local/cargo
+  RUSTUP_HOME: /usr/local/rustup
+
 test:
   stage: test
   image: rust:1.76-bullseye
   script:
     - cargo test
+
+rustdoc:
+  stage: build
+  image: rust:1.76-bullseye
+  script:
+    - cargo doc --no-deps
+  artifacts:
+    paths:
+      - target/doc
+
+pages:
+  stage: publish
+  image: debian:bookworm-slim
+  dependencies:
+    - rustdoc
+  before_script:
+    - apt-get update && apt-get install -y coreutils bash
+  script:
+    - mkdir -p public
+    - mv target/doc public/doc
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
