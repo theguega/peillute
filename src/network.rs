@@ -2,8 +2,7 @@ use crate::{
     message::{Message, NetworkMessageCode},
     state::GLOBAL_APP_STATE,
 };
-use bincode::config::standard;
-use bincode::serde::{decode_from_slice, encode_to_vec};
+use rmp_serde::{decode, encode};
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::SocketAddr;
@@ -130,9 +129,8 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
         log::debug!("Received {} bytes from {}", n, addr);
 
-        let config = standard();
-        let (message, _): (Message, _) = match decode_from_slice(&buf[..n], config) {
-            Ok(res) => res,
+        let message: Message = match decode::from_slice(&buf[..n]) {
+            Ok(msg) => msg,
             Err(e) => {
                 log::error!("Error decoding message: {}", e);
                 continue;
@@ -202,8 +200,7 @@ pub async fn send_message(
         code: code.clone(),
     };
 
-    let config = standard();
-    let buf = encode_to_vec(&msg, config)?;
+    let buf = encode::to_vec(&msg)?;
 
     let mut manager = NETWORK_MANAGER.lock().await;
 
@@ -240,7 +237,6 @@ mod tests {
 
         let _listener = TcpListener::bind(address).await?;
 
-        // Give the listener some time to start
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         let code = crate::message::NetworkMessageCode::Discovery;
