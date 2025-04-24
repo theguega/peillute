@@ -1,9 +1,14 @@
 use clap::Parser;
+use cli::run_cli;
 use log::info;
+use rusqlite::{Connection, Result};
+use std::io::{self as std_io, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
+use tokio::net::TcpListener;
+use tokio::select;
 use tokio::sync::Mutex;
-use tokio::task;
 
 mod cli;
 mod clock;
@@ -57,6 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
+
+    //TODO : remove this and use letter to identify the node
     let num_sites = 1; //1 for self then it will be managed by communications between peers
 
     {
@@ -71,31 +78,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     network::announce("127.0.0.1", 8000, 9000).await;
 
-    // start listening for incoming connections
     let network_listener_local_addr = local_addr.clone();
-    task::spawn(async move {
-        if let Err(e) = network::start_listening(&network_listener_local_addr.to_string()).await {
-            log::error!("Error starting listener: {}", e);
-        }
-    });
+    let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
+    log::debug!("Listening on: {}", network_listener_local_addr);
 
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    let conn: Connection = Connection::open("peillute.db").unwrap();
+    let _ = db::drop_table(&conn);
+    let _ = db::init_db(&conn);
+    let node_name = "A";
+    let mut local_lamport_time: i64 = 0;
+
+    let stdin: tokio_io::Stdin = tokio_io::stdin();
+    let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
+    let mut lines: tokio_io::Lines<BufReader<tokio_io::Stdin>> = reader.lines();
+
+    log::info!("Welcome on peillute, write /help to get the command list.");
+    print!("> ");
+    std_io::stdout().flush().unwrap();
 
     let main_loop_app_state = GLOBAL_APP_STATE.clone();
-    tokio::select! {
-        _ = main_loop(main_loop_app_state) => {},
-        _ = tokio::signal::ctrl_c() => {
-            disconnect().await;
-        }
-    }
+    let _ = main_loop(
+        main_loop_app_state,
+        &mut lines,
+        &conn,
+        &mut local_lamport_time,
+        node_name,
+        listener,
+    )
+    .await;
 
     Ok(())
 }
 
-async fn main_loop(_state: Arc<Mutex<AppState>>) {
+//TODO : should not take local_lamport_time -> refer to app state instead, same for node_name
+async fn main_loop(
+    _state: Arc<Mutex<AppState>>,
+    lines: &mut tokio_io::Lines<BufReader<tokio_io::Stdin>>,
+    conn: &Connection,
+    local_lamport_time: &mut i64,
+    node_name: &str,
+    listener: TcpListener,
+) {
     loop {
-        // Logic
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        select! {
+            line = lines.next_line() => {
+                let _ = run_cli(line, &conn,local_lamport_time, node_name);
+            }
+            Ok((stream, addr)) = listener.accept() => {
+                let _ = network::start_listening(stream, addr).await;
+            }
+            _ = tokio::signal::ctrl_c() => {
+                disconnect().await;
+                log::info!("👋 Bye !");
+                std::process::exit(0);
+            }
+        }
     }
 }
 

@@ -1,49 +1,31 @@
 use super::db;
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
 use std::io::{self as std_io, Write};
-use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
-use tokio::select;
 
-#[allow(unused)]
-#[allow(dead_code)]
-pub async fn main_loop() -> Result<()> {
-    let conn: Connection = Connection::open("peillute.db")?;
-    db::drop_table(&conn);
-    db::init_db(&conn);
-    let noeud = "A";
-    let mut local_lamport_time: i64 = 0;
-
-    let stdin = tokio_io::stdin();
-    let reader = BufReader::new(stdin);
-    let mut lines = reader.lines();
-
-    println!("Welcome on peillute, write /help to get the command list.");
-    print!("> ");
-    std_io::stdout().flush().unwrap();
-
-    loop {
-        select! {
-            line = lines.next_line() => {
-                match line {
-                    Ok(Some(cmd)) => {
-                        handle_command(&conn, &mut local_lamport_time,&noeud, cmd);
-                        log::info!("> ");
-                        std_io::stdout().flush().unwrap();
-                    }
-                    Ok(None) => {
-                        break Ok(());
-                    }
-                    Err(e) => {
-                        log::error!("Erreur de lecture stdin : {}", e);
-                    }
-                }
-            }
+pub fn run_cli(
+    line: Result<Option<String>, std::io::Error>,
+    conn: &Connection,
+    mut local_lamport_time: &mut i64,
+    node_name: &str,
+) -> u8 {
+    match line {
+        Ok(Some(cmd)) => {
+            handle_command(&conn, &mut local_lamport_time, &node_name, cmd);
+            print!("> ");
+            std_io::stdout().flush().unwrap();
+            return 0;
+        }
+        Ok(None) => {
+            log::info!("Aucun input");
+            return 0;
+        }
+        Err(e) => {
+            log::error!("Erreur de lecture stdin : {}", e);
+            return 1; // code d'erreur
         }
     }
 }
 
-#[allow(unused)]
-#[allow(dead_code)]
 fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: String) -> () {
     match cmd.as_str() {
         "/create_user" => {
@@ -119,7 +101,7 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
             std_io::stdin().read_line(&mut input).unwrap();
             let amount: f64 = input.trim().parse::<f64>().unwrap();
 
-            db::print_users(&conn);
+            let _ = db::print_users(&conn);
 
             let mut input = String::new();
             print!("Beneficiary > ");
@@ -173,24 +155,19 @@ fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: S
         }
 
         "/help" => {
-            println!("Command list : ");
-            println!("/create_user : create the user personnal account");
-            println!("/user_accounts : list all users");
-            println!("/print_user_tsx : print the user's transactions");
-            println!("/print_tsx : print the system's transactions time");
-            println!("/deposit : make a deposit on your personnal account.");
-            println!("/withdraw : make a withdraw on your personnal account.");
-            println!(
+            log::info!("Command list : ");
+            log::info!("/create_user : create the user personnal account");
+            log::info!("/user_accounts : list all users");
+            log::info!("/print_user_tsx : print the user's transactions");
+            log::info!("/print_tsx : print the system's transactions time");
+            log::info!("/deposit : make a deposit on your personnal account.");
+            log::info!("/withdraw : make a withdraw on your personnal account.");
+            log::info!(
                 "/transfer : make a transfer from your personnal account to an other user account."
             );
-            println!("/pay : make a pay from your personnal account.");
-            println!("/refund : get a refund on your personnal account.");
+            log::info!("/pay : make a pay from your personnal account.");
+            log::info!("/refund : get a refund on your personnal account.");
         }
-
-        "/quit" => {
-            println!("👋 Bye !");
-            std::process::exit(0);
-        }
-        _ => println!("❓ Unknown command  : {}", cmd),
+        _ => log::info!("❓ Unknown command  : {}", cmd),
     }
 }
