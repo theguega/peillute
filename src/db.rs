@@ -49,6 +49,7 @@ pub fn is_database_initialized(conn: &Connection) -> Result<bool> {
     Ok(exists)
 }
 
+#[allow(unused)]
 pub fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
     conn.execute("DROP TABLE IF EXISTS User;", [])?;
