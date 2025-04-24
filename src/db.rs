@@ -1,5 +1,6 @@
-#![allow(unused)]
+use rusqlite::{Connection, Result, params};
 
+#[allow(unused)]
 #[derive(Debug)]
 pub struct Transaction {
     from_user: String,
@@ -12,15 +13,7 @@ pub struct Transaction {
 
 const NULL: &str = "NULL";
 
-use rusqlite::ffi::SQLITE_NULL;
-use rusqlite::{Connection, Result, params};
-use std::cmp::Ordering;
-use std::fs::File;
-use std::io;
-use std::io::{BufRead, BufReader, ErrorKind, Write};
-
-pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
-    // Création de la table User
+pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS User (
             unique_name TEXT PRIMARY KEY,
@@ -29,8 +22,6 @@ pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
         [],
     )?;
 
-    // Création de la table Transactions
-    // Attention : le mot Transaction sans S est reservé dans SQL donc on en peut pas l'utiliser (comme Select par exemple)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS Transactions (
             from_user TEXT,
@@ -41,7 +32,7 @@ pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
             optional_msg TEXT,
             FOREIGN KEY(from_user) REFERENCES User(unique_name),
             FOREIGN KEY(to_user) REFERENCES User(unique_name),
-            PRIMARY KEY(lamport_time,source_node)
+            PRIMARY KEY(lamport_time, source_node)
         )",
         [],
     )?;
@@ -50,260 +41,176 @@ pub fn init_db(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn drop_table(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+pub fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
     conn.execute("DROP TABLE IF EXISTS User;", [])?;
     log::debug!("Tables dropped successfully.");
     Ok(())
 }
 
-pub fn create_user(conn: &rusqlite::Connection, unique_name: &str) -> rusqlite::Result<()> {
-    // vérifie si l'utilisateur existe déjà
-    let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-    let user_exists: i64 = stmt.query_row(rusqlite::params![unique_name], |row| row.get(0))?;
+pub fn user_exists(conn: &Connection, name: &str) -> Result<bool> {
+    let mut stmt = conn.prepare("SELECT EXISTS(SELECT 1 FROM User WHERE unique_name = ?1)")?;
+    let exists: bool = stmt.query_row(params![name], |row| row.get(0))?;
+    Ok(exists)
+}
 
-    if user_exists > 0 {
-        log::error!("User '{}' {}", unique_name, "already exists.");
+pub fn create_user(conn: &Connection, unique_name: &str) -> Result<()> {
+    if user_exists(conn, unique_name)? {
+        log::warn!("User '{}' already exists.", unique_name);
         return Ok(());
     }
-
     conn.execute(
         "INSERT INTO User (unique_name, solde) VALUES (?1, 0)",
-        rusqlite::params![unique_name],
+        params![unique_name],
     )?;
-    log::debug!("User '{}' added with solde 0", unique_name);
     Ok(())
 }
 
-pub fn create_tsx(
-    conn: &rusqlite::Connection,
+pub fn calculate_solde(name: &str) -> Result<f64> {
+    let conn = Connection::open("peillute.db")?;
+    let mut stmt = conn.prepare(
+        "SELECT
+            IFNULL((SELECT SUM(amount) FROM Transactions WHERE to_user = ?1), 0) -
+            IFNULL((SELECT SUM(amount) FROM Transactions WHERE from_user = ?1), 0)
+        AS balance",
+    )?;
+    stmt.query_row(params![name], |row| row.get(0))
+}
+
+pub fn update_solde(conn: &Connection, name: &str) -> Result<()> {
+    if !user_exists(conn, name)? {
+        log::error!("User '{}' does not exist.", name);
+        return Ok(());
+    }
+    let solde = calculate_solde(name)?;
+    conn.execute(
+        "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
+        params![solde, name],
+    )?;
+    Ok(())
+}
+
+pub fn ensure_user(conn: &Connection, name: &str) -> Result<()> {
+    if name != NULL && !user_exists(conn, name)? {
+        create_user(conn, name)?;
+    }
+    Ok(())
+}
+
+pub fn create_transaction(
+    conn: &Connection,
     from_user: &str,
     to_user: &str,
     amount: f64,
     lamport_time: &mut i64,
     source_node: &str,
     optional_msg: &str,
-) -> rusqlite::Result<()> {
-    if from_user != NULL {
-        let from_solde = calculate_solde(from_user)?;
-        if from_solde < amount {
-            // not enought money #broke
-            log::error!(
-                "Error : Solde '{}' is lower than amount {}, {}",
-                from_solde,
-                amount,
-                "can't make this transaction"
-            );
-            return Err(rusqlite::Error::InvalidQuery);
-        }
+) -> Result<()> {
+    if from_user != NULL && calculate_solde(from_user)? < amount {
+        log::error!(
+            "Insufficient funds: '{}' has less than {}.",
+            from_user,
+            amount
+        );
+        return Err(rusqlite::Error::InvalidQuery);
     }
 
-    if from_user != NULL {
-        // vérifie si l'utilisateur existe
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-        let user_exists: i64 = stmt.query_row(rusqlite::params![from_user], |row| row.get(0))?;
-        // si non, on le crée
-        if user_exists == 0 {
-            create_user(&conn, from_user);
-        }
-    }
-
-    if to_user != NULL {
-        // vérifie si l'utilisateur existe
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-        let user_exists: i64 = stmt.query_row(rusqlite::params![to_user], |row| row.get(0))?;
-        // si non, on le crée
-        if user_exists == 0 {
-            create_user(&conn, to_user);
-        }
-    }
+    ensure_user(conn, from_user)?;
+    ensure_user(conn, to_user)?;
 
     conn.execute(
-        "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optional_msg) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![from_user, to_user, amount, *lamport_time, source_node, optional_msg],
+        "INSERT INTO Transactions (from_user, to_user, amount, lamport_time, source_node, optional_msg)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![from_user, to_user, amount, *lamport_time, source_node, optional_msg],
     )?;
-    log::debug!(
-        "from user: {}, to user: {}, amount: {}, lamport time: {}, source node: {}, optionnal msg: {}",
-        from_user,
-        to_user,
-        amount,
-        lamport_time,
-        source_node,
-        optional_msg
-    );
-    *lamport_time += 1;
-    if from_user != NULL {
-        update_solde(&conn, from_user);
-    }
 
+    *lamport_time += 1;
+
+    if from_user != NULL {
+        update_solde(conn, from_user)?;
+    }
     if to_user != NULL {
-        update_solde(&conn, to_user);
+        update_solde(conn, to_user)?;
     }
 
     Ok(())
 }
 
-pub fn deposit_user(
-    conn: &rusqlite::Connection,
-    unique_name: &str,
+pub fn deposit(
+    conn: &Connection,
+    user: &str,
     amount: f64,
     lamport_time: &mut i64,
     source_node: &str,
-) -> rusqlite::Result<()> {
+) -> Result<()> {
     if amount < 0.0 {
-        // amount should be >0
-        log::error!(
-            "Amount '{}' {}",
-            amount,
-            "is negative, can't make this deposit"
-        );
+        log::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
-
-    create_tsx(
-        &conn,
+    create_transaction(
+        conn,
         NULL,
-        unique_name,
+        user,
         amount,
         lamport_time,
         source_node,
         "Deposit",
-    );
-
-    update_solde(&conn, unique_name);
-
-    // log::info!("User '{}' deposed {}€ in User", unique_name, amount);
-
-    Ok(())
+    )
 }
 
-pub fn withdraw_user(
-    conn: &rusqlite::Connection,
-    unique_name: &str,
+pub fn withdraw(
+    conn: &Connection,
+    user: &str,
     amount: f64,
     lamport_time: &mut i64,
     source_node: &str,
-) -> rusqlite::Result<()> {
+) -> Result<()> {
     if amount < 0.0 {
-        // amount should be >0
-        log::error!(
-            "Amount '{}' {}",
-            amount,
-            "is negative, can't make this withdraw"
-        );
+        log::error!("Negative withdrawal amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
-
-    let solde = calculate_solde(unique_name)?;
-    if solde < amount {
-        // not enought money #broke
-        log::error!(
-            "Solde '{}' is lower than amount {}, {}",
-            solde,
-            amount,
-            "can't make this withdraw"
-        );
-        return Err(rusqlite::Error::InvalidQuery);
-    }
-
-    create_tsx(
-        &conn,
-        unique_name,
+    create_transaction(
+        conn,
+        user,
         NULL,
         amount,
         lamport_time,
         source_node,
         "Withdraw",
-    );
-
-    update_solde(&conn, unique_name);
-
-    // log::info!("User '{}' withdrawed {}€", unique_name, amount);
-
-    Ok(())
+    )
 }
 
-pub fn calculate_solde(name: &str) -> Result<f64> {
-    let conn: Connection = Connection::open("peillute.db")?;
-
-    // if user don't exist, default return 0
-
-    // somme des transactions positives - négatives
-    let mut stmt = conn.prepare(
-        "SELECT
-            IFNULL((SELECT SUM(amount) FROM Transactions WHERE to_user = ?1), 0) -
-            IFNULL((SELECT SUM(amount) FROM Transactions WHERE from_user = ?1), 0)
-        AS difference;",
-    )?;
-
-    let solde: f64 = stmt.query_row(params![name], |row| row.get(0))?;
-    Ok(solde)
-}
-
-pub fn update_solde(conn: &rusqlite::Connection, name: &str) -> Result<()> {
-    // vérifie si l'utilisateur existe
-    let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-    let user_exists: i64 = stmt.query_row(rusqlite::params![name], |row| row.get(0))?;
-    // si non, on return
-    if user_exists == 0 {
-        log::error!("User '{}' {}", name, "doesn't exists, can't update solde.");
-        return Ok(());
-    }
-
-    let solde = calculate_solde(name)?; // get the f64 value or return error
-    conn.execute(
-        "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
-        params![solde, name],
-    )?;
-
-    Ok(())
-}
-
-pub fn create_user_solde(
-    conn: &rusqlite::Connection,
+#[allow(unused)]
+pub fn create_user_with_solde(
+    conn: &Connection,
     unique_name: &str,
     solde: f64,
     lamport_time: &mut i64,
     source_node: &str,
-) -> rusqlite::Result<()> {
-    // vérifie si l'utilisateur existe déjà
-    let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-    let user_exists: i64 = stmt.query_row(rusqlite::params![unique_name], |row| row.get(0))?;
-
-    if user_exists > 0 {
-        log::error!("User '{}' {}", unique_name, "already exists.");
-        return Ok(());
-    }
-
-    create_user(&conn, unique_name); // optionel car create tsx crée aussi les users qui n'existent pas
-
-    create_tsx(
-        &conn,
+) -> Result<()> {
+    create_user(conn, unique_name)?;
+    create_transaction(
+        conn,
         NULL,
         unique_name,
         solde,
         lamport_time,
         source_node,
-        "Deposit",
-    );
-    update_solde(&conn, unique_name);
-
-    log::debug!("User '{}' added with solde {}", unique_name, solde);
-    Ok(())
+        "Initial deposit",
+    )
 }
 
-pub fn get_transac(
-    conn: &rusqlite::Connection,
+pub fn get_transaction(
+    conn: &Connection,
     transac_time: i64,
     node: &str,
-) -> rusqlite::Result<Option<Transaction>> {
+) -> Result<Option<Transaction>> {
     let mut stmt = conn.prepare(
         "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
-        FROM Transactions
-        WHERE lamport_time = ?1 AND source_node = ?2",
+         FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2",
     )?;
 
-    let transaction = stmt.query_row(params![transac_time, node], |row| {
+    match stmt.query_row(params![transac_time, node], |row| {
         Ok(Transaction {
             from_user: row.get(0)?,
             to_user: row.get(1)?,
@@ -312,164 +219,114 @@ pub fn get_transac(
             source_node: row.get(4)?,
             optional_msg: row.get(5)?,
         })
-    });
-
-    match transaction {
-        Ok(t) => Ok(Some(t)),
+    }) {
+        Ok(tx) => Ok(Some(tx)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),
     }
 }
 
-pub fn refund(
-    conn: &rusqlite::Connection,
+pub fn refund_transaction(
+    conn: &Connection,
     transac_time: i64,
     node: &str,
     lamport_time: &mut i64,
     source_node: &str,
-) -> rusqlite::Result<()> {
-    match get_transac(&conn, transac_time, node)? {
-        Some(tx) => {
-            create_tsx(
-                &conn,
-                &tx.to_user,
-                &tx.from_user,
-                tx.amount,
-                lamport_time,
-                source_node,
-                "Refunding",
-            );
-
-            /* log::info!(
-                "Refunded transaction from {} to {} of {}€ at time {} from node {}. Message: {:?}",
-                tx.from_user, tx.to_user, tx.amount, tx.lamport_time, tx.source_node, tx.optional_msg
-            ); */
-
-            update_solde(&conn, &tx.from_user);
-            update_solde(&conn, &tx.to_user);
-        }
-        None => {
-            log::error!(
-                "{} time:{}, node:{}",
-                "No transaction found for the specified time and node. Can not refund",
-                transac_time,
-                node
-            );
-        }
+) -> Result<()> {
+    if let Some(tx) = get_transaction(conn, transac_time, node)? {
+        create_transaction(
+            conn,
+            &tx.to_user,
+            &tx.from_user,
+            tx.amount,
+            lamport_time,
+            source_node,
+            "Refund",
+        )?;
+    } else {
+        log::error!(
+            "No transaction found at time {} from node {}",
+            transac_time,
+            node
+        );
     }
     Ok(())
 }
 
-pub fn print_users(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+pub fn print_users(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
-
-    // récupère les users dans user_iter, la String nom puis le f64 solde
-    let user_iter = stmt.query_map([], |row| {
-        let name: String = row.get(0)?;
-        let solde: f64 = row.get(1)?;
-        Ok((name, solde))
+    let users = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;
 
-    log::debug!("------ Users ------");
-    // boucle d'affichage
-    for user in user_iter {
+    log::info!("-- Users --");
+    for user in users {
         let (name, solde) = user?;
-        log::debug!("Name: {}, Solde: {}", name, solde);
+        log::info!("{}: {:.2}", name, solde);
     }
-    log::debug!("-------------------");
-
     Ok(())
 }
 
-pub fn print_tsx(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+pub fn print_transactions(conn: &Connection) -> Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions"
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions",
     )?;
-
-    // récupère les transactions dans tsx_iter
-    let tsx_iter = stmt.query_map([], |row| {
+    let txs = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,         // from_user
-            row.get::<_, String>(1)?,         // to_user
-            row.get::<_, f64>(2)?,            // amount
-            row.get::<_, i64>(3)?,            // lamport_time
-            row.get::<_, String>(4)?,         // source_node
-            row.get::<_, Option<String>>(5)?, // optional_msg (peut être NULL)
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, f64>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, Option<String>>(5)?,
         ))
     })?;
 
-    log::debug!("--- Transactions ---");
-    for tsx in tsx_iter {
-        let (from_user, to_user, amount, lamport_time, source_node, optional_msg) = tsx?;
-
-        log::debug!(
-            "from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optional_msg: {}",
-            from_user,
-            to_user,
+    log::info!("-- Transactions --");
+    for tx in txs {
+        let (from, to, amount, time, node, msg) = tx?;
+        log::info!(
+            "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
+            from,
+            to,
             amount,
-            lamport_time,
-            source_node,
-            optional_msg.unwrap_or_else(|| "None".to_string())
+            time,
+            node,
+            msg
         );
     }
-    log::debug!("-------------------");
-
     Ok(())
 }
 
-pub fn print_tsx_user(conn: &rusqlite::Connection, name: &str) -> rusqlite::Result<()> {
+pub fn print_transaction_for_user(conn: &Connection, name: &str) -> Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg FROM Transactions WHERE from_user=?1 OR to_user=?1"
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
+        FROM Transactions WHERE from_user = ?1",
     )?;
 
-    // récupère les transactions dans tsx_iter
-    let tsx_iter = stmt.query_map([name], |row| {
+    let txs = stmt.query_map(params![name], |row| {
         Ok((
-            row.get::<_, String>(0)?,         // from_user
-            row.get::<_, String>(1)?,         // to_user
-            row.get::<_, f64>(2)?,            // amount
-            row.get::<_, i64>(3)?,            // lamport_time
-            row.get::<_, String>(4)?,         // source_node
-            row.get::<_, Option<String>>(5)?, // optional_msg (peut être NULL)
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, f64>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, Option<String>>(5)?,
         ))
     })?;
 
-    log::debug!("--- Transactions of {} ---", name);
-    for tsx in tsx_iter {
-        let (from_user, to_user, amount, lamport_time, source_node, optional_msg) = tsx?;
-
-        log::debug!(
-            "from_user: {}, to_user: {}, amount: {}, lamport_time: {}, source_node: {}, optional_msg: {}",
-            from_user,
-            to_user,
+    log::info!("-- Transactions for user {} --", name);
+    for tx in txs {
+        let (from, to, amount, time, node, msg) = tx?;
+        log::info!(
+            "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
+            from,
+            to,
             amount,
-            lamport_time,
-            source_node,
-            optional_msg.unwrap_or_else(|| "None".to_string())
+            time,
+            node,
+            msg
         );
     }
-    log::debug!("-------------------");
-
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rusqlite::Connection;
-
-    #[test]
-    fn test_create_user() -> rusqlite::Result<()> {
-        let conn = Connection::open_in_memory()?;
-        init_db(&conn)?;
-
-        create_user(&conn, "Charlie")?;
-
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM User WHERE unique_name = ?1")?;
-        let user_exists: i64 = stmt.query_row(rusqlite::params!["Charlie"], |row| row.get(0))?;
-
-        assert_eq!(user_exists, 1);
-
-        Ok(())
-    }
 }

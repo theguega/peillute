@@ -1,5 +1,7 @@
-use crate::state::GLOBAL_APP_STATE;
-use futures::future::join_all;
+use crate::{
+    message::{Message, NetworkMessageCode},
+    state::GLOBAL_APP_STATE,
+};
 use rmp_serde::{decode, encode};
 use std::collections::HashMap;
 use std::error::Error;
@@ -10,8 +12,6 @@ use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
-
-use crate::message::Message;
 
 pub struct PeerConnection {
     pub sender: Sender<Vec<u8>>,
@@ -44,8 +44,8 @@ impl NetworkManager {
     pub fn get_sender(&self, addr: &SocketAddr) -> Option<Sender<Vec<u8>>> {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
     }
+
     #[allow(unused)]
-    #[allow(dead_code)]
     pub fn get_all_connections(&self) -> Vec<SocketAddr> {
         self.connection_pool.keys().cloned().collect()
     }
@@ -55,17 +55,13 @@ lazy_static::lazy_static! {
     pub static ref NETWORK_MANAGER: Arc<Mutex<NetworkManager>> = Arc::new(Mutex::new(NetworkManager::new()));
 }
 
-// create new async task to handle the writing (unique strema)
-// async way to do it
-pub async fn spawn_writer_task(
-    mut stream: TcpStream,
-    mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
-) {
+pub async fn spawn_writer_task(stream: TcpStream, mut rx: mpsc::Receiver<Vec<u8>>) {
     tokio::spawn(async move {
+        let mut stream = stream;
         while let Some(data) = rx.recv().await {
-            if let Err(e) = stream.write_all(&data).await {
-                log::error!("Failed to send message: {}", e);
-                break; // connection closed
+            if stream.write_all(&data).await.is_err() {
+                log::error!("Failed to send message");
+                break;
             }
         }
         log::debug!("Writer task closed.");
@@ -73,9 +69,6 @@ pub async fn spawn_writer_task(
 }
 
 pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
-    let mut tasks = vec![];
-
-    // lock just to get the local address and site id
     let (local_addr, site_id, local_vc) = {
         let state = GLOBAL_APP_STATE.lock().await;
         (
@@ -85,28 +78,32 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
         )
     };
 
+    let mut handles = Vec::new();
+
     for port in start_port..=end_port {
         let address = format!("{}:{}", ip, port);
-        let local_addr_clone = local_addr.clone();
-        let site_id_clone = site_id.clone();
-        let local_vc = local_vc.clone();
+        let local_addr = local_addr.clone();
+        let site_id = site_id.clone();
+        let vc = local_vc.clone();
 
-        let task = tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let _ = send_message(
                 &address,
                 "",
-                crate::message::NetworkMessageCode::Discovery,
-                &local_addr_clone,
-                &site_id_clone,
-                &local_vc,
+                NetworkMessageCode::Discovery,
+                &local_addr,
+                &site_id,
+                &vc,
             )
             .await;
         });
 
-        tasks.push(task);
+        handles.push(handle);
     }
 
-    join_all(tasks).await;
+    for handle in handles {
+        let _ = handle.await;
+    }
 }
 
 pub async fn start_listening(stream: TcpStream, addr: SocketAddr) {
@@ -121,74 +118,63 @@ pub async fn start_listening(stream: TcpStream, addr: SocketAddr) {
 
 pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
     let mut buf = vec![0; 1024];
+
     loop {
-        tokio::select! {
-            result = stream.read(&mut buf) => {
-                match result {
-                    Ok(n) if n == 0 => {
-                        log::debug!("Connection closed by: {}", addr);
-                        break Ok(());
-                    }
-                    Ok(n) => {
-                        log::debug!("Received {} bytes from {}", n, addr);
+        let n = stream.read(&mut buf).await?;
 
-                        let message: Message = match decode::from_slice(&buf[..n]) {
-                            Ok(msg) => msg,
-                            Err(e) => {
-                                log::error!("Error decoding message: {}", e);
-                                continue;
-                            }
-                        };
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                        match message.code {
-                            crate::message::NetworkMessageCode::Discovery => {
-                                {
-                                    let mut state = GLOBAL_APP_STATE.lock().await;
-                                    log::debug!("Sending discovery response to: {}", message.sender_addr);
-                                    let ack_code = crate::message::NetworkMessageCode::Acknowledgment;
-                                    let _ = send_message(
-                                        &message.sender_addr.to_string(),
-                                        "",
-                                        ack_code,
-                                        &state.get_local_addr(),
-                                        &state.get_site_id().to_string(),
-                                        &state.get_vector_clock(),
-                                    ).await;
+        if n == 0 {
+            log::debug!("Connection closed by: {}", addr);
+            return Ok(());
+        }
 
-                                    state.add_peer(&message.sender_addr.to_string());
-                                }
-                            }
-                            crate::message::NetworkMessageCode::Transaction => {
-                                log::debug!("Transaction message received: {:?}", message);
-                            }
-                            crate::message::NetworkMessageCode::Acknowledgment => {
-                                log::debug!("Acknowledgment message received: {:?}", message);
-                                {
-                                    let mut state = GLOBAL_APP_STATE.lock().await;
-                                    state.add_peer(&message.sender_addr.to_string());
-                                }
-                            }
-                            crate::message::NetworkMessageCode::Error => {
-                                log::debug!("Error message received: {:?}", message);
-                            }
-                            crate::message::NetworkMessageCode::Disconnect => {
-                                log::debug!("Disconnect message received: {:?}", message);
-                                {
-                                    let mut state = GLOBAL_APP_STATE.lock().await;
-                                    state.remove_peer(&message.sender_addr.to_string());
-                                }
-                            }
-                            crate::message::NetworkMessageCode::Sync => {
-                                log::debug!("Sync message received: {:?}", message);
-                                on_sync().await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("Error reading from stream: {}", e);
-                        break Err(e.into());
-                    }
-                }
+        log::debug!("Received {} bytes from {}", n, addr);
+
+        let message: Message = match decode::from_slice(&buf[..n]) {
+            Ok(msg) => msg,
+            Err(e) => {
+                log::error!("Error decoding message: {}", e);
+                continue;
+            }
+        };
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        match message.code {
+            NetworkMessageCode::Discovery => {
+                let mut state = GLOBAL_APP_STATE.lock().await;
+                log::debug!("Sending discovery response to: {}", message.sender_addr);
+                let _ = send_message(
+                    &message.sender_addr.to_string(),
+                    "",
+                    NetworkMessageCode::Acknowledgment,
+                    &state.get_local_addr(),
+                    &state.get_site_id().to_string(),
+                    &state.get_vector_clock(),
+                )
+                .await;
+
+                state.add_peer(message.sender_addr);
+            }
+            NetworkMessageCode::Transaction => {
+                log::debug!("Transaction message received: {:?}", message);
+            }
+            NetworkMessageCode::Acknowledgment => {
+                log::debug!("Acknowledgment message received: {:?}", message);
+                GLOBAL_APP_STATE.lock().await.add_peer(message.sender_addr);
+            }
+            NetworkMessageCode::Error => {
+                log::debug!("Error message received: {:?}", message);
+            }
+            NetworkMessageCode::Disconnect => {
+                log::debug!("Disconnect message received: {:?}", message);
+                GLOBAL_APP_STATE
+                    .lock()
+                    .await
+                    .remove_peer(message.sender_addr);
+            }
+            NetworkMessageCode::Sync => {
+                log::debug!("Sync message received: {:?}", message);
+                on_sync().await;
             }
         }
     }
@@ -251,7 +237,6 @@ mod tests {
 
         let _listener = TcpListener::bind(address).await?;
 
-        // Give the listener some time to start
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         let code = crate::message::NetworkMessageCode::Discovery;

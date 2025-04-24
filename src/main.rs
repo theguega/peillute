@@ -1,5 +1,5 @@
 use clap::Parser;
-use cli::run_cli;
+use control::run_cli;
 use log::info;
 use rusqlite::{Connection, Result};
 use std::io::{self as std_io, Write};
@@ -10,30 +10,29 @@ use tokio::net::TcpListener;
 use tokio::select;
 use tokio::sync::Mutex;
 
-mod cli;
 mod clock;
+mod control;
 mod db;
 mod message;
 mod network;
 mod state;
 
-// singleton
+const LOW_PORT: u16 = 8000;
+const HIGH_PORT: u16 = 9000;
+
 use crate::state::{AppState, GLOBAL_APP_STATE};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    // Site ID
-    #[arg(long, default_value_t = 0)]
-    id: usize,
-
-    // Port number for this site to listen on
+    #[arg(long, default_value_t = std::process::id() as u64)]
+    site_id: u64,
     #[arg(long, default_value_t = 0)]
     port: u16,
-
-    // Comma-separated list of peer addresses (ip:port)
     #[arg(long, value_delimiter = ',')]
     peers: Vec<String>,
+    #[arg(long, default_value_t = String::from("127.0.0.1"))]
+    ip: String,
 }
 
 #[tokio::main]
@@ -42,14 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    // if none is provided, use the process id
-    let site_id = match args.id {
-        0 => std::process::id() as usize,
-        id => id,
-    };
-
-    // if none port was provided, try to find a free port in the range 8000-9000
-    let port_range = 8000..=9000;
+    // if none port was provided, try to find a free port in the range 8000-9000 and use it
+    let port_range = LOW_PORT..=HIGH_PORT;
     let mut selected_port = args.port;
     if selected_port == 0 {
         for port in port_range {
@@ -60,30 +53,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
-    let local_addr: SocketAddr = format!("127.0.0.1:{}", selected_port).parse()?;
-
-    //TODO : remove this and use letter to identify the node
-    let num_sites = 1; //1 for self then it will be managed by communications between peers
+    let site_ip: &str = &args.ip;
+    let local_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
     {
         let mut state = GLOBAL_APP_STATE.lock().await;
-        state.site_id = site_id;
+        state.site_id = args.site_id;
         state.local_addr = local_addr;
-        state.num_sites = num_sites;
-        state.vector_clock = (0..num_sites)
+        state.nb_sites_on_network = args.peers.len();
+        state.vector_clock = (0..args.peers.len())
             .map(|_| std::sync::atomic::AtomicU64::new(0))
             .collect();
+        state.lamport_clock = std::sync::atomic::AtomicU64::new(args.site_id);
     }
 
-    network::announce("127.0.0.1", 8000, 9000).await;
+    network::announce(site_ip, LOW_PORT, HIGH_PORT).await;
 
     let network_listener_local_addr = local_addr.clone();
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
     let conn: Connection = Connection::open("peillute.db").unwrap();
-    let _ = db::drop_table(&conn);
+    let _ = db::drop_tables(&conn);
     let _ = db::init_db(&conn);
     let node_name = "A";
     let mut local_lamport_time: i64 = 0;
@@ -174,14 +165,14 @@ mod tests {
     fn test_args_parsing() {
         let args = Args::parse_from(vec![
             "my_program",
-            "--id",
+            "--site-id",
             "1",
             "--port",
             "8080",
             "--peers",
             "127.0.0.1:8081,127.0.0.1:8082",
         ]);
-        assert_eq!(args.id, 1);
+        assert_eq!(args.site_id, 1);
         assert_eq!(args.port, 8080);
         assert_eq!(args.peers.len(), 2);
         assert_eq!(args.peers[0], "127.0.0.1:8081");
@@ -190,8 +181,8 @@ mod tests {
 
     #[test]
     fn test_args_parsing_no_peers() {
-        let args = Args::parse_from(vec!["my_program", "--id", "1", "--port", "8080"]);
-        assert_eq!(args.id, 1);
+        let args = Args::parse_from(vec!["my_program", "--site-id", "1", "--port", "8080"]);
+        assert_eq!(args.site_id, 1);
         assert_eq!(args.port, 8080);
         assert_eq!(args.peers.len(), 0);
     }
