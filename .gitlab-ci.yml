@@ -1,33 +1,5 @@
-stages:
-  - test
-  - build
-  - publish
-
 test:
   stage: test
-  image: rust
+  image: rust:1.76-bullseye
   script:
     - cargo test
-
-rustdoc:
-  stage: build
-  image: rust
-  script:
-    - cargo doc
-  artifacts:
-    paths:
-      - target/doc
-
-pages:
-  stage: publish
-  image: alpine
-  dependencies:
-    - rustdoc
-  script:
-    - mkdir -p public
-    - mv target/doc public/doc
-  artifacts:
-    paths:
-      - public
-  only:
-    - main
