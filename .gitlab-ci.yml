@@ -6,15 +6,13 @@ stages:
 variables:
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
 
-default:
-  before_script:
-    - git config --global --add safe.directory /home/gitlab-runner/builds/t3_zuxyfa/0/guegathe/peillute
-
 test:
   stage: test
   image: rust:1.76-bullseye
   script:
     - cargo test
+  rules:
+    - when: always
 
 rustdoc:
   stage: build
@@ -24,6 +22,8 @@ rustdoc:
   artifacts:
     paths:
       - target/doc
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
 
 pages:
   stage: publish
@@ -32,12 +32,11 @@ pages:
     - rustdoc
   before_script:
     - apt-get update && apt-get install -y coreutils bash
-    - git config --global --add safe.directory /home/gitlab-runner/builds/t3_zuxyfa/0/guegathe/peillute
   script:
     - mkdir -p public
     - mv target/doc public/doc
   artifacts:
     paths:
       - public
-  only:
-    - main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
