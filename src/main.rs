@@ -74,10 +74,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::debug!("Listening on: {}", network_listener_local_addr);
 
     let conn: Connection = Connection::open("peillute.db").unwrap();
-    let _ = db::drop_tables(&conn);
-    let _ = db::init_db(&conn);
-    let node_name = "A";
-    let mut local_lamport_time: i64 = 0;
+    if !db::is_database_initialized(&conn)? {
+        let _ = db::init_db(&conn);
+    }
+
+    let node_name = "A"; // TODO :should be in app state and define by discovery
+    let mut local_lamport_time: i64 = 0; // TODO :should use app state
 
     let stdin: tokio_io::Stdin = tokio_io::stdin();
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);

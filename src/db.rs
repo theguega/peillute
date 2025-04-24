@@ -41,6 +41,14 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub fn is_database_initialized(conn: &Connection) -> Result<bool> {
+    let mut stmt = conn.prepare(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'Transactions')",
+    )?;
+    let exists: bool = stmt.query_row([], |row| row.get(0))?;
+    Ok(exists)
+}
+
 pub fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
     conn.execute("DROP TABLE IF EXISTS User;", [])?;
@@ -207,7 +215,7 @@ pub fn get_transaction(
 ) -> Result<Option<Transaction>> {
     let mut stmt = conn.prepare(
         "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
-         FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2",
+        FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2",
     )?;
 
     match stmt.query_row(params![transac_time, node], |row| {
