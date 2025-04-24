@@ -20,13 +20,13 @@ mod state;
 const LOW_PORT: u16 = 8000;
 const HIGH_PORT: u16 = 9000;
 
-use crate::state::{AppState, GLOBAL_APP_STATE};
+use crate::state::{AppState, LOCAL_APP_STATE};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, default_value_t = std::process::id() as u64)]
-    site_id: u64,
+    #[arg(long, default_value_t = std::process::id().to_string())]
+    site_id: String,
     #[arg(long, default_value_t = 0)]
     port: u16,
     #[arg(long, value_delimiter = ',')]
@@ -57,14 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
     {
-        let mut state = GLOBAL_APP_STATE.lock().await;
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.site_id = args.site_id;
         state.local_addr = local_addr;
         state.nb_sites_on_network = args.peers.len();
-        state.vector_clock = (0..args.peers.len())
-            .map(|_| std::sync::atomic::AtomicU64::new(0))
-            .collect();
-        state.lamport_clock = std::sync::atomic::AtomicU64::new(args.site_id);
+        let site_id = state.site_id.clone();
+        state.clocks.set_site_id(&site_id);
     }
 
     network::announce(site_ip, LOW_PORT, HIGH_PORT).await;
@@ -78,8 +76,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = db::init_db(&conn);
     }
 
-    let node_name = "A"; // TODO :should be in app state and define by discovery
-    let mut local_lamport_time: i64 = 0; // TODO :should use app state
+    let (mut local_lamport_time, node_name) = {
+            let state = LOCAL_APP_STATE.lock().await;
+            let lamport_time = state.get_lamport().clone();
+            let site_id = state.get_site_id().to_string(); // Clone as a String
+            (lamport_time, site_id)
+        };
 
     let stdin: tokio_io::Stdin = tokio_io::stdin();
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
@@ -89,13 +91,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     print!("> ");
     std_io::stdout().flush().unwrap();
 
-    let main_loop_app_state = GLOBAL_APP_STATE.clone();
+    let main_loop_app_state = LOCAL_APP_STATE.clone();
     let _ = main_loop(
         main_loop_app_state,
         &mut lines,
         &conn,
         &mut local_lamport_time,
-        node_name,
+        node_name.as_str(),
         listener,
     )
     .await;
@@ -115,6 +117,11 @@ async fn main_loop(
     loop {
         select! {
             line = lines.next_line() => {
+                {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.increment_vector_current();
+                    state.increment_lamport();
+                }
                 let _ = run_cli(line, &conn,local_lamport_time, node_name);
             }
             Ok((stream, addr)) = listener.accept() => {
@@ -131,26 +138,38 @@ async fn main_loop(
 
 async fn disconnect() {
     // lock just to get the local address and site id
-    let (local_addr, site_id, peer_addrs, local_vc) = {
-        let state = GLOBAL_APP_STATE.lock().await;
+    let (local_addr, site_id, peer_addrs, clock) = {
+        let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_local_addr().to_string(),
             state.get_site_id().to_string(),
             state.get_peers(),
-            state.get_vector_clock().clone(),
+            state.get_clock().clone(),
         )
     };
+
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_lamport();
+        state.increment_vector_current();
+    }
 
     info!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
+        {
+            // Before sending the message, we need to update the local clock
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.increment_lamport();
+            state.increment_vector_current();
+        }
         if let Err(e) = network::send_message(
             &peer_addr_str,
             "",
             message::NetworkMessageCode::Disconnect,
             &local_addr,
             &site_id,
-            &local_vc,
+            clock.clone(),
         )
         .await
         {
@@ -168,13 +187,13 @@ mod tests {
         let args = Args::parse_from(vec![
             "my_program",
             "--site-id",
-            "1",
+            "A",
             "--port",
             "8080",
             "--peers",
             "127.0.0.1:8081,127.0.0.1:8082",
         ]);
-        assert_eq!(args.site_id, 1);
+        assert_eq!(args.site_id, "A");
         assert_eq!(args.port, 8080);
         assert_eq!(args.peers.len(), 2);
         assert_eq!(args.peers[0], "127.0.0.1:8081");
@@ -183,8 +202,8 @@ mod tests {
 
     #[test]
     fn test_args_parsing_no_peers() {
-        let args = Args::parse_from(vec!["my_program", "--site-id", "1", "--port", "8080"]);
-        assert_eq!(args.site_id, 1);
+        let args = Args::parse_from(vec!["my_program", "--site-id", "A", "--port", "8080"]);
+        assert_eq!(args.site_id, "A");
         assert_eq!(args.port, 8080);
         assert_eq!(args.peers.len(), 0);
     }

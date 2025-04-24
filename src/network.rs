@@ -1,6 +1,5 @@
 use crate::{
-    message::{Message, NetworkMessageCode},
-    state::GLOBAL_APP_STATE,
+    clock::Clock, message::{Message, NetworkMessageCode}, state::LOCAL_APP_STATE
 };
 use rmp_serde::{decode, encode};
 use std::collections::HashMap;
@@ -69,12 +68,12 @@ pub async fn spawn_writer_task(stream: TcpStream, mut rx: mpsc::Receiver<Vec<u8>
 }
 
 pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
-    let (local_addr, site_id, local_vc) = {
-        let state = GLOBAL_APP_STATE.lock().await;
+    let (local_addr, site_id, clocks) = {
+        let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_local_addr().to_string(),
             state.get_site_id().to_string(),
-            state.get_vector_clock().clone(),
+            state.get_clock().clone(),
         )
     };
 
@@ -84,16 +83,22 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
         let address = format!("{}:{}", ip, port);
         let local_addr = local_addr.clone();
         let site_id = site_id.clone();
-        let vc = local_vc.clone();
+        let clocks = clocks.clone();
 
         let handle = tokio::spawn(async move {
+            {
+                // Before sending the message, we need to update the local clock
+                let mut state = LOCAL_APP_STATE.lock().await;
+                state.increment_lamport();
+                state.increment_vector_current();
+            }
             let _ = send_message(
                 &address,
                 "",
                 NetworkMessageCode::Discovery,
                 &local_addr,
                 &site_id,
-                &vc,
+                clocks,
             )
             .await;
         });
@@ -141,41 +146,57 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
         match message.code {
             NetworkMessageCode::Discovery => {
-                let mut state = GLOBAL_APP_STATE.lock().await;
+
+                let (local_addr, site_id, clocks) = {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                    (
+                        state.get_local_addr().to_string(),
+                        state.get_site_id().to_string(),
+                        state.get_clock().clone(),
+                    )
+                };
                 log::debug!("Sending discovery response to: {}", message.sender_addr);
                 let _ = send_message(
                     &message.sender_addr.to_string(),
                     "",
                     NetworkMessageCode::Acknowledgment,
-                    &state.get_local_addr(),
-                    &state.get_site_id().to_string(),
-                    &state.get_vector_clock(),
+                    &local_addr,
+                    &site_id,
+                    clocks,
                 )
                 .await;
-
-                state.add_peer(message.sender_addr);
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
             }
             NetworkMessageCode::Acknowledgment => {
                 log::debug!("Acknowledgment message received: {:?}", message);
-                GLOBAL_APP_STATE.lock().await.add_peer(message.sender_addr);
+                {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                }
             }
             NetworkMessageCode::Error => {
                 log::debug!("Error message received: {:?}", message);
             }
             NetworkMessageCode::Disconnect => {
                 log::debug!("Disconnect message received: {:?}", message);
-                GLOBAL_APP_STATE
-                    .lock()
-                    .await
-                    .remove_peer(message.sender_addr);
+                {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.remove_peer(message.sender_addr);
+                }
             }
             NetworkMessageCode::Sync => {
                 log::debug!("Sync message received: {:?}", message);
                 on_sync().await;
             }
+        }
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.increment_lamport();
+            state.increment_vector_current();
+            state.update_vector(&message.clock.get_vector());
         }
     }
 }
@@ -186,7 +207,7 @@ pub async fn send_message(
     code: crate::message::NetworkMessageCode,
     local_addr: &str,
     local_site: &str,
-    local_vc: &Vec<u64>,
+    clock: Clock,
 ) -> Result<(), Box<dyn Error>> {
     let addr = address.parse::<SocketAddr>()?;
 
@@ -195,7 +216,7 @@ pub async fn send_message(
     let msg = Message {
         sender_id: local_site.parse().unwrap(),
         sender_addr: local_addr.parse().unwrap(),
-        sender_vc: local_vc.clone(),
+        clock: clock.clone(),
         message: message.to_string(),
         code: code.clone(),
     };
@@ -206,7 +227,7 @@ pub async fn send_message(
 
     let sender = match manager.get_sender(&addr) {
         Some(s) => s,
-        None => {
+        _none => {
             manager.create_connection(addr).await?;
             manager.get_sender(&addr).unwrap()
         }
@@ -232,8 +253,8 @@ mod tests {
         let address = "127.0.0.1:8081";
         let message = "hello";
         let local_addr = "127.0.0.1:8080";
-        let local_site = "1";
-        let local_vc: Vec<u64> = vec![1, 2, 3];
+        let local_site = "A";
+        let clock = Clock::new();
 
         let _listener = TcpListener::bind(address).await?;
 
@@ -243,7 +264,7 @@ mod tests {
 
         // Send the message
         let send_result =
-            send_message(address, message, code, local_addr, local_site, &local_vc).await;
+            send_message(address, message, code, local_addr, local_site, clock).await;
         assert!(send_result.is_ok());
         Ok(())
     }
