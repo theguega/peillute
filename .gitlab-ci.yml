@@ -4,7 +4,10 @@ stages:
   - publish
 
 variables:
-  CARGO_HOME: /usr/local/cargo
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+
+before_script:
+  - git config --global --add safe.directory "$CI_PROJECT_DIR"
 
 test:
   stage: test
@@ -28,6 +31,7 @@ pages:
     - rustdoc
   before_script:
     - apt-get update && apt-get install -y coreutils bash
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   script:
     - mkdir -p public
     - mv target/doc public/doc
