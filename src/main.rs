@@ -10,8 +10,8 @@ use tokio::net::TcpListener;
 use tokio::select;
 use tokio::sync::Mutex;
 
-mod control;
 mod clock;
+mod control;
 mod db;
 mod message;
 mod network;
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::debug!("Listening on: {}", network_listener_local_addr);
 
     let conn: Connection = Connection::open("peillute.db").unwrap();
-    let _ = db::drop_table(&conn);
+    let _ = db::drop_tables(&conn);
     let _ = db::init_db(&conn);
     let node_name = "A";
     let mut local_lamport_time: i64 = 0;

@@ -10,167 +10,144 @@ pub fn run_cli(
 ) -> u8 {
     match line {
         Ok(Some(cmd)) => {
-            handle_command(&conn, &mut local_lamport_time, &node_name, cmd);
+            let command = parse_command(&cmd);
+            handle_command(command, conn, &mut local_lamport_time, node_name);
             print!("> ");
             std_io::stdout().flush().unwrap();
-            return 0;
+            0
         }
         Ok(None) => {
             log::info!("Aucun input");
-            return 0;
+            0
         }
         Err(e) => {
             log::error!("Erreur de lecture stdin : {}", e);
-            return 1; // code d'erreur
+            1
         }
     }
 }
 
-// TO-DO : implement gui
-//pub fn run_gui
+enum Command {
+    CreateUser,
+    UserAccounts,
+    PrintUserTransactions,
+    PrintTransactions,
+    Deposit,
+    Withdraw,
+    Transfer,
+    Pay,
+    Refund,
+    Help,
+    Unknown(String),
+}
 
-fn handle_command(conn: &Connection, lamport_time: &mut i64, noeud: &str, cmd: String) -> () {
-    match cmd.as_str() {
-        "/create_user" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-            db::create_user(&conn, name).unwrap()
+fn parse_command(input: &str) -> Command {
+    match input.trim() {
+        "/create_user" => Command::CreateUser,
+        "/user_accounts" => Command::UserAccounts,
+        "/print_user_tsx" => Command::PrintUserTransactions,
+        "/print_tsx" => Command::PrintTransactions,
+        "/deposit" => Command::Deposit,
+        "/withdraw" => Command::Withdraw,
+        "/transfer" => Command::Transfer,
+        "/pay" => Command::Pay,
+        "/refund" => Command::Refund,
+        "/help" => Command::Help,
+        other => Command::Unknown(other.to_string()),
+    }
+}
+
+fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str) {
+    match cmd {
+        Command::CreateUser => {
+            let name = prompt("Username");
+            db::create_user(conn, &name).unwrap();
         }
 
-        "/user_accounts" => {
-            db::print_users(&conn).unwrap();
+        Command::UserAccounts => {
+            db::print_users(conn).unwrap();
         }
 
-        "/print_user_tsx" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-            db::print_tsx_user(&conn, name).unwrap();
+        Command::PrintUserTransactions => {
+            let name = prompt("Username");
+            db::print_transaction_for_user(conn, &name).unwrap();
         }
 
-        "/print_tsx" => {
-            db::print_tsx(&conn).unwrap();
+        Command::PrintTransactions => {
+            db::print_transactions(conn).unwrap();
         }
 
-        // Déposer de l'argent
-        "/deposit" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-
-            let mut input = String::new();
-            print!("Deposit amount > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f64>().unwrap();
-            db::deposit_user(&conn, name, amount, lamport_time, noeud).unwrap();
+        Command::Deposit => {
+            let name = prompt("Username");
+            let amount = prompt_parse::<f64>("Deposit amount");
+            db::deposit(conn, &name, amount, lamport_time, node).unwrap();
         }
 
-        // Retirer de l'argent
-        "/withdraw" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-
-            let mut input = String::new();
-            print!("Withdraw amount > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let amount = input.trim().parse::<f64>().unwrap();
-            // to do : verifications
-            db::withdraw_user(&conn, name, amount, lamport_time, noeud).unwrap();
+        Command::Withdraw => {
+            let name = prompt("Username");
+            let amount = prompt_parse::<f64>("Withdraw amount");
+            db::withdraw(conn, &name, amount, lamport_time, node).unwrap();
         }
 
-        // Faire un virement à qqn d'autre
-        "/transfer" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-
-            let mut input = String::new();
-            print!("Transfer amount > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let amount: f64 = input.trim().parse::<f64>().unwrap();
-
-            let _ = db::print_users(&conn);
-
-            let mut input = String::new();
-            print!("Beneficiary > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let beneficiary = input.trim();
-
-            db::create_tsx(&conn, name, beneficiary, amount, lamport_time, noeud, "").unwrap();
+        Command::Transfer => {
+            let name = prompt("Username");
+            let amount = prompt_parse::<f64>("Transfer amount");
+            let _ = db::print_users(conn);
+            let beneficiary = prompt("Beneficiary");
+            db::create_transaction(conn, &name, &beneficiary, amount, lamport_time, node, "")
+                .unwrap();
         }
 
-        // Payer
-        "/pay" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-
-            let mut input = String::new();
-            print!("Payment amount > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let amount: f64 = input.trim().parse::<f64>().unwrap();
-
-            db::create_tsx(&conn, name, "NULL", amount, lamport_time, noeud, "").unwrap();
+        Command::Pay => {
+            let name = prompt("Username");
+            let amount = prompt_parse::<f64>("Payment amount");
+            db::create_transaction(conn, &name, "NULL", amount, lamport_time, node, "").unwrap();
         }
 
-        // Se faire rembourser
-        "/refund" => {
-            let mut input = String::new();
-            print!("Username > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let name = input.trim();
-
-            db::print_tsx_user(&conn, name).unwrap();
-
-            let mut input = String::new();
-            print!("Lamport time > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let transac_time = input.trim().parse::<i64>().unwrap();
-
-            let mut input = String::new();
-            print!("Node > ");
-            std_io::stdout().flush().unwrap();
-            std_io::stdin().read_line(&mut input).unwrap();
-            let transac_node = input.trim();
-
-            db::refund(&conn, transac_time, transac_node, lamport_time, noeud).unwrap();
+        Command::Refund => {
+            let name = prompt("Username");
+            db::print_transaction_for_user(conn, &name).unwrap();
+            let transac_time = prompt_parse::<i64>("Lamport time");
+            let transac_node = prompt("Node");
+            db::refund_transaction(conn, transac_time, &transac_node, lamport_time, node).unwrap();
         }
 
-        "/help" => {
-            log::info!("Command list : ");
-            log::info!("/create_user : create the user personnal account");
-            log::info!("/user_accounts : list all users");
-            log::info!("/print_user_tsx : print the user's transactions");
-            log::info!("/print_tsx : print the system's transactions time");
-            log::info!("/deposit : make a deposit on your personnal account.");
-            log::info!("/withdraw : make a withdraw on your personnal account.");
-            log::info!(
-                "/transfer : make a transfer from your personnal account to an other user account."
-            );
-            log::info!("/pay : make a pay from your personnal account.");
-            log::info!("/refund : get a refund on your personnal account.");
+        Command::Help => {
+            log::info!("📜 Command list:");
+            log::info!("/create_user      - Create a personal account");
+            log::info!("/user_accounts    - List all users");
+            log::info!("/print_user_tsx   - Show a user’s transactions");
+            log::info!("/print_tsx        - Show all system transactions");
+            log::info!("/deposit          - Deposit money to an account");
+            log::info!("/withdraw         - Withdraw money from an account");
+            log::info!("/transfer         - Transfer money to another user");
+            log::info!("/pay              - Make a payment (to NULL)");
+            log::info!("/refund           - Refund a transaction");
         }
-        _ => log::info!("❓ Unknown command  : {}", cmd),
+
+        Command::Unknown(cmd) => {
+            log::info!("❓ Unknown command: {}", cmd);
+        }
+    }
+}
+
+fn prompt(label: &str) -> String {
+    let mut input = String::new();
+    print!("{label} > ");
+    std_io::stdout().flush().unwrap();
+    std_io::stdin().read_line(&mut input).unwrap();
+    input.trim().to_string()
+}
+
+fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
+where
+    T::Err: std::fmt::Debug,
+{
+    loop {
+        let input = prompt(label);
+        match input.parse::<T>() {
+            Ok(value) => break value,
+            Err(_) => println!("Invalid input. Try again."),
+        }
     }
 }
