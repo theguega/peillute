@@ -9,6 +9,8 @@ variables:
 test:
   stage: test
   image: rustlang/rust:nightly-slim
+  before_script:
+    - apt-get update && apt-get install -y libsqlite3-dev
   script:
     - cargo test
   rules:
@@ -17,6 +19,8 @@ test:
 rustdoc:
   stage: build
   image: rustlang/rust:nightly-slim
+  before_script:
+    - apt-get update && apt-get install -y libsqlite3-dev
   script:
     - cargo doc --no-deps
   artifacts:
