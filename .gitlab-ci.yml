@@ -8,7 +8,7 @@ variables:
 
 test:
   stage: test
-  image: rust:1.76-bullseye
+  image: rust:nightly
   script:
     - cargo test
   rules:
@@ -16,7 +16,7 @@ test:
 
 rustdoc:
   stage: build
-  image: rust:1.76-bullseye
+  image: rust:nightly
   script:
     - cargo doc --no-deps
   artifacts:
