@@ -18,6 +18,8 @@ test:
 rustdoc:
   stage: build
   image: rust:1.76-bullseye
+  before_script:
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
   script:
     - cargo doc --no-deps
   artifacts:
