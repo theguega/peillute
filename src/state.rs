@@ -34,6 +34,11 @@ impl AppState {
             clocks,
         }
     }
+    #[allow(unused)]
+    pub fn change_site_id(&mut self, site_id: &str) {
+        self.clocks.change_current_site_id(&self.site_id, site_id);
+        self.site_id = site_id.to_string();
+    }
 
     pub fn add_peer(&mut self, site_id : &str, addr: SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
