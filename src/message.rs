@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-
+use crate::control::Command;
 use crate::clock::Clock;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -56,6 +56,7 @@ pub struct Message {
     pub sender_id: String,
     pub sender_addr: SocketAddr,
     pub clock: Clock,
+    pub command: Option<Command>,
     pub message: String,
     pub code: NetworkMessageCode,
 }
@@ -86,6 +87,7 @@ mod tests {
             sender_id: "A".to_string(),
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
             clock: clock,
+            command: None,
             message: "Test message".to_string(),
             code: NetworkMessageCode::Transaction,
         };

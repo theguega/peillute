@@ -1,33 +1,35 @@
 use super::db;
 use rusqlite::Connection;
 use std::io::{self as std_io, Write};
+use serde::{Deserialize, Serialize};
+use crate::network::send_message_to_all;
+use std::error::Error;
 
+// renvoie une commande 
 pub fn run_cli(
     line: Result<Option<String>, std::io::Error>,
-    conn: &Connection,
-    mut local_lamport_time: &mut i64,
-    node_name: &str,
-) -> u8 {
+) -> Command {
     match line {
         Ok(Some(cmd)) => {
             let command = parse_command(&cmd);
-            handle_command(command, conn, &mut local_lamport_time, node_name);
+
             print!("> ");
             std_io::stdout().flush().unwrap();
-            0
+            command
         }
         Ok(None) => {
             log::info!("Aucun input");
-            0
+            Command::Unknown("Aucun input".to_string())
         }
         Err(e) => {
             log::error!("Erreur de lecture stdin : {}", e);
-            1
+            Command::Error("Erreur de lecture stdin".to_string())
         }
     }
 }
 
-enum Command {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum Command {
     CreateUser,
     UserAccounts,
     PrintUserTransactions,
@@ -39,6 +41,7 @@ enum Command {
     Refund,
     Help,
     Unknown(String),
+    Error(String),
 }
 
 fn parse_command(input: &str) -> Command {
@@ -57,11 +60,21 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
-fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str) {
+pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str, from_network : bool)-> Result<(), Box<dyn Error>> {
+
+    
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
             db::create_user(conn, &name).unwrap();
+            if !from_network {
+                let _ = send_message_to_all(
+                    &format!("{}", name),
+                    Some(Command::CreateUser),
+                    crate::message::NetworkMessageCode::Transaction,
+                )
+                .await?;
+            }
         }
 
         Command::UserAccounts => {
@@ -81,12 +94,29 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Deposit amount");
             db::deposit(conn, &name, amount, lamport_time, node).unwrap();
+            if !from_network {
+                let _ = send_message_to_all(
+                    &format!("{}-{}", name, amount),
+                    Some(Command::Deposit),
+                    crate::message::NetworkMessageCode::Transaction,
+                )
+                .await?;
+            }
         }
 
         Command::Withdraw => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Withdraw amount");
             db::withdraw(conn, &name, amount, lamport_time, node).unwrap();
+            if !from_network {
+                let _ = send_message_to_all(
+                    &format!("{}-{}", name, amount),
+                    Some(Command::Withdraw),
+                    crate::message::NetworkMessageCode::Transaction,
+                )
+                .await?;
+            }
+
         }
 
         Command::Transfer => {
@@ -96,12 +126,32 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
             let beneficiary = prompt("Beneficiary");
             db::create_transaction(conn, &name, &beneficiary, amount, lamport_time, node, "")
                 .unwrap();
+
+            if !from_network {
+                let _ = send_message_to_all(
+                    &format!("{}-{}-{}", name, beneficiary, amount),
+                    Some(Command::Transfer),
+                    crate::message::NetworkMessageCode::Transaction,
+                )
+                .await?;
+            }
+
         }
 
         Command::Pay => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Payment amount");
             db::create_transaction(conn, &name, "NULL", amount, lamport_time, node, "").unwrap();
+            
+            if !from_network {
+                let _ = send_message_to_all(
+                    &format!("{}-{}", name, amount),
+                    Some(Command::Pay),
+                    crate::message::NetworkMessageCode::Transaction,
+                )
+                .await?;
+            }
+
         }
 
         Command::Refund => {
@@ -110,6 +160,11 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
             let transac_time = prompt_parse::<i64>("Lamport time");
             let transac_node = prompt("Node");
             db::refund_transaction(conn, transac_time, &transac_node, lamport_time, node).unwrap();
+
+            if !from_network {
+               // TODO : send message
+            }
+
         }
 
         Command::Help => {
@@ -128,7 +183,12 @@ fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node:
         Command::Unknown(cmd) => {
             log::info!("❓ Unknown command: {}", cmd);
         }
+
+        Command::Error(err) => {
+            log::error!("❌ Error: {}", err);
+        }
     }
+    Ok(())
 }
 
 fn prompt(label: &str) -> String {

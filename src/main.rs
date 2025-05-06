@@ -1,5 +1,6 @@
 use clap::Parser;
-use control::run_cli;
+use control::{run_cli, handle_command};
+
 use log::info;
 use rusqlite::{Connection, Result};
 use std::io::{self as std_io, Write};
@@ -122,7 +123,8 @@ async fn main_loop(
                     state.increment_vector_current();
                     state.increment_lamport();
                 }
-                let _ = run_cli(line, &conn,local_lamport_time, node_name);
+                let command = run_cli(line);
+                let _ = handle_command(command, conn, local_lamport_time, node_name, false).await;
             }
             Ok((stream, addr)) = listener.accept() => {
                 let _ = network::start_listening(stream, addr).await;
@@ -166,6 +168,7 @@ async fn disconnect() {
         if let Err(e) = network::send_message(
             &peer_addr_str,
             "",
+            None,
             message::NetworkMessageCode::Disconnect,
             &local_addr,
             &site_id,
