@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
+use crate::clock::Clock;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
     pub id: u64,
@@ -51,9 +53,9 @@ impl NetworkMessageCode {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
-    pub sender_id: usize,
+    pub sender_id: String,
     pub sender_addr: SocketAddr,
-    pub sender_vc: Vec<u64>,
+    pub clock: Clock,
     pub message: String,
     pub code: NetworkMessageCode,
 }
@@ -78,14 +80,16 @@ mod tests {
 
     #[test]
     fn test_message_debug() {
+        let clock = Clock::new();
+
         let message = Message {
-            sender_id: 1,
+            sender_id: "A".to_string(),
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
-            sender_vc: vec![1, 2, 3],
+            clock: clock,
             message: "Test message".to_string(),
             code: NetworkMessageCode::Transaction,
         };
-        assert!(format!("{:?}", message).contains("Message { sender_id: 1"));
+        assert!(format!("{:?}", message).contains("Message { sender_id: \"A\""));
     }
 
     #[test]
