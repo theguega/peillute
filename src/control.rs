@@ -1,15 +1,12 @@
 use super::db;
+use crate::network::send_message_to_all;
 use rusqlite::Connection;
-use std::io::{self as std_io, Write};
 use serde::{Deserialize, Serialize};
-use crate::{message::CreateUser, network::send_message_to_all};
 use std::error::Error;
-use crate::message::MessageInfo;
+use std::io::{self as std_io, Write};
 
-// renvoie une commande 
-pub fn run_cli(
-    line: Result<Option<String>, std::io::Error>,
-) -> Command {
+// renvoie une commande
+pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     match line {
         Ok(Some(cmd)) => {
             let command = parse_command(&cmd);
@@ -61,9 +58,13 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
-pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut i64, node: &str, from_network : bool)-> Result<(), Box<dyn Error>> {
-
-    
+pub async fn handle_command(
+    cmd: Command,
+    conn: &Connection,
+    lamport_time: &mut i64,
+    node: &str,
+    from_network: bool,
+) -> Result<(), Box<dyn Error>> {
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
@@ -72,7 +73,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
                 let _ = send_message_to_all(
                     Some(Command::CreateUser),
                     crate::message::NetworkMessageCode::Transaction,
-                    crate::message::MessageInfo::CreateUser(CreateUser::new(name.clone())),
+                    crate::message::MessageInfo::CreateUser(crate::message::CreateUser::new(
+                        name.clone(),
+                    )),
                 )
                 .await?;
             }
@@ -99,7 +102,10 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
                 let _ = send_message_to_all(
                     Some(Command::Deposit),
                     crate::message::NetworkMessageCode::Transaction,
-                    crate::message::MessageInfo::Deposit(crate::message::Deposit::new(name.clone(), amount)),
+                    crate::message::MessageInfo::Deposit(crate::message::Deposit::new(
+                        name.clone(),
+                        amount,
+                    )),
                 )
                 .await?;
             }
@@ -113,11 +119,13 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
                 let _ = send_message_to_all(
                     Some(Command::Withdraw),
                     crate::message::NetworkMessageCode::Transaction,
-                    crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(name.clone(), amount)),
+                    crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(
+                        name.clone(),
+                        amount,
+                    )),
                 )
                 .await?;
             }
-
         }
 
         Command::Transfer => {
@@ -132,27 +140,32 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
                 let _ = send_message_to_all(
                     Some(Command::Transfer),
                     crate::message::NetworkMessageCode::Transaction,
-                    crate::message::MessageInfo::Transfer(crate::message::Transfer::new(name.clone(), beneficiary.clone(), amount)),
+                    crate::message::MessageInfo::Transfer(crate::message::Transfer::new(
+                        name.clone(),
+                        beneficiary.clone(),
+                        amount,
+                    )),
                 )
                 .await?;
             }
-
         }
 
         Command::Pay => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Payment amount");
             db::create_transaction(conn, &name, "NULL", amount, lamport_time, node, "").unwrap();
-            
+
             if !from_network {
                 let _ = send_message_to_all(
                     Some(Command::Pay),
                     crate::message::NetworkMessageCode::Transaction,
-                    crate::message::MessageInfo::Pay(crate::message::Pay::new(name.clone(), amount)),
+                    crate::message::MessageInfo::Pay(crate::message::Pay::new(
+                        name.clone(),
+                        amount,
+                    )),
                 )
                 .await?;
             }
-
         }
 
         Command::Refund => {
@@ -163,9 +176,8 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
             db::refund_transaction(conn, transac_time, &transac_node, lamport_time, node).unwrap();
 
             if !from_network {
-               // TODO : send message
+                // TODO : send message
             }
-
         }
 
         Command::Help => {

@@ -1,5 +1,5 @@
 use clap::Parser;
-use control::{run_cli, handle_command};
+use control::{handle_command, run_cli};
 
 use log::info;
 use rusqlite::{Connection, Result};
@@ -78,11 +78,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let (mut local_lamport_time, node_name) = {
-            let state = LOCAL_APP_STATE.lock().await;
-            let lamport_time = state.get_lamport().clone();
-            let site_id = state.get_site_id().to_string(); // Clone as a String
-            (lamport_time, site_id)
-        };
+        let state = LOCAL_APP_STATE.lock().await;
+        let lamport_time = state.get_lamport().clone();
+        let site_id = state.get_site_id().to_string(); // Clone as a String
+        (lamport_time, site_id)
+    };
 
     let stdin: tokio_io::Stdin = tokio_io::stdin();
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
@@ -124,7 +124,7 @@ async fn main_loop(
                     state.increment_lamport();
                 }
                 let command = run_cli(line);
-                handle_command(command, conn, local_lamport_time, node_name, false).await;
+                let _ = handle_command(command, conn, local_lamport_time, node_name, false).await;
             }
             Ok((stream, addr)) = listener.accept() => {
                 let _ = network::start_listening(stream, addr).await;

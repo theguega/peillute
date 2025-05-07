@@ -1,5 +1,8 @@
+use crate::control::Command;
 use crate::{
-    clock::Clock, message::{Message, NetworkMessageCode,MessageInfo}, state::LOCAL_APP_STATE
+    clock::Clock,
+    message::{Message, MessageInfo, NetworkMessageCode},
+    state::LOCAL_APP_STATE,
 };
 use rmp_serde::{decode, encode};
 use std::collections::HashMap;
@@ -8,10 +11,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
-use crate::control::Command;
+use tokio::sync::Mutex;
 
 pub struct PeerConnection {
     pub sender: Sender<Vec<u8>>,
@@ -148,10 +150,9 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
         match message.code {
             NetworkMessageCode::Discovery => {
-
                 let (local_addr, site_id, clocks) = {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
                     (
                         state.get_local_addr().to_string(),
                         state.get_site_id().to_string(),
@@ -173,6 +174,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
                 match message.command {
+                    #[allow(unused)]
                     Some(cmd) => {
                         let mut state = LOCAL_APP_STATE.lock().await;
                         state.increment_lamport();
@@ -193,7 +195,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                 log::debug!("Acknowledgment message received: {:?}", message);
                 {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
                 }
             }
             NetworkMessageCode::Error => {
@@ -233,7 +235,7 @@ pub async fn send_message(
 
     /* !!!! DO NOT LOCK APPSTATE HERE, ALREADY LOCKED IN handle_message !!!! */
 
-    if code == NetworkMessageCode::Transaction && command.is_none(){
+    if code == NetworkMessageCode::Transaction && command.is_none() {
         log::error!("Command is None for Transaction message");
         return Err("Command is None for Transaction message".into());
     }
@@ -243,7 +245,7 @@ pub async fn send_message(
         sender_addr: local_addr.parse().unwrap(),
         clock: clock.clone(),
         command: command,
-        info:info,
+        info: info,
         code: code.clone(),
     };
 
@@ -265,13 +267,11 @@ pub async fn send_message(
     Ok(())
 }
 
-
 pub async fn send_message_to_all(
     command: Option<Command>,
     code: crate::message::NetworkMessageCode,
     info: MessageInfo,
 ) -> Result<(), Box<dyn Error>> {
-
     let (local_addr, site_id, peer_addrs, clock) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
@@ -321,8 +321,16 @@ mod tests {
         let code = crate::message::NetworkMessageCode::Discovery;
 
         // Send the message
-        let send_result =
-            send_message(address, MessageInfo::None,None, code, local_addr, local_site, clock).await;
+        let send_result = send_message(
+            address,
+            MessageInfo::None,
+            None,
+            code,
+            local_addr,
+            local_site,
+            clock,
+        )
+        .await;
         assert!(send_result.is_ok());
         Ok(())
     }

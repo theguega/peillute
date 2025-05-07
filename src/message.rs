@@ -1,7 +1,7 @@
+use crate::clock::Clock;
+use crate::control::Command;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use crate::control::Command;
-use crate::clock::Clock;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
@@ -61,7 +61,6 @@ pub struct Message {
     pub code: NetworkMessageCode,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageInfo {
     CreateUser(CreateUser),
@@ -72,7 +71,6 @@ pub enum MessageInfo {
     Refund(Refund),
     None,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateUser {
@@ -135,6 +133,8 @@ pub struct Refund {
     pub transac_node: String,
 }
 impl Refund {
+    #[allow(unused)]
+    #[allow(dead_code)]
     pub fn new(name: String, transac_time: i64, transac_node: String) -> Self {
         Self {
             name,

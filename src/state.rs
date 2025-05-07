@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::collections::HashMap;
 
 use crate::clock::Clock;
 
@@ -40,7 +40,7 @@ impl AppState {
         self.site_id = site_id.to_string();
     }
 
-    pub fn add_peer(&mut self, site_id : &str, addr: SocketAddr) {
+    pub fn add_peer(&mut self, site_id: &str, addr: SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
             self.nb_sites_on_network += 1;
@@ -108,8 +108,6 @@ impl AppState {
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.clocks.update_lamport(received_lamport);
     }
-
-
 }
 
 // Singleton
@@ -136,7 +134,8 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr: SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
-        let shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let shared_state =
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
 
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.nb_sites_on_network, num_sites);
@@ -153,7 +152,8 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let mut shared_state =
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
 
@@ -161,7 +161,6 @@ mod tests {
         assert_eq!(shared_state.nb_sites_on_network, 3);
         assert!(shared_state.clocks.get_vector().contains_key("B"));
     }
-
 
     #[test]
     fn test_remove_peer() {
@@ -172,7 +171,8 @@ mod tests {
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state = AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+        let mut shared_state =
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
         shared_state.remove_peer("127.0.0.1:8081".parse().unwrap());
@@ -180,9 +180,8 @@ mod tests {
         assert_eq!(shared_state.peer_addrs.len(), 2);
         assert_eq!(shared_state.nb_sites_on_network, 2);
 
-        // Ensure the vector clock is updated correctly ?? 
+        // Ensure the vector clock is updated correctly ??
         // Do we want the clock to remove the site when it is removed from the peer list?
         // assert!(!shared_state.clocks.get_vector().contains_key("B"));
-
     }
 }

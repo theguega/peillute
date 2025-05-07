@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result, params};
+use rusqlite::{params, Connection, Result};
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -156,7 +156,7 @@ pub fn deposit(
         log::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
-    if !user_exists(conn, user)?{
+    if !user_exists(conn, user)? {
         return Err(rusqlite::Error::InvalidQuery);
     }
     create_transaction(
@@ -181,10 +181,10 @@ pub fn withdraw(
         log::error!("Negative withdrawal amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
     }
-    if !user_exists(conn, user)?{
+    if !user_exists(conn, user)? {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    if calculate_solde(user)?<amount{
+    if calculate_solde(user)? < amount {
         return Err(rusqlite::Error::InvalidQuery);
     }
     create_transaction(
