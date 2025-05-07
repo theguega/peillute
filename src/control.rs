@@ -1,5 +1,6 @@
 use super::db;
 use crate::network::send_message_to_all;
+use crate::state::LOCAL_APP_STATE;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -38,6 +39,7 @@ pub enum Command {
     Pay,
     Refund,
     Help,
+    Info,
     Unknown(String),
     Error(String),
 }
@@ -54,6 +56,7 @@ fn parse_command(input: &str) -> Command {
         "/pay" => Command::Pay,
         "/refund" => Command::Refund,
         "/help" => Command::Help,
+        "/info" => Command::Info,
         other => Command::Unknown(other.to_string()),
     }
 }
@@ -191,6 +194,33 @@ pub async fn handle_command(
             log::info!("/transfer         - Transfer money to another user");
             log::info!("/pay              - Make a payment (to NULL)");
             log::info!("/refund           - Refund a transaction");
+            log::info!("/info             - Show system information");
+        }
+
+        Command::Info => {
+            let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
+                let state = LOCAL_APP_STATE.lock().await;
+                (
+                    state.get_local_addr().to_string(),
+                    state.get_site_id().to_string(),
+                    state.get_peers(),
+                    state.get_clock().clone(),
+                    state.nb_sites_on_network,
+                )
+            };
+
+            log::info!("ℹ️  Info: This is a distributed banking system.");
+            log::info!("ℹ️  Version: 0.0.1");
+            log::info!(
+                "ℹ️  Authors: Aubin Vert, Théo Guegan, Alexandre Eberhardt, Léopold Chappuis "
+            );
+            log::info!("ℹ️  License: MIT");
+            log::info!("ℹ️  Local address: {}", local_addr);
+            log::info!("ℹ️  Site ID: {}", site_id);
+            log::info!("ℹ️  Peers: {:?}", peer_addrs);
+            log::info!("ℹ️  Number of sites on network: {}", nb_sites);
+            log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
+            log::info!("ℹ️  Vector clock: {:?}", clock.get_vector_clock());
         }
 
         Command::Unknown(cmd) => {
