@@ -25,13 +25,24 @@ cargo build
 Chaque instance fonctionne comme un nœud sur le réseau local. Exemple pour lancer 3 nœuds :
 ```sh
 # Terminal 1
-RUST_LOG=debug cargo run -- --site-id 1 --port 8000 --peers 127.0.0.1:8001,127.0.0.1:8002
+RUST_LOG=DEBUG cargo run
 
 # Terminal 2
-RUST_LOG=info cargo run -- --site-id 2 --port 8001 --peers 127.0.0.1:8000,127.0.0.1:8002
+RUST_LOG=INFO cargo run
 
 # Terminal 3
-RUST_LOG=error cargo run -- --site-id 3 --port 8002 --peers 127.0.0.1:8000,127.0.0.1:8001
+RUST_LOG=ERROR cargo run
+```
+Le choix du port ainsi que les id de sites sont optionnels mais peuvent être spécifiés:
+```sh
+# Terminal 1
+RUST_LOG=DEBUG cargo run -- --site-id A --port 8000
+
+# Terminal 2
+RUST_LOG=INFO cargo run -- --site-id B --port 8001
+
+# Terminal 3
+RUST_LOG=ERROR cargo run -- --site-id C --port 8002
 ```
 
 ## 🛠️ Développement et Tests
@@ -39,4 +50,9 @@ RUST_LOG=error cargo run -- --site-id 3 --port 8002 --peers 127.0.0.1:8000,127.0
 ### Lancer les tests unitaires :
 ```sh
 cargo test
+```
+
+### Formater le code:
+```sh
+cargo fmt
 ```
