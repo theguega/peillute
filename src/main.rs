@@ -124,7 +124,7 @@ async fn main_loop(
                     state.increment_lamport();
                 }
                 let command = run_cli(line);
-                let _ = handle_command(command, conn, local_lamport_time, node_name, false).await;
+                handle_command(command, conn, local_lamport_time, node_name, false).await;
             }
             Ok((stream, addr)) = listener.accept() => {
                 let _ = network::start_listening(stream, addr).await;
@@ -167,7 +167,7 @@ async fn disconnect() {
         }
         if let Err(e) = network::send_message(
             &peer_addr_str,
-            "",
+            message::MessageInfo::None,
             None,
             message::NetworkMessageCode::Disconnect,
             &local_addr,

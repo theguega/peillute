@@ -57,8 +57,91 @@ pub struct Message {
     pub sender_addr: SocketAddr,
     pub clock: Clock,
     pub command: Option<Command>,
-    pub message: String,
+    pub info: MessageInfo,
     pub code: NetworkMessageCode,
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MessageInfo {
+    CreateUser(CreateUser),
+    Deposit(Deposit),
+    Withdraw(Withdraw),
+    Transfer(Transfer),
+    Pay(Pay),
+    Refund(Refund),
+    None,
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateUser {
+    pub name: String,
+}
+impl CreateUser {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Deposit {
+    pub name: String,
+    pub amount: f64,
+}
+impl Deposit {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Withdraw {
+    pub name: String,
+    pub amount: f64,
+}
+impl Withdraw {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transfer {
+    pub name: String,
+    pub beneficiary: String,
+    pub amount: f64,
+}
+impl Transfer {
+    pub fn new(name: String, beneficiary: String, amount: f64) -> Self {
+        Self {
+            name,
+            beneficiary,
+            amount,
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Pay {
+    pub name: String,
+    pub amount: f64,
+}
+impl Pay {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Refund {
+    pub name: String,
+    pub transac_time: i64,
+    pub transac_node: String,
+}
+impl Refund {
+    pub fn new(name: String, transac_time: i64, transac_node: String) -> Self {
+        Self {
+            name,
+            transac_time,
+            transac_node,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -88,7 +171,7 @@ mod tests {
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
             clock: clock,
             command: None,
-            message: "Test message".to_string(),
+            info: MessageInfo::None,
             code: NetworkMessageCode::Transaction,
         };
         assert!(format!("{:?}", message).contains("Message { sender_id: \"A\""));

@@ -1,5 +1,5 @@
 use crate::{
-    clock::Clock, message::{Message, NetworkMessageCode}, state::LOCAL_APP_STATE
+    clock::Clock, message::{Message, NetworkMessageCode,MessageInfo}, state::LOCAL_APP_STATE
 };
 use rmp_serde::{decode, encode};
 use std::collections::HashMap;
@@ -95,7 +95,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
             }
             let _ = send_message(
                 &address,
-                "",
+                MessageInfo::None,
                 None,
                 NetworkMessageCode::Discovery,
                 &local_addr,
@@ -161,7 +161,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                 log::debug!("Sending discovery response to: {}", message.sender_addr);
                 let _ = send_message(
                     &message.sender_addr.to_string(),
-                    "",
+                    MessageInfo::None,
                     None,
                     NetworkMessageCode::Acknowledgment,
                     &local_addr,
@@ -172,7 +172,22 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
-                // match pour les commandes
+                match message.command {
+                    Some(cmd) => {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        state.increment_lamport();
+                        state.increment_vector_current();
+                        state.update_vector(&message.clock.get_vector());
+                        state.update_lamport(message.clock.get_lamport());
+
+                        // TODO: Handle the command
+                        //let conn = rusqlite::Connection::open("peillute.db")?;
+                        //let _ = crate::control::handle_command(cmd, &conn, &mut state.get_lamport(), &state.get_site_id(), true).await;
+                    }
+                    None => {
+                        log::error!("Command is None for Transaction message");
+                    }
+                }
             }
             NetworkMessageCode::Acknowledgment => {
                 log::debug!("Acknowledgment message received: {:?}", message);
@@ -207,7 +222,7 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
 pub async fn send_message(
     address: &str,
-    message: &str,
+    info: MessageInfo,
     command: Option<Command>,
     code: crate::message::NetworkMessageCode,
     local_addr: &str,
@@ -228,7 +243,7 @@ pub async fn send_message(
         sender_addr: local_addr.parse().unwrap(),
         clock: clock.clone(),
         command: command,
-        message: message.to_string(),
+        info:info,
         code: code.clone(),
     };
 
@@ -252,9 +267,9 @@ pub async fn send_message(
 
 
 pub async fn send_message_to_all(
-    message: &str,
     command: Option<Command>,
     code: crate::message::NetworkMessageCode,
+    info: MessageInfo,
 ) -> Result<(), Box<dyn Error>> {
 
     let (local_addr, site_id, peer_addrs, clock) = {
@@ -271,7 +286,7 @@ pub async fn send_message_to_all(
         let peer_addr_str = peer_addr.to_string();
         send_message(
             &peer_addr_str,
-            message,
+            info.clone(),
             command.clone(),
             code.clone(),
             &local_addr,
@@ -295,7 +310,6 @@ mod tests {
     #[test]
     async fn test_send_message() -> Result<(), Box<dyn Error>> {
         let address = "127.0.0.1:8081";
-        let message = "hello";
         let local_addr = "127.0.0.1:8080";
         let local_site = "A";
         let clock = Clock::new();
@@ -308,7 +322,7 @@ mod tests {
 
         // Send the message
         let send_result =
-            send_message(address, message,None, code, local_addr, local_site, clock).await;
+            send_message(address, MessageInfo::None,None, code, local_addr, local_site, clock).await;
         assert!(send_result.is_ok());
         Ok(())
     }

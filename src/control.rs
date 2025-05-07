@@ -2,8 +2,9 @@ use super::db;
 use rusqlite::Connection;
 use std::io::{self as std_io, Write};
 use serde::{Deserialize, Serialize};
-use crate::network::send_message_to_all;
+use crate::{message::CreateUser, network::send_message_to_all};
 use std::error::Error;
+use crate::message::MessageInfo;
 
 // renvoie une commande 
 pub fn run_cli(
@@ -69,9 +70,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
             db::create_user(conn, &name).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
-                    &format!("{}", name),
                     Some(Command::CreateUser),
                     crate::message::NetworkMessageCode::Transaction,
+                    crate::message::MessageInfo::CreateUser(CreateUser::new(name.clone())),
                 )
                 .await?;
             }
@@ -96,9 +97,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
             db::deposit(conn, &name, amount, lamport_time, node).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
-                    &format!("{}-{}", name, amount),
                     Some(Command::Deposit),
                     crate::message::NetworkMessageCode::Transaction,
+                    crate::message::MessageInfo::Deposit(crate::message::Deposit::new(name.clone(), amount)),
                 )
                 .await?;
             }
@@ -110,9 +111,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
             db::withdraw(conn, &name, amount, lamport_time, node).unwrap();
             if !from_network {
                 let _ = send_message_to_all(
-                    &format!("{}-{}", name, amount),
                     Some(Command::Withdraw),
                     crate::message::NetworkMessageCode::Transaction,
+                    crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(name.clone(), amount)),
                 )
                 .await?;
             }
@@ -129,9 +130,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
 
             if !from_network {
                 let _ = send_message_to_all(
-                    &format!("{}-{}-{}", name, beneficiary, amount),
                     Some(Command::Transfer),
                     crate::message::NetworkMessageCode::Transaction,
+                    crate::message::MessageInfo::Transfer(crate::message::Transfer::new(name.clone(), beneficiary.clone(), amount)),
                 )
                 .await?;
             }
@@ -145,9 +146,9 @@ pub async fn handle_command(cmd: Command, conn: &Connection, lamport_time: &mut 
             
             if !from_network {
                 let _ = send_message_to_all(
-                    &format!("{}-{}", name, amount),
                     Some(Command::Pay),
                     crate::message::NetworkMessageCode::Transaction,
+                    crate::message::MessageInfo::Pay(crate::message::Pay::new(name.clone(), amount)),
                 )
                 .await?;
             }
