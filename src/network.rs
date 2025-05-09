@@ -1,5 +1,8 @@
+use crate::control::Command;
 use crate::{
-    clock::Clock, message::{Message, NetworkMessageCode}, state::LOCAL_APP_STATE
+    clock::Clock,
+    message::{Message, MessageInfo, NetworkMessageCode},
+    state::LOCAL_APP_STATE,
 };
 use rmp_serde::{decode, encode};
 use std::collections::HashMap;
@@ -8,9 +11,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 
 pub struct PeerConnection {
     pub sender: Sender<Vec<u8>>,
@@ -94,7 +97,8 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16) {
             }
             let _ = send_message(
                 &address,
-                "",
+                MessageInfo::None,
+                None,
                 NetworkMessageCode::Discovery,
                 &local_addr,
                 &site_id,
@@ -146,10 +150,9 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
         match message.code {
             NetworkMessageCode::Discovery => {
-
                 let (local_addr, site_id, clocks) = {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
                     (
                         state.get_local_addr().to_string(),
                         state.get_site_id().to_string(),
@@ -159,7 +162,8 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
                 log::debug!("Sending discovery response to: {}", message.sender_addr);
                 let _ = send_message(
                     &message.sender_addr.to_string(),
-                    "",
+                    MessageInfo::None,
+                    None,
                     NetworkMessageCode::Acknowledgment,
                     &local_addr,
                     &site_id,
@@ -169,12 +173,29 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
+                match message.command {
+                    #[allow(unused)]
+                    Some(cmd) => {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        state.increment_lamport();
+                        state.increment_vector_current();
+                        state.update_vector(&message.clock.get_vector());
+                        state.update_lamport(message.clock.get_lamport());
+
+                        // TODO: Handle the command
+                        //let conn = rusqlite::Connection::open("peillute.db")?;
+                        //let _ = crate::control::handle_command(cmd, &conn, &mut state.get_lamport(), &state.get_site_id(), true).await;
+                    }
+                    None => {
+                        log::error!("Command is None for Transaction message");
+                    }
+                }
             }
             NetworkMessageCode::Acknowledgment => {
                 log::debug!("Acknowledgment message received: {:?}", message);
                 {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(),message.sender_addr);
+                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
                 }
             }
             NetworkMessageCode::Error => {
@@ -203,7 +224,8 @@ pub async fn handle_message(mut stream: TcpStream, addr: SocketAddr) -> Result<(
 
 pub async fn send_message(
     address: &str,
-    message: &str,
+    info: MessageInfo,
+    command: Option<Command>,
     code: crate::message::NetworkMessageCode,
     local_addr: &str,
     local_site: &str,
@@ -213,11 +235,17 @@ pub async fn send_message(
 
     /* !!!! DO NOT LOCK APPSTATE HERE, ALREADY LOCKED IN handle_message !!!! */
 
+    if code == NetworkMessageCode::Transaction && command.is_none() {
+        log::error!("Command is None for Transaction message");
+        return Err("Command is None for Transaction message".into());
+    }
+
     let msg = Message {
         sender_id: local_site.parse().unwrap(),
         sender_addr: local_addr.parse().unwrap(),
         clock: clock.clone(),
-        message: message.to_string(),
+        command: command,
+        info: info,
         code: code.clone(),
     };
 
@@ -239,6 +267,37 @@ pub async fn send_message(
     Ok(())
 }
 
+pub async fn send_message_to_all(
+    command: Option<Command>,
+    code: crate::message::NetworkMessageCode,
+    info: MessageInfo,
+) -> Result<(), Box<dyn Error>> {
+    let (local_addr, site_id, peer_addrs, clock) = {
+        let state = LOCAL_APP_STATE.lock().await;
+        (
+            state.get_local_addr().to_string(),
+            state.get_site_id().to_string(),
+            state.get_peers(),
+            state.get_clock().clone(),
+        )
+    };
+
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        send_message(
+            &peer_addr_str,
+            info.clone(),
+            command.clone(),
+            code.clone(),
+            &local_addr,
+            &site_id,
+            clock.clone(),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 pub async fn on_sync() {
     // TODO : implement sync
 }
@@ -251,7 +310,6 @@ mod tests {
     #[test]
     async fn test_send_message() -> Result<(), Box<dyn Error>> {
         let address = "127.0.0.1:8081";
-        let message = "hello";
         let local_addr = "127.0.0.1:8080";
         let local_site = "A";
         let clock = Clock::new();
@@ -263,8 +321,16 @@ mod tests {
         let code = crate::message::NetworkMessageCode::Discovery;
 
         // Send the message
-        let send_result =
-            send_message(address, message, code, local_addr, local_site, clock).await;
+        let send_result = send_message(
+            address,
+            MessageInfo::None,
+            None,
+            code,
+            local_addr,
+            local_site,
+            clock,
+        )
+        .await;
         assert!(send_result.is_ok());
         Ok(())
     }

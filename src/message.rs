@@ -1,7 +1,7 @@
+use crate::clock::Clock;
+use crate::control::Command;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-
-use crate::clock::Clock;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
@@ -56,8 +56,92 @@ pub struct Message {
     pub sender_id: String,
     pub sender_addr: SocketAddr,
     pub clock: Clock,
-    pub message: String,
+    pub command: Option<Command>,
+    pub info: MessageInfo,
     pub code: NetworkMessageCode,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MessageInfo {
+    CreateUser(CreateUser),
+    Deposit(Deposit),
+    Withdraw(Withdraw),
+    Transfer(Transfer),
+    Pay(Pay),
+    Refund(Refund),
+    None,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateUser {
+    pub name: String,
+}
+impl CreateUser {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Deposit {
+    pub name: String,
+    pub amount: f64,
+}
+impl Deposit {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Withdraw {
+    pub name: String,
+    pub amount: f64,
+}
+impl Withdraw {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transfer {
+    pub name: String,
+    pub beneficiary: String,
+    pub amount: f64,
+}
+impl Transfer {
+    pub fn new(name: String, beneficiary: String, amount: f64) -> Self {
+        Self {
+            name,
+            beneficiary,
+            amount,
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Pay {
+    pub name: String,
+    pub amount: f64,
+}
+impl Pay {
+    pub fn new(name: String, amount: f64) -> Self {
+        Self { name, amount }
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Refund {
+    pub name: String,
+    pub transac_time: i64,
+    pub transac_node: String,
+}
+impl Refund {
+    #[allow(unused)]
+    #[allow(dead_code)]
+    pub fn new(name: String, transac_time: i64, transac_node: String) -> Self {
+        Self {
+            name,
+            transac_time,
+            transac_node,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -86,7 +170,8 @@ mod tests {
             sender_id: "A".to_string(),
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
             clock: clock,
-            message: "Test message".to_string(),
+            command: None,
+            info: MessageInfo::None,
             code: NetworkMessageCode::Transaction,
         };
         assert!(format!("{:?}", message).contains("Message { sender_id: \"A\""));

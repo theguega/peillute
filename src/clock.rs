@@ -1,15 +1,13 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Clock{
+pub struct Clock {
     lamport_clock: i64,
     vector_clock: HashMap<String, i64>, // site_id -> clock value
 }
 
-
-impl Clock{
+impl Clock {
     pub fn new() -> Self {
         Clock {
             lamport_clock: 0,
@@ -33,11 +31,10 @@ impl Clock{
         *clock += 1;
         *clock
     }
-    
+
     pub fn get_lamport(&self) -> i64 {
         self.lamport_clock
     }
-
 
     pub fn get_vector(&self) -> &HashMap<String, i64> {
         &self.vector_clock
@@ -73,11 +70,7 @@ impl Clock{
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.lamport_clock = self.lamport_clock.max(received_lamport);
     }
-
-
 }
-
-
 
 #[cfg(test)]
 mod tests {
