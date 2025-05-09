@@ -1,7 +1,6 @@
 use super::db;
 use crate::network::send_message_to_all;
 use crate::state::LOCAL_APP_STATE;
-use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::io::{self as std_io, Write};
@@ -135,8 +134,7 @@ pub async fn handle_command(
             let amount = prompt_parse::<f64>("Transfer amount");
             let _ = db::print_users();
             let beneficiary = prompt("Beneficiary");
-            db::create_transaction(&name, &beneficiary, amount, lamport_time, node, "")
-                .unwrap();
+            db::create_transaction(&name, &beneficiary, amount, lamport_time, node, "").unwrap();
 
             if !from_network {
                 let _ = send_message_to_all(

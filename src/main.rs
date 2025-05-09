@@ -2,7 +2,7 @@ use clap::Parser;
 use control::{handle_command, run_cli};
 
 use log::info;
-use rusqlite::{Connection, Result};
+use rusqlite::Result;
 use std::io::{self as std_io, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;

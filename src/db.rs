@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection, Result};
 use lazy_static::lazy_static;
+use rusqlite::{params, Result};
 use std::sync::Mutex;
 
 #[allow(unused)]
@@ -14,7 +14,8 @@ pub struct Transaction {
 }
 
 lazy_static! {
-    static ref DB_CONN: Mutex<rusqlite::Connection> = Mutex::new(rusqlite::Connection::open("peillute.db").unwrap());
+    static ref DB_CONN: Mutex<rusqlite::Connection> =
+        Mutex::new(rusqlite::Connection::open("peillute.db").unwrap());
 }
 
 const NULL: &str = "NULL";
@@ -45,7 +46,6 @@ pub fn init_db() -> Result<()> {
             [],
         )?;
     }
-
 
     log::debug!("Database initialized successfully.");
     Ok(())
@@ -174,12 +174,7 @@ pub fn create_transaction(
     Ok(())
 }
 
-pub fn deposit(
-    user: &str,
-    amount: f64,
-    lamport_time: &mut i64,
-    source_node: &str,
-) -> Result<()> {
+pub fn deposit(user: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> Result<()> {
     if amount < 0.0 {
         log::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
@@ -187,22 +182,10 @@ pub fn deposit(
     if !user_exists(user)? {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    create_transaction(
-        NULL,
-        user,
-        amount,
-        lamport_time,
-        source_node,
-        "Deposit",
-    )
+    create_transaction(NULL, user, amount, lamport_time, source_node, "Deposit")
 }
 
-pub fn withdraw(
-    user: &str,
-    amount: f64,
-    lamport_time: &mut i64,
-    source_node: &str,
-) -> Result<()> {
+pub fn withdraw(user: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> Result<()> {
     if amount < 0.0 {
         log::error!("Negative withdrawal amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
@@ -213,14 +196,7 @@ pub fn withdraw(
     if calculate_solde(user)? < amount {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    create_transaction(
-        user,
-        NULL,
-        amount,
-        lamport_time,
-        source_node,
-        "Withdraw",
-    )
+    create_transaction(user, NULL, amount, lamport_time, source_node, "Withdraw")
 }
 
 #[allow(unused)]
@@ -241,10 +217,7 @@ pub fn create_user_with_solde(
     )
 }
 
-pub fn get_transaction(
-    transac_time: i64,
-    node: &str,
-) -> Result<Option<Transaction>> {
+pub fn get_transaction(transac_time: i64, node: &str) -> Result<Option<Transaction>> {
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -332,14 +305,14 @@ pub fn print_transactions() -> Result<()> {
         for tx in txs {
             let (from, to, amount, time, node, msg) = tx?;
             log::info!(
-            "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-            from,
-            to,
-            amount,
-            time,
-            node,
-            msg
-        );
+                "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
+                from,
+                to,
+                amount,
+                time,
+                node,
+                msg
+            );
         }
         Ok(())
     }
@@ -368,14 +341,14 @@ pub fn print_transaction_for_user(name: &str) -> Result<()> {
         for tx in txs {
             let (from, to, amount, time, node, msg) = tx?;
             log::info!(
-            "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-            from,
-            to,
-            amount,
-            time,
-            node,
-            msg
-        );
+                "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
+                from,
+                to,
+                amount,
+                time,
+                node,
+                msg
+            );
         }
         Ok(())
     }
