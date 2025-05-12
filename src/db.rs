@@ -1,7 +1,3 @@
-use lazy_static::lazy_static;
-use rusqlite::{params, Result};
-use std::sync::Mutex;
-
 #[allow(unused)]
 #[derive(Debug)]
 pub struct Transaction {
@@ -13,14 +9,14 @@ pub struct Transaction {
     optional_msg: Option<String>,
 }
 
-lazy_static! {
-    static ref DB_CONN: Mutex<rusqlite::Connection> =
-        Mutex::new(rusqlite::Connection::open("peillute.db").unwrap());
+lazy_static::lazy_static! {
+    static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
+        std::sync::Mutex::new(rusqlite::Connection::open("peillute.db").unwrap());
 }
 
 const NULL: &str = "NULL";
 
-pub fn init_db() -> Result<()> {
+pub fn init_db() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
         conn.execute(
@@ -51,7 +47,7 @@ pub fn init_db() -> Result<()> {
     Ok(())
 }
 
-pub fn is_database_initialized() -> Result<bool> {
+pub fn is_database_initialized() -> rusqlite::Result<bool> {
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -63,7 +59,7 @@ pub fn is_database_initialized() -> Result<bool> {
 }
 
 #[allow(unused)]
-pub fn drop_tables() -> Result<()> {
+pub fn drop_tables() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
         conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
@@ -73,8 +69,9 @@ pub fn drop_tables() -> Result<()> {
     Ok(())
 }
 
-pub fn user_exists(name: &str) -> Result<bool> {
+pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     {
+        use rusqlite::params;
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare("SELECT EXISTS(SELECT 1 FROM User WHERE unique_name = ?1)")?;
         let exists: bool = stmt.query_row(params![name], |row| row.get(0))?;
@@ -82,7 +79,8 @@ pub fn user_exists(name: &str) -> Result<bool> {
     }
 }
 
-pub fn create_user(unique_name: &str) -> Result<()> {
+pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
+    use rusqlite::params;
     if user_exists(unique_name)? {
         log::warn!("User '{}' already exists.", unique_name);
         return Ok(());
@@ -98,8 +96,9 @@ pub fn create_user(unique_name: &str) -> Result<()> {
     }
 }
 
-pub fn calculate_solde(name: &str) -> Result<f64> {
+pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     {
+        use rusqlite::params;
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT
@@ -111,7 +110,8 @@ pub fn calculate_solde(name: &str) -> Result<f64> {
     }
 }
 
-pub fn update_solde(name: &str) -> Result<()> {
+pub fn update_solde(name: &str) -> rusqlite::Result<()> {
+    use rusqlite::params;
     if !user_exists(name)? {
         log::error!("User '{}' does not exist.", name);
         return Ok(());
@@ -127,7 +127,7 @@ pub fn update_solde(name: &str) -> Result<()> {
     }
 }
 
-pub fn ensure_user(name: &str) -> Result<()> {
+pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     if name != NULL && !user_exists(name)? {
         create_user(name)?;
     }
@@ -141,7 +141,8 @@ pub fn create_transaction(
     lamport_time: &mut i64,
     source_node: &str,
     optional_msg: &str,
-) -> Result<()> {
+) -> rusqlite::Result<()> {
+    use rusqlite::params;
     if from_user != NULL && calculate_solde(from_user)? < amount {
         log::error!(
             "Insufficient funds: '{}' has less than {}.",
@@ -174,7 +175,12 @@ pub fn create_transaction(
     Ok(())
 }
 
-pub fn deposit(user: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> Result<()> {
+pub fn deposit(
+    user: &str,
+    amount: f64,
+    lamport_time: &mut i64,
+    source_node: &str,
+) -> rusqlite::Result<()> {
     if amount < 0.0 {
         log::error!("Negative deposit amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
@@ -185,7 +191,12 @@ pub fn deposit(user: &str, amount: f64, lamport_time: &mut i64, source_node: &st
     create_transaction(NULL, user, amount, lamport_time, source_node, "Deposit")
 }
 
-pub fn withdraw(user: &str, amount: f64, lamport_time: &mut i64, source_node: &str) -> Result<()> {
+pub fn withdraw(
+    user: &str,
+    amount: f64,
+    lamport_time: &mut i64,
+    source_node: &str,
+) -> rusqlite::Result<()> {
     if amount < 0.0 {
         log::error!("Negative withdrawal amount: {}", amount);
         return Err(rusqlite::Error::InvalidQuery);
@@ -205,7 +216,7 @@ pub fn create_user_with_solde(
     solde: f64,
     lamport_time: &mut i64,
     source_node: &str,
-) -> Result<()> {
+) -> rusqlite::Result<()> {
     create_user(unique_name)?;
     create_transaction(
         NULL,
@@ -217,7 +228,8 @@ pub fn create_user_with_solde(
     )
 }
 
-pub fn get_transaction(transac_time: i64, node: &str) -> Result<Option<Transaction>> {
+pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option<Transaction>> {
+    use rusqlite::params;
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -247,7 +259,7 @@ pub fn refund_transaction(
     node: &str,
     lamport_time: &mut i64,
     source_node: &str,
-) -> Result<()> {
+) -> rusqlite::Result<()> {
     if let Some(tx) = get_transaction(transac_time, node)? {
         create_transaction(
             &tx.to_user,
@@ -267,7 +279,7 @@ pub fn refund_transaction(
     Ok(())
 }
 
-pub fn print_users() -> Result<()> {
+pub fn print_users() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
@@ -284,7 +296,7 @@ pub fn print_users() -> Result<()> {
     }
 }
 
-pub fn print_transactions() -> Result<()> {
+pub fn print_transactions() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -318,7 +330,8 @@ pub fn print_transactions() -> Result<()> {
     }
 }
 
-pub fn print_transaction_for_user(name: &str) -> Result<()> {
+pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
+    use rusqlite::params;
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(

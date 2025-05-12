@@ -1,9 +1,4 @@
-use crate::clock::Clock;
-use crate::control::Command;
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
     pub id: u64,
     pub user_id: String,
@@ -11,7 +6,7 @@ pub struct Transaction {
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum NetworkMessageCode {
     Discovery,
     Transaction,
@@ -51,17 +46,17 @@ impl NetworkMessageCode {
 
 // TODO : add message status (failed, success, etc.)
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender_id: String,
-    pub sender_addr: SocketAddr,
-    pub clock: Clock,
-    pub command: Option<Command>,
+    pub sender_addr: std::net::SocketAddr,
+    pub clock: crate::clock::Clock,
+    pub command: Option<crate::control::Command>,
     pub info: MessageInfo,
     pub code: NetworkMessageCode,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum MessageInfo {
     CreateUser(CreateUser),
     Deposit(Deposit),
@@ -72,7 +67,7 @@ pub enum MessageInfo {
     None,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CreateUser {
     pub name: String,
 }
@@ -81,7 +76,7 @@ impl CreateUser {
         Self { name }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Deposit {
     pub name: String,
     pub amount: f64,
@@ -91,7 +86,7 @@ impl Deposit {
         Self { name, amount }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Withdraw {
     pub name: String,
     pub amount: f64,
@@ -101,7 +96,7 @@ impl Withdraw {
         Self { name, amount }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Transfer {
     pub name: String,
     pub beneficiary: String,
@@ -116,7 +111,7 @@ impl Transfer {
         }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Pay {
     pub name: String,
     pub amount: f64,
@@ -126,7 +121,7 @@ impl Pay {
         Self { name, amount }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Refund {
     pub name: String,
     pub transac_time: i64,
@@ -164,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_message_debug() {
-        let clock = Clock::new();
+        let clock = crate::clock::Clock::new();
 
         let message = Message {
             sender_id: "A".to_string(),

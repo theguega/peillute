@@ -1,17 +1,14 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Clock {
     lamport_clock: i64,
-    vector_clock: HashMap<String, i64>, // site_id -> clock value
+    vector_clock: std::collections::HashMap<String, i64>, // site_id -> clock value
 }
 
 impl Clock {
     pub fn new() -> Self {
         Clock {
             lamport_clock: 0,
-            vector_clock: HashMap::new(),
+            vector_clock: std::collections::HashMap::new(),
         }
     }
 
@@ -36,11 +33,11 @@ impl Clock {
         self.lamport_clock
     }
 
-    pub fn get_vector(&self) -> &HashMap<String, i64> {
+    pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
         &self.vector_clock
     }
 
-    pub fn update_vector(&mut self, received_vc: &HashMap<String, i64>) {
+    pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
         for (site_id, clock_value) in received_vc {
             let current_value = self.vector_clock.entry(site_id.clone()).or_insert(0);
             *current_value = (*current_value).max(*clock_value);
@@ -90,7 +87,7 @@ mod tests {
     #[test]
     fn test_update_vector() {
         let mut clock = Clock::new();
-        let mut received_vc = HashMap::new();
+        let mut received_vc = std::collections::HashMap::new();
         received_vc.insert("A".to_string(), 2);
         received_vc.insert("B".to_string(), 3);
 
