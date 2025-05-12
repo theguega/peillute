@@ -1,19 +1,12 @@
-use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use crate::clock::Clock;
-
 pub struct AppState {
     // --- Site Info ---
     pub site_id: String,
     pub nb_sites_on_network: usize,
-    pub peer_addrs: Vec<SocketAddr>,
-    pub local_addr: SocketAddr,
+    pub peer_addrs: Vec<std::net::SocketAddr>,
+    pub local_addr: std::net::SocketAddr,
 
     // --- Logical Clocks ---
-    pub clocks: Clock,
+    pub clocks: crate::clock::Clock,
 }
 
 impl AppState {
@@ -21,10 +14,10 @@ impl AppState {
     pub fn new(
         site_id: String,
         nb_sites_on_network: usize,
-        local_addr: SocketAddr,
-        peer_addrs: Vec<SocketAddr>,
+        local_addr: std::net::SocketAddr,
+        peer_addrs: Vec<std::net::SocketAddr>,
     ) -> Self {
-        let clocks = Clock::new();
+        let clocks = crate::clock::Clock::new();
 
         Self {
             site_id,
@@ -40,7 +33,7 @@ impl AppState {
         self.site_id = site_id.to_string();
     }
 
-    pub fn add_peer(&mut self, site_id: &str, addr: SocketAddr) {
+    pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
             self.nb_sites_on_network += 1;
@@ -48,7 +41,7 @@ impl AppState {
         }
     }
 
-    pub fn remove_peer(&mut self, addr: SocketAddr) {
+    pub fn remove_peer(&mut self, addr: std::net::SocketAddr) {
         if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
             self.peer_addrs.remove(pos);
             self.nb_sites_on_network -= 1;
@@ -64,7 +57,7 @@ impl AppState {
         self.site_id.as_str()
     }
 
-    pub fn get_peers(&self) -> Vec<SocketAddr> {
+    pub fn get_peers(&self) -> Vec<std::net::SocketAddr> {
         self.peer_addrs.clone()
     }
 
@@ -87,11 +80,11 @@ impl AppState {
     }
     #[allow(unused)]
     #[allow(dead_code)]
-    pub fn get_vector(&self) -> &HashMap<String, i64> {
+    pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
         self.clocks.get_vector()
     }
 
-    pub fn update_vector(&mut self, received_vc: &HashMap<String, i64>) {
+    pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
         self.clocks.update_vector(received_vc);
     }
     #[allow(unused)]
@@ -100,7 +93,7 @@ impl AppState {
         self.clocks.get_vector_clock()
     }
 
-    pub fn get_clock(&self) -> &Clock {
+    pub fn get_clock(&self) -> &crate::clock::Clock {
         &self.clocks
     }
     #[allow(unused)]
@@ -111,9 +104,9 @@ impl AppState {
 }
 
 // Singleton
-lazy_static! {
-    pub static ref LOCAL_APP_STATE: Arc<tokio::sync::Mutex<AppState>> =
-        Arc::new(tokio::sync::Mutex::new(AppState::new(
+lazy_static::lazy_static! {
+    pub static ref LOCAL_APP_STATE: std::sync::Arc<tokio::sync::Mutex<AppState>> =
+        std::sync::Arc::new(tokio::sync::Mutex::new(AppState::new(
             "".to_string(), // empty site id at start
             0,
             "0.0.0.0:0".parse().unwrap(),
@@ -133,7 +126,7 @@ mod tests {
             "127.0.0.1:8081".parse().unwrap(),
             "127.0.0.1:8082".parse().unwrap(),
         ];
-        let local_addr: SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
+        let local_addr: std::net::SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
         let shared_state =
             AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
 
