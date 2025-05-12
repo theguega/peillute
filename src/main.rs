@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 mod clock;
 mod control;
 mod db;
@@ -22,6 +24,7 @@ struct Args {
     ip: String,
 }
 
+#[cfg(feature = "server")]
 #[tokio::main]
 async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
@@ -66,6 +69,12 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
+    let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
+    let router = router.into_make_service();
+    let backend_listener = tokio::net::TcpListener::bind(client_server_interaction_addr)
+        .await
+        .unwrap();
+
     if !db::is_database_initialized()? {
         let _ = db::init_db();
     }
@@ -81,6 +90,8 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
     let mut lines: tokio_io::Lines<_> = reader.lines();
 
+    network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
+
     log::info!(
         "Welcome on peillute, write /help to get the command list, access the web interface at {}",
         format! {"http://{}", client_server_interaction_addr}
@@ -88,10 +99,14 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     print!("> ");
     std_io::stdout().flush().unwrap();
 
-    network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
-
     let main_loop_app_state = LOCAL_APP_STATE.clone();
-    let _ = main_loop(
+
+    // Spawn the web server
+    let server_task = tokio::spawn(async move {
+        axum::serve(backend_listener, router).await.unwrap();
+    });
+
+    main_loop(
         main_loop_app_state,
         &mut lines,
         &mut local_lamport_time,
@@ -100,9 +115,13 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
+    // Ensure the server task finishes cleanly if ever reached
+    server_task.await?;
+
     Ok(())
 }
 
+#[cfg(feature = "server")]
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
@@ -140,6 +159,7 @@ async fn main_loop(
     }
 }
 
+#[cfg(feature = "server")]
 async fn disconnect() {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -182,6 +202,29 @@ async fn disconnect() {
         {
             error!("Error sending message to {}: {}", peer_addr_str, e);
         }
+    }
+}
+
+use dioxus::prelude::*;
+
+#[cfg(not(feature = "server"))]
+fn main() {
+    dioxus::launch(App);
+}
+
+mod views;
+
+const FAVICON: Asset = asset!("/assets/logo.png");
+const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
+
+#[component]
+fn App() -> Element {
+    use views::Home;
+    rsx! {
+        document::Link { rel: "icon", href: FAVICON }
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
+
+        Home {}
     }
 }
 

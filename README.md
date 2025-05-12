@@ -1,58 +1,53 @@
-# Application Répartie en Rust
+# Distributed Application in Rust
 
-Ce projet est une application répartie en Rust utilisant TCP pour la communication entre les nœuds.
-L'objectif est d'implémenter manuellement des mécanismes comme les horloges vectorielles, la gestion des réplicats et la prise de snapshots.
+This project is a distributed application in Rust using TCP for communication between nodes.
+The goal is to manually implement mechanisms such as vector clocks, replica management, and snapshot taking.
 
 ## 🚀 Installation
 
-### 1. Cloner le repo
+### 1. Clone the repo
 ```sh
-https://gitlab.utc.fr/guegathe/peillute.git -j8
+git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 ```
 
-### 2. Installer les dépendances
-Assurez-vous d'avoir Rust et Cargo installés, puis exécutez :
-```sh
-# Check & Test
-cargo check && cargo test
+### 2. Install dependencies
+Make sure you have Rust, Cargo, Dioxus, and their dependencies installed.
 
-# Build
-cargo build
+```sh
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Cargo bin-install
+curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+# Install Dioxus
+cargo binstall dioxus-cli
 ```
 
-## 📡 Lancer un nœud
+### For Linux and Windows users, refer to:
+https://dioxuslabs.com/learn/0.6/getting_started/#
 
-Chaque instance fonctionne comme un nœud sur le réseau local. Exemple pour lancer 3 nœuds :
+## 🚀 Compile and Run
+
+### 1. Compile with Dioxus (merges client and server)
 ```sh
-# Terminal 1
-RUST_LOG=DEBUG cargo run
-
-# Terminal 2
-RUST_LOG=INFO cargo run
-
-# Terminal 3
-RUST_LOG=ERROR cargo run
-```
-Le choix du port ainsi que les id de sites sont optionnels mais peuvent être spécifiés:
-```sh
-# Terminal 1
-RUST_LOG=DEBUG cargo run -- --site-id A --port 8000
-
-# Terminal 2
-RUST_LOG=INFO cargo run -- --site-id B --port 8001
-
-# Terminal 3
-RUST_LOG=ERROR cargo run -- --site-id C --port 8002
+dx bundle --release --platform web
 ```
 
-## 🛠️ Développement et Tests
+### 2. Run the binary:
+```sh
+cd target/dx/peillute/release/web
+RUST_LOG=info ./server
+```
 
-### Lancer les tests unitaires :
+## 🛠️ Development and Testing
+
+### Run unit tests:
 ```sh
 cargo test
 ```
 
-### Formater le code:
+### Format the code:
 ```sh
 cargo fmt
 ```

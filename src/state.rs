@@ -1,3 +1,4 @@
+#[cfg(feature = "server")]
 pub struct AppState {
     // --- Site Info ---
     pub site_id: String,
@@ -9,6 +10,7 @@ pub struct AppState {
     pub clocks: crate::clock::Clock,
 }
 
+#[cfg(feature = "server")]
 impl AppState {
     #[allow(unused)]
     pub fn new(
@@ -104,6 +106,7 @@ impl AppState {
 }
 
 // Singleton
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref LOCAL_APP_STATE: std::sync::Arc<tokio::sync::Mutex<AppState>> =
         std::sync::Arc::new(tokio::sync::Mutex::new(AppState::new(
@@ -115,6 +118,7 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
 

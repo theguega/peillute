@@ -1,3 +1,4 @@
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
     pub id: u64,
@@ -6,6 +7,7 @@ pub struct Transaction {
     pub description: String,
 }
 
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum NetworkMessageCode {
     Discovery,
@@ -16,6 +18,7 @@ pub enum NetworkMessageCode {
     Sync,
 }
 
+#[cfg(feature = "server")]
 impl NetworkMessageCode {
     #[allow(unused)]
     #[allow(dead_code)]
@@ -45,7 +48,7 @@ impl NetworkMessageCode {
 }
 
 // TODO : add message status (failed, success, etc.)
-
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender_id: String,
@@ -56,6 +59,7 @@ pub struct Message {
     pub code: NetworkMessageCode,
 }
 
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum MessageInfo {
     CreateUser(CreateUser),
@@ -67,41 +71,49 @@ pub enum MessageInfo {
     None,
 }
 
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CreateUser {
     pub name: String,
 }
+#[cfg(feature = "server")]
 impl CreateUser {
     pub fn new(name: String) -> Self {
         Self { name }
     }
 }
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Deposit {
     pub name: String,
     pub amount: f64,
 }
+#[cfg(feature = "server")]
 impl Deposit {
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Withdraw {
     pub name: String,
     pub amount: f64,
 }
+#[cfg(feature = "server")]
 impl Withdraw {
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Transfer {
     pub name: String,
     pub beneficiary: String,
     pub amount: f64,
 }
+#[cfg(feature = "server")]
 impl Transfer {
     pub fn new(name: String, beneficiary: String, amount: f64) -> Self {
         Self {
@@ -111,22 +123,26 @@ impl Transfer {
         }
     }
 }
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Pay {
     pub name: String,
     pub amount: f64,
 }
+#[cfg(feature = "server")]
 impl Pay {
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Refund {
     pub name: String,
     pub transac_time: i64,
     pub transac_node: String,
 }
+#[cfg(feature = "server")]
 impl Refund {
     #[allow(unused)]
     #[allow(dead_code)]
@@ -140,6 +156,7 @@ impl Refund {
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
 

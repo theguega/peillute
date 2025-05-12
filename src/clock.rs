@@ -1,9 +1,11 @@
+#[cfg(feature = "server")]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Clock {
     lamport_clock: i64,
     vector_clock: std::collections::HashMap<String, i64>, // site_id -> clock value
 }
 
+#[cfg(feature = "server")]
 impl Clock {
     pub fn new() -> Self {
         Clock {
@@ -70,6 +72,7 @@ impl Clock {
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
 

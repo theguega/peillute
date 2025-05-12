@@ -1,3 +1,4 @@
+#[cfg(feature = "server")]
 pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
@@ -16,6 +17,7 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     }
 }
 
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum Command {
     CreateUser,
@@ -33,6 +35,7 @@ pub enum Command {
     Error(String),
 }
 
+#[cfg(feature = "server")]
 fn parse_command(input: &str) -> Command {
     match input.trim() {
         "/create_user" => Command::CreateUser,
@@ -50,6 +53,7 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
+#[cfg(feature = "server")]
 pub async fn handle_command(
     cmd: Command,
     lamport_time: &mut i64,
@@ -205,11 +209,12 @@ pub async fn handle_command(
                 )
             };
 
-            log::info!("ℹ️  Info: This is a distributed banking system.");
-            log::info!("ℹ️  Version: 0.0.1");
             log::info!(
-                "ℹ️  Authors: Aubin Vert, Théo Guegan, Alexandre Eberhardt, Léopold Chappuis"
+                "ℹ️  {} : A distributed banking system.",
+                env!("CARGO_PKG_NAME")
             );
+            log::info!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
+            log::info!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
             log::info!("ℹ️  License: MIT");
             log::info!("ℹ️  Local address: {}", local_addr);
             log::info!("ℹ️  Site ID: {}", site_id);
@@ -230,6 +235,7 @@ pub async fn handle_command(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
     let mut input = String::new();
@@ -239,6 +245,7 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+#[cfg(feature = "server")]
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where
     T::Err: std::fmt::Debug,
