@@ -35,16 +35,24 @@ dx bundle --release --platform web
 ```
 
 ### 2. Run the binary:
+
+Manually run the server:
 ```sh
 cd target/dx/peillute/release/web
 RUST_LOG=info ./server
 ```
 
+Or just use the provided script:
+```sh
+./launch_peillute_instance.sh
+```
+
+
 ## 🛠️ Development and Testing
 
 ### Run unit tests:
 ```sh
-cargo test
+cargo test --all-features
 ```
 
 ### Format the code:
