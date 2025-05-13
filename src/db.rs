@@ -138,7 +138,7 @@ pub fn create_transaction(
     from_user: &str,
     to_user: &str,
     amount: f64,
-    lamport_time: &mut i64,
+    lamport_time: &i64,
     source_node: &str,
     optional_msg: &str,
 ) -> rusqlite::Result<()> {
@@ -163,7 +163,7 @@ pub fn create_transaction(
             params![from_user, to_user, amount, *lamport_time, source_node, optional_msg],
         )?;
     }
-    *lamport_time += 1;
+    //*lamport_time += 1;
 
     if from_user != NULL {
         update_solde(from_user)?;
@@ -178,7 +178,7 @@ pub fn create_transaction(
 pub fn deposit(
     user: &str,
     amount: f64,
-    lamport_time: &mut i64,
+    lamport_time: &i64,
     source_node: &str,
 ) -> rusqlite::Result<()> {
     if amount < 0.0 {
@@ -194,7 +194,7 @@ pub fn deposit(
 pub fn withdraw(
     user: &str,
     amount: f64,
-    lamport_time: &mut i64,
+    lamport_time: &i64,
     source_node: &str,
 ) -> rusqlite::Result<()> {
     if amount < 0.0 {
@@ -214,7 +214,7 @@ pub fn withdraw(
 pub fn create_user_with_solde(
     unique_name: &str,
     solde: f64,
-    lamport_time: &mut i64,
+    lamport_time: &i64,
     source_node: &str,
 ) -> rusqlite::Result<()> {
     create_user(unique_name)?;
@@ -257,7 +257,7 @@ pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option
 pub fn refund_transaction(
     transac_time: i64,
     node: &str,
-    lamport_time: &mut i64,
+    lamport_time: &i64,
     source_node: &str,
 ) -> rusqlite::Result<()> {
     if let Some(tx) = get_transaction(transac_time, node)? {

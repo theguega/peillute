@@ -110,7 +110,7 @@ async fn main_loop(
     node_name: &str,
     listener: tokio::net::TcpListener,
 ) {
-    use crate::control::{handle_command, run_cli};
+    use crate::control::{handle_command_from_cli, run_cli};
     use crate::state::LOCAL_APP_STATE;
     use std::io::{self as std_io, Write};
     use tokio::select;
@@ -124,7 +124,7 @@ async fn main_loop(
                     state.increment_lamport();
                 }
                 let command = run_cli(line);
-                let _ = handle_command(command, local_lamport_time, node_name, false).await;
+                let _ = handle_command_from_cli(command, local_lamport_time, node_name).await;
                 print!("> ");
                 std_io::stdout().flush().unwrap();
             }
