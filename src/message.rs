@@ -78,7 +78,7 @@ pub enum MessageInfo {
 pub struct SnapshotResponse {
     pub site_id: String,
     pub clock: crate::clock::Clock,
-    pub user_balances: std::collections::HashMap<String, f64>,
+    pub tx_log: Vec<crate::snapshot::TxSummary>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

@@ -223,33 +223,42 @@ pub async fn handle_message(
                 state.remove_peer(message.sender_addr);
             }
             NetworkMessageCode::SnapshotRequest => {
-                log::debug!("Snapshot request message received: {:?}", message);
-                // respond usig the clock and the current state of the user's balance
-                let user_balances = crate::db::get_local_db_state();
+                let txs = crate::db::get_local_transaction_log()?;
+                let summaries: Vec<_> = txs.iter().map(|t| t.into()).collect();
+
                 let (site_id, clock, local_addr) = {
-                    let state = LOCAL_APP_STATE.lock().await;
+                    let st = LOCAL_APP_STATE.lock().await;
                     (
-                        state.get_site_id().to_string(),
-                        state.get_clock().clone(),
-                        state.get_local_addr().to_string(),
+                        st.get_site_id().to_string(),
+                        st.get_clock().clone(),
+                        st.get_local_addr().to_string(),
                     )
                 };
-                let _ = send_message(
+
+                send_message(
                     &message.sender_addr.to_string(),
                     MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
                         site_id: site_id.clone(),
                         clock: clock.clone(),
-                        user_balances: user_balances.unwrap(),
+                        tx_log: summaries,
                     }),
                     None,
                     NetworkMessageCode::SnapshotResponse,
                     &local_addr,
                     &site_id,
                     clock,
-                );
+                )
+                .await?;
             }
+
             NetworkMessageCode::SnapshotResponse => {
-                log::debug!("Snapshot response message received: {:?}", message);
+                if let MessageInfo::SnapshotResponse(resp) = message.info {
+                    let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
+                    if let Some(gs) = mgr.push(resp) {
+                        log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
+                        crate::snapshot::persist(&gs).await.unwrap();
+                    }
+                }
             }
             NetworkMessageCode::Sync => {
                 log::debug!("Sync message received: {:?}", message);

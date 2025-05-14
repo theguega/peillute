@@ -31,6 +31,7 @@ pub enum Command {
     Info,
     Unknown(String),
     Error(String),
+    Snapshot,
 }
 
 fn parse_command(input: &str) -> Command {
@@ -46,6 +47,7 @@ fn parse_command(input: &str) -> Command {
         "/refund" => Command::Refund,
         "/help" => Command::Help,
         "/info" => Command::Info,
+        "/start_snapshot" => Command::Snapshot,
         other => Command::Unknown(other.to_string()),
     }
 }
@@ -211,6 +213,11 @@ pub async fn handle_command_from_cli(
             log::info!("/pay              - Make a payment (to NULL)");
             log::info!("/refund           - Refund a transaction");
             log::info!("/info             - Show system information");
+            log::info!("/start_snapshot    - Start a snapshot");
+        }
+
+        Command::Snapshot => {
+            super::snapshot::start_snapshot().await?;
         }
 
         Command::Info => {
@@ -310,9 +317,8 @@ pub async fn handle_command_from_network(
         }
 
         MessageInfo::SnapshotResponse(data) => {
-            log::info!("📸 Snapshot response received");
+            //do nothing
             log::info!("Snapshot response: {:?}", data);
-            // Handle the snapshot response here
         }
 
         MessageInfo::None => {
