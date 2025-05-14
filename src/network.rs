@@ -198,7 +198,13 @@ pub async fn handle_message(
                     state.increment_vector_current();
                     state.update_vector(&message.clock.get_vector());
                     state.update_lamport(message.clock.get_lamport());
-                    handle_command_from_network(message.info,&state.get_lamport(),state.get_site_id()).await?;
+                    handle_command_from_network(
+                        message.info,
+                        &state.get_lamport(),
+                        state.get_site_id(),
+                        state.get_vector(),
+                    )
+                    .await?;
                 } else {
                     log::error!("Command is None for Transaction message");
                 }
