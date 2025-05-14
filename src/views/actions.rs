@@ -104,7 +104,7 @@ pub fn Withdraw(name: String) -> Element {
                     onclick: move |_| {
                         let name = name_for_future.clone();
                         async move {
-                            if deposit_for_user_server(name.to_string(), *withdraw_amount.read())
+                            if withdraw_for_user_server(name.to_string(), *withdraw_amount.read())
                                 .await
                                 .is_ok()
                             {
@@ -119,171 +119,107 @@ pub fn Withdraw(name: String) -> Element {
     }
 }
 
+const PRODUCTS: &[(&str, f64, &str)] = &[
+    ("Coca", 1.50, "/assets/images/coca.png"),
+    ("Chips", 2.00, "/assets/images/chips.png"),
+    ("Sandwich", 4.50, "/assets/images/sandwich.png"),
+    ("Coffee", 1.20, "/assets/images/coffee.png"),
+];
+
 // take the username and collect the an amount (float from form) to make a payment
 // to-do : create some products to buy as a list of product cards
 // (product card : name, price, quantity, total price)
 #[component]
 pub fn Pay(name: String) -> Element {
-    let products = vec![
-        ("Coca", 1.50, asset!("/assets/images/coca.png")),
-        ("Chips", 2.00, asset!("/assets/images/chips.png")),
-        ("Sandwich", 4.50, asset!("/assets/images/sandwich.png")),
-        ("Coffee", 1.20, asset!("/assets/images/coffee.png")),
-    ];
+    let mut product_quantities = use_signal(|| vec![0u32; PRODUCTS.len()]);
+    let name_for_payment = std::rc::Rc::new(name.clone());
 
-    // State for cart
-    let mut cart = use_signal(Vec::<(String, f64, u32)>::new);
-    let mut total_amount = use_signal(|| 0f64);
-    let name = std::rc::Rc::new(name);
-    let name_for_payment = name.clone();
+    let handle_pay = move |_| {
+        let current_quantities = product_quantities.read().clone();
+        let name_clone = name_for_payment.clone();
 
-    // Function to add product to cart
-    let mut add_to_cart = move |product_name: String, price: f64| {
-        let mut updated_cart = cart.read().clone();
-
-        // Check if product is already in cart
-        if let Some(index) = updated_cart
-            .iter()
-            .position(|(name, _, _)| name == &product_name)
-        {
-            // Update quantity
-            let (name, price, quantity) = updated_cart[index].clone();
-            updated_cart[index] = (name, price, quantity + 1);
-        } else {
-            // Add new product to cart
-            updated_cart.push((product_name, price, 1));
-        }
-
-        cart.set(updated_cart);
-
-        // Update total amount
-        let new_total = cart.read().iter().fold(0.0, |acc, (_, price, quantity)| {
-            acc + (price * *quantity as f64)
-        });
-        total_amount.set(new_total);
-    };
-
-    // Function to remove product from cart
-    let mut remove_from_cart = move |product_name: String| {
-        let mut updated_cart = cart.read().clone();
-
-        if let Some(index) = updated_cart
-            .iter()
-            .position(|(name, _, _)| name == &product_name)
-        {
-            let (name, price, quantity) = updated_cart[index].clone();
-
-            if quantity > 1 {
-                // Decrease quantity
-                updated_cart[index] = (name, price, quantity - 1);
-            } else {
-                // Remove product
-                updated_cart.remove(index);
+        let mut total_amount = 0.0;
+        for (i, &(_, price, _)) in PRODUCTS.iter().enumerate() {
+            if let Some(&quantity) = current_quantities.get(i) {
+                total_amount += price * quantity as f64;
             }
         }
 
-        cart.set(updated_cart);
-
-        // Update total amount
-        let new_total = cart.read().iter().fold(0.0, |acc, (_, price, quantity)| {
-            acc + (price * *quantity as f64)
-        });
-        total_amount.set(new_total);
-    };
-
-    // Function to checkout
-    let checkout = move |_| {
-        let total = *total_amount.read();
-        let username = name_for_payment.clone();
-
-        // Clear cart after payment
-        cart.set(Vec::new());
-        total_amount.set(0.0);
-
-        // Make payment
-        async move {
-            if total > 0.0 {
-                if pay_for_user_server(username.to_string(), total)
-                    .await
-                    .is_ok()
-                {
-                    // Payment successful
+        if total_amount > 0.0 {
+            spawn(async move {
+                match pay_for_user_server(name_clone.to_string(), total_amount).await {
+                    Ok(_) => {
+                        log::info!("Payment successful toast/notification would show here.");
+                        product_quantities.set(vec![0u32; PRODUCTS.len()]);
+                    }
+                    Err(e) => {
+                        log::error!("Payment failed: {}", e);
+                    }
                 }
-            }
+            });
+        } else {
+            log::warn!("Attempted to pay with a total of 0.0. No action taken.");
         }
     };
+
+    let current_total_display = use_memo(move || {
+        let mut total = 0.0;
+        let quantities_read = product_quantities.read();
+        for (i, &(_, price, _)) in PRODUCTS.iter().enumerate() {
+            if let Some(&quantity) = quantities_read.get(i) {
+                total += price * quantity as f64;
+            }
+        }
+        total
+    });
 
     rsx! {
         div { id: "pay-page",
-            h1 { "Welcome {name}, buy products" }
+            h1 { "Welcome {name}, select your products" }
+
             // Products section
-            div { class: "products-container",
-                for (index , (product_name , price , image_path)) in products.iter().enumerate() {
-                    div { key: "{index}", class: "product-card",
-                        img {
-                            src: "{image_path}",
-                            alt: "{product_name}",
-                            class: "product-image",
-                        }
+            div {
+                for (index , (product_name , price , image_path)) in PRODUCTS.iter().enumerate() {
+                    div { key: "{product_name}-{index}",
+                        img { src: "{image_path}", alt: "{product_name}" }
                         div { class: "product-info",
                             h3 { "{product_name}" }
-                            p { class: "product-price", "€{price:.2}" }
-                            button {
-                                class: "add-to-cart-btn",
-                                onclick: move |_| {
-                                    add_to_cart(product_name.to_string(), *price);
-                                },
-                                "Add to Cart"
+                            p { "€{price:.2}" }
+                            div {
+                                label { r#for: "qty-{index}", "Quantity:" }
+                                input {
+                                    r#type: "number",
+                                    id: "qty-{index}",
+                                    min: "0",
+                                    value: "{product_quantities.read()[index]}",
+                                    oninput: move |event| {
+                                        let mut pq_signal_for_input = product_quantities.clone();
+                                        if let Ok(new_quantity) = event.value().parse::<u32>() {
+                                            let mut quantities_writer = pq_signal_for_input.write();
+                                            if index < quantities_writer.len() {
+                                                quantities_writer[index] = new_quantity;
+                                            }
+                                        } else if event.value().is_empty() {
+                                            let mut quantities_writer = pq_signal_for_input.write();
+                                            if index < quantities_writer.len() {
+                                                quantities_writer[index] = 0;
+                                            }
+                                        }
+                                    },
+                                }
                             }
                         }
                     }
                 }
             }
-            // Cart section
-            div { class: "cart-container",
-                h2 { "Your Cart" }
-                if cart.read().is_empty() {
-                    p { class: "empty-cart", "Your cart is empty" }
-                } else {
-                    ul { class: "cart-items",
-                        for (index , (item_name , item_price , quantity)) in cart.read().iter().enumerate() {
-                            li { key: "{index}", class: "cart-item",
-                                div { class: "item-details",
-                                    span { class: "item-name", "{item_name}" }
-                                    span { class: "item-price", "€{item_price:.2} x {quantity}" }
-                                    span { class: "item-total",
-                                        "= €{item_price * *quantity as f64:.2}"
-                                    }
-                                }
-                                div { class: "item-actions",
-                                    button {
-                                        class: "remove-item-btn",
-                                        onclick: move |_| {
-                                            remove_from_cart(item_name.to_string());
-                                        },
-                                        "−"
-                                    }
-                                    span { class: "item-quantity", "{quantity}" }
-                                    button {
-                                        class: "add-item-btn",
-                                        onclick: move |_| {
-                                            add_to_cart(item_name.to_string(), *item_price);
-                                        },
-                                        "+"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    div { class: "cart-summary",
-                        h3 { "Total: €{total_amount:.2}" }
-                        button {
-                            class: "checkout-btn",
-                            disabled: cart.read().is_empty(),
-                            onclick: checkout,
-                            "Pay Now"
-                        }
-                    }
+
+            div { class: "cart-summary",
+                h2 { "Order Summary" }
+                h3 { "Total: €{current_total_display():.2}" }
+                button {
+                    disabled: current_total_display() == 0.0,
+                    onclick: handle_pay,
+                    "Pay Now"
                 }
             }
         }
