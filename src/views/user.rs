@@ -32,7 +32,7 @@ pub fn User(name: String) -> Element {
                 to: Route::Withdraw {
                     name: name.to_string(),
                 },
-                "Blog"
+                "Withdraw"
             }
             Link {
                 to: Route::Pay {

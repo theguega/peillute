@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
-    from_user: String,
-    to_user: String,
-    amount: f64,
-    lamport_time: i64,
-    source_node: String,
-    optional_msg: Option<String>,
+    pub from_user: String,
+    pub to_user: String,
+    pub amount: f64,
+    pub lamport_time: i64,
+    pub source_node: String,
+    pub optional_msg: Option<String>,
 }
 
 #[cfg(feature = "server")]
