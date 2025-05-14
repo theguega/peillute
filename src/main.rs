@@ -92,7 +92,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 
     network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
 
-    log::info!(
+    println!(
         "Welcome on peillute, write /help to get the command list, access the web interface at {}",
         format! {"http://{}", client_server_interaction_addr}
     );
@@ -152,7 +152,7 @@ async fn main_loop(
             }
             _ = tokio::signal::ctrl_c() => {
                 disconnect().await;
-                log::info!("👋 Bye !");
+                println!("👋 Bye !");
                 std::process::exit(0);
             }
         }

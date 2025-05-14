@@ -1,6 +1,4 @@
-#[allow(unused)]
-#[derive(Debug)]
-#[cfg(feature = "server")]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
     from_user: String,
     to_user: String,
@@ -319,10 +317,10 @@ pub fn print_users() -> rusqlite::Result<()> {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
         })?;
 
-        log::info!("-- Users --");
+        println!("-- Users --");
         for user in users {
             let (name, solde) = user?;
-            log::info!("{}: {:.2}", name, solde);
+            println!("{}: {:.2}", name, solde);
         }
         Ok(())
     }
@@ -360,17 +358,12 @@ pub fn print_transactions() -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions --");
+        println!("-- Transactions --");
         for tx in txs {
             let (from, to, amount, time, node, msg) = tx?;
-            log::info!(
+            println!(
                 "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-                from,
-                to,
-                amount,
-                time,
-                node,
-                msg
+                from, to, amount, time, node, msg
             );
         }
         Ok(())
@@ -398,19 +391,51 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions for user {} --", name);
+        println!("-- Transactions for user {} --", name);
         for tx in txs {
             let (from, to, amount, time, node, msg) = tx?;
-            log::info!(
+            println!(
                 "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?}",
-                from,
-                to,
-                amount,
-                time,
-                node,
-                msg
+                from, to, amount, time, node, msg
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "server")]
+pub fn get_transactions_for_user(name: &str) -> rusqlite::Result<Vec<Transaction>> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
+        FROM Transactions WHERE from_user = ?1",
+        )?;
+
+        let txs = stmt.query_map(params![name], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })?;
+
+        let mut txs_vec = Vec::new();
+        for tx in txs {
+            let (from, to, amount, time, node, msg) = tx?;
+            txs_vec.push(Transaction {
+                from_user: from,
+                to_user: to,
+                amount: amount,
+                lamport_time: time,
+                source_node: node,
+                optional_msg: msg,
+            });
+        }
+        Ok(txs_vec)
     }
 }

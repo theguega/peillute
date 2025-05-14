@@ -3,8 +3,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn Home() -> Element {
-    let mut users = use_signal(|| Vec::new());
     let mut user_input = use_signal(|| "".to_string());
+    let mut users = use_signal(|| Vec::new());
 
     use_future(move || async move {
         if let Ok(data) = get_users().await {

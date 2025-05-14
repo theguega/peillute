@@ -5,7 +5,7 @@ set -e
 echo "[*] Launching Peillute instance..."
 
 # Set default log level
-LOG_LEVEL="info"
+LOG_LEVEL=""
 
 # Check for -debug argument
 for arg in "$@"; do

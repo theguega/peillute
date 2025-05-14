@@ -7,7 +7,7 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
             command
         }
         Ok(None) => {
-            log::info!("Aucun input");
+            println!("Aucun input");
             Command::Unknown("Aucun input".to_string())
         }
         Err(e) => {
@@ -184,17 +184,17 @@ pub async fn handle_command(
         }
 
         Command::Help => {
-            log::info!("📜 Command list:");
-            log::info!("/create_user      - Create a personal account");
-            log::info!("/user_accounts    - List all users");
-            log::info!("/print_user_tsx   - Show a user’s transactions");
-            log::info!("/print_tsx        - Show all system transactions");
-            log::info!("/deposit          - Deposit money to an account");
-            log::info!("/withdraw         - Withdraw money from an account");
-            log::info!("/transfer         - Transfer money to another user");
-            log::info!("/pay              - Make a payment (to NULL)");
-            log::info!("/refund           - Refund a transaction");
-            log::info!("/info             - Show system information");
+            println!("📜 Command list:");
+            println!("/create_user      - Create a personal account");
+            println!("/user_accounts    - List all users");
+            println!("/print_user_tsx   - Show a user’s transactions");
+            println!("/print_tsx        - Show all system transactions");
+            println!("/deposit          - Deposit money to an account");
+            println!("/withdraw         - Withdraw money from an account");
+            println!("/transfer         - Transfer money to another user");
+            println!("/pay              - Make a payment (to NULL)");
+            println!("/refund           - Refund a transaction");
+            println!("/info             - Show system information");
         }
 
         Command::Info => {
@@ -209,23 +209,23 @@ pub async fn handle_command(
                 )
             };
 
-            log::info!(
+            println!(
                 "ℹ️  {} : A distributed banking system.",
                 env!("CARGO_PKG_NAME")
             );
-            log::info!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
-            log::info!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
-            log::info!("ℹ️  License: MIT");
-            log::info!("ℹ️  Local address: {}", local_addr);
-            log::info!("ℹ️  Site ID: {}", site_id);
-            log::info!("ℹ️  Peers: {:?}", peer_addrs);
-            log::info!("ℹ️  Number of sites on network: {}", nb_sites);
-            log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
-            log::info!("ℹ️  Vector clock: {:?}", clock.get_vector_clock());
+            println!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
+            println!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
+            println!("ℹ️  License: MIT");
+            println!("ℹ️  Local address: {}", local_addr);
+            println!("ℹ️  Site ID: {}", site_id);
+            println!("ℹ️  Peers: {:?}", peer_addrs);
+            println!("ℹ️  Number of sites on network: {}", nb_sites);
+            println!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
+            println!("ℹ️  Vector clock: {:?}", clock.get_vector_clock());
         }
 
         Command::Unknown(cmd) => {
-            log::info!("❓ Unknown command: {}", cmd);
+            println!("❓ Unknown command: {}", cmd);
         }
 
         Command::Error(err) => {
