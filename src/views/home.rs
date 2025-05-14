@@ -1,3 +1,4 @@
+use crate::Route;
 use dioxus::prelude::*;
 
 #[component]
@@ -12,57 +13,53 @@ pub fn Home() -> Element {
     });
 
     rsx! {
-        document::Meta {
-            name: "viewport",
-            content: "width=device-width, initial-scale=1.0",
+        h1 { "Users" }
+        div { id: "users-list",
+            for item in users.iter() {
+                Link {
+                    to: Route::History {
+                        name: item.to_string(),
+                    },
+                    "{item}"
+                }
+            }
         }
-        body {
-            div { class: "app-container",
-                div { id: "home-page", class: "page active",
-                    header { class: "app-header",
-                        a { class: "logo-link", href: "#",
-                            img {
-                                class: "logo-img",
-                                src: asset!("/assets/logo.png"),
-                                alt: "Logo peillute",
-                            }
-                        }
-                        h1 { "Peillute" }
-                        button { id: "theme-toggle", class: "theme-button",
-                            text { "🌙" }
-                        }
-                    }
-                    main {
-                        h2 { "Users" }
-                        div { class: "user-list-container",
-                            ul { id: "user-list", class: "user-list",
-                                for item in users.iter() {
-                                    li { "{item}" }
-                                }
-                            }
-                        }
-                    }
-                    footer { class: "add-user-footer",
-                        input {
-                            r#type: "text",
-                            id: "new-user-name",
-                            placeholder: "New user name",
-                            value: user_input,
-                            oninput: move |event| user_input.set(event.value()),
-                        }
-                        button {
-                            id: "add-user-button",
-                            onclick: move |_| async move {
-                                if let Ok(_) = add_user(user_input.to_string()).await {
+        div { id: "add-user-form",
+            form {
+                label { r#for: "fusername", "User name :" }
+                input {
+                    r#type: "text",
+                    id: "form-username",
+                    r#name: "fusername",
+                    placeholder: "New user name",
+                    value: user_input,
+                    oninput: move |event| user_input.set(event.value()),
+                    onkeydown: move |event: dioxus::events::KeyboardEvent| {
+                        if let dioxus::events::Key::Enter = event.key() {
+                            let user_input_clone = user_input.clone();
+                            spawn(async move {
+                                if let Ok(_) = add_user(user_input_clone.to_string()).await {
                                     user_input.set("".to_string());
                                 }
                                 if let Ok(data) = get_users().await {
                                     users.set(data);
                                 }
-                            },
-                            text { "✔️" }
+                            });
                         }
-                    }
+                    },
+                }
+                button {
+                    id: "submit",
+                    r#type: "submit",
+                    onclick: move |_| async move {
+                        if let Ok(_) = add_user(user_input.to_string()).await {
+                            user_input.set("".to_string());
+                        }
+                        if let Ok(data) = get_users().await {
+                            users.set(data);
+                        }
+                    },
+                    text { "Submit" }
                 }
             }
         }
@@ -71,12 +68,17 @@ pub fn Home() -> Element {
 
 #[server]
 async fn get_users() -> Result<Vec<String>, ServerFnError> {
-    let users = crate::db::get_users()?;
+    use crate::db;
+    let users = db::get_users()?;
     Ok(users)
 }
 
 #[server]
 async fn add_user(name: String) -> Result<(), ServerFnError> {
-    crate::db::create_user(&name)?;
+    use crate::db;
+    if name == "" {
+        return Err(ServerFnError::new("User name cannot be empty."));
+    }
+    db::create_user(&name)?;
     Ok(())
 }

@@ -7,10 +7,6 @@ mod message;
 mod network;
 mod state;
 
-const LOW_PORT: u16 = 10000;
-const HIGH_PORT: u16 = 11000;
-const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
-
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -33,6 +29,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     use std::net::SocketAddr;
     use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
     use tokio::net::TcpListener;
+
+    const LOW_PORT: u16 = 10000;
+    const HIGH_PORT: u16 = 11000;
+    const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
     env_logger::init();
 
@@ -213,19 +213,55 @@ fn main() {
 }
 
 mod views;
+use views::*;
 
-const FAVICON: Asset = asset!("/assets/logo.png");
+const FAVICON: Asset = asset!("/assets/icon.png");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 
 #[component]
 fn App() -> Element {
-    use views::Home;
     rsx! {
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
 
-        Home {}
+        Router::<Route> {}
     }
+}
+
+#[derive(Debug, Clone, Routable, PartialEq)]
+#[rustfmt::skip]
+enum Route {
+    #[layout(Navbar)]
+        #[route("/")]
+        Home {},
+        #[route("/info")]
+        Info {},
+        #[nest("/:name")]
+        #[layout(User)]
+            #[route("/history")]
+            History {
+                name: String,
+            },
+            #[route("/withdraw")]
+            Withdraw {
+                name: String,
+            },
+            #[route("/pay")]
+            Pay {
+                name: String,
+            },
+            #[route("/refund")]
+            Refund {
+                name: String,
+            },
+            #[route("/transfer")]
+            Transfer {
+                name: String,
+            },
+            #[route("/deposit")]
+            Deposit {
+                name: String,
+            },
 }
 
 #[cfg(test)]

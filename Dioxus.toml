@@ -1,4 +1,5 @@
 [application]
+name = "peillute"
 
 [web.app]
 
@@ -19,3 +20,7 @@ script = []
 # Javascript code file
 # serve: [dev-server] only
 script = []
+
+[bundle]
+identifier = "utc.peillute"
+publisher = "Peill'UTC"

@@ -133,6 +133,7 @@ pub fn update_solde(name: &str) -> rusqlite::Result<()> {
             "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
             params![solde, name],
         )?;
+        log::debug!("Updated solde for {} to {}", name, solde);
         Ok(())
     }
 }
@@ -166,6 +167,13 @@ pub fn create_transaction(
 
     ensure_user(from_user)?;
     ensure_user(to_user)?;
+
+    log::debug!(
+        "Creating transaction from {} to {} with amount {}",
+        from_user,
+        to_user,
+        amount
+    );
 
     {
         let conn = DB_CONN.lock().unwrap();
@@ -201,7 +209,13 @@ pub fn deposit(
     if !user_exists(user)? {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    create_transaction(NULL, user, amount, lamport_time, source_node, "Deposit")
+    log::debug!("Depositing {} to {}", amount, user);
+
+    if let Err(e) = create_transaction(NULL, user, amount, lamport_time, source_node, "Deposit") {
+        log::error!("Error while creating deposit transaction: {}", e);
+        return Err(e);
+    }
+    Ok(())
 }
 
 #[cfg(feature = "server")]

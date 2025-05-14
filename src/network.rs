@@ -316,6 +316,8 @@ pub async fn send_message_to_all(
     Ok(())
 }
 
+#[cfg(feature = "server")]
+#[allow(unused)]
 pub async fn on_sync() {
     // TODO: implement sync
 }

@@ -4,6 +4,16 @@ set -e
 
 echo "[*] Launching Peillute instance..."
 
+# Set default log level
+LOG_LEVEL="info"
+
+# Check for -debug argument
+for arg in "$@"; do
+    if [ "$arg" == "-debug" ]; then
+        LOG_LEVEL="debug"
+    fi
+done
+
 # Check if Rust is installed
 if ! command -v cargo &> /dev/null; then
     echo "[*] Installing Rust..."
@@ -55,4 +65,4 @@ fi
 
 echo "[*] Running the Peillute instance..."
 cd target/dx/peillute/release/web
-RUST_LOG=info ./server
+RUST_LOG=$LOG_LEVEL ./server

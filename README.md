@@ -10,7 +10,16 @@ The goal is to manually implement mechanisms such as vector clocks, replica mana
 git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 ```
 
-### 2. Install dependencies
+### 2. Automatically install dependencies and run peillute instance
+
+```sh
+./launch_peillute_instance.sh
+
+# to be more verbose :
+./launch_peillute_instance.sh -debug
+```
+
+### 3. Manually install dependencies
 Make sure you have Rust, Cargo, Dioxus, and their dependencies installed.
 
 ```sh
@@ -40,11 +49,6 @@ Manually run the server:
 ```sh
 cd target/dx/peillute/release/web
 RUST_LOG=info ./server
-```
-
-Or just use the provided script:
-```sh
-./launch_peillute_instance.sh
 ```
 
 
