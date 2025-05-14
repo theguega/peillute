@@ -269,6 +269,7 @@ pub fn withdraw(
     )
 }
 
+#[allow(unused)]
 pub fn create_user_with_solde(
     unique_name: &str,
     solde: f64,

@@ -260,14 +260,14 @@ pub async fn handle_command_from_network(
     use log;
 
     match msg {
-        MessageInfo::CreateUser(CreateUser) => {
-            super::db::create_user(&CreateUser.name).unwrap();
+        MessageInfo::CreateUser(create_user) => {
+            super::db::create_user(&create_user.name).unwrap();
         }
 
-        MessageInfo::Deposit(Deposit) => {
+        MessageInfo::Deposit(deposit) => {
             super::db::deposit(
-                &Deposit.name,
-                Deposit.amount,
+                &deposit.name,
+                deposit.amount,
                 lamport_time,
                 node,
                 vector_clock,
@@ -275,10 +275,10 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Withdraw(Withdraw) => {
+        MessageInfo::Withdraw(withdraw) => {
             super::db::withdraw(
-                &Withdraw.name,
-                Withdraw.amount,
+                &withdraw.name,
+                withdraw.amount,
                 lamport_time,
                 node,
                 vector_clock,
@@ -286,11 +286,11 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Transfer(Transfer) => {
+        MessageInfo::Transfer(transfer) => {
             super::db::create_transaction(
-                &Transfer.name,
-                &Transfer.beneficiary,
-                Transfer.amount,
+                &transfer.name,
+                &transfer.beneficiary,
+                transfer.amount,
                 lamport_time,
                 node,
                 "",
@@ -299,11 +299,11 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Pay(Pay) => {
+        MessageInfo::Pay(pay) => {
             super::db::create_transaction(
-                &Pay.name,
+                &pay.name,
                 "NULL",
-                Pay.amount,
+                pay.amount,
                 lamport_time,
                 node,
                 "",
@@ -312,10 +312,10 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Refund(Refund) => {
+        MessageInfo::Refund(refund) => {
             super::db::refund_transaction(
-                Refund.transac_time,
-                &Refund.transac_node,
+                refund.transac_time,
+                &refund.transac_node,
                 lamport_time,
                 node,
                 vector_clock,
