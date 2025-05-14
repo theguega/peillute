@@ -555,31 +555,97 @@ button.secondary:hover {
     font-size: 1.1em;
 }
 
-/* Info Page (info.rs) */
-#info-page {
-    padding: var(--spacing-large);
+/* Info Page (info.rs) - System Information Panel */
+.info-panel {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-large);
+    padding: var(--spacing-large);
     box-shadow: var(--shadow-medium);
-    max-width: 700px;
-    margin: var(--spacing-medium) auto;
+    max-width: 800px;
+    /* Adjust as needed for content readability */
+    margin: var(--spacing-large) auto;
+    /* Center the panel on the page */
 }
 
-#info-page h1,
-#info-page h2,
-#info-page h3 {
-    color: var(--accent-color);
+.info-panel h2 {
+    /* "System Information" */
+    text-align: center;
+    color: var(--primary-color);
+    /* Using primary color for the main title */
+    font-size: 1.75rem;
+    /* Adjusted size for an H2 */
+    margin-bottom: var(--spacing-xlarge);
+    /* More space after the main title */
 }
 
-#info-page h2 {
-    font-size: 1.5rem;
-    margin-top: var(--spacing-large);
+.info-item {
+    margin-bottom: var(--spacing-regular);
+    padding-bottom: var(--spacing-regular);
+    /* Add some space below each item */
+    border-bottom: 1px solid var(--header-bg);
+    /* Subtle separator for each item */
+    font-size: 1em;
+    line-height: 1.5;
+    /* Improve readability for potentially longer values */
 }
 
-#info-page h3 {
-    font-size: 1.2rem;
-    margin-top: var(--spacing-regular);
+.info-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+    /* No border for the last item */
+}
+
+.info-item strong {
+    font-weight: 600;
+    /* Slightly bolder than default 500 */
+    color: var(--text-color);
+    /* Or use var(--accent-color) for more emphasis on labels */
+    margin-right: var(--spacing-small);
+    display: inline-block;
+    /* Helps with alignment if needed */
+    min-width: 200px;
+    /* Ensures labels have some minimum width, helps align values if desired */
+}
+
+.info-item span {
+    color: var(--text-color);
+    word-break: break-word;
+    /* Break long strings like addresses/IDs to prevent overflow */
+}
+
+/* Styling for the "Connected Peers" list */
+.info-item .peer-list {
+    list-style-type: none;
+    /* Remove default bullet points */
+    padding-left: 0;
+    /* Remove default padding */
+    margin-top: var(--spacing-small);
+    /* Space between "Connected Peers:" and the list */
+}
+
+.info-item .peer-list li {
+    background-color: var(--header-bg);
+    /* Light background for each peer item */
+    color: var(--text-color);
+    padding: var(--spacing-small) var(--spacing-regular);
+    border-radius: var(--border-radius-medium);
+    margin-bottom: var(--spacing-small);
+    font-family: var(--font-family-monospace);
+    /* Good for addresses/IDs */
+    font-size: 0.9em;
+    border: 1px solid var(--border-color);
+    word-break: break-all;
+    /* Ensure long peer addresses wrap nicely */
+}
+
+/* Span for "No peers currently connected." */
+.info-item>span {
+    /* Targets the span directly under info-item (for the "No peers" message) */
+    font-style: italic;
+    color: var(--text-color);
+    opacity: 0.8;
 }
 
 

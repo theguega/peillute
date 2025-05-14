@@ -13,7 +13,6 @@ pub fn Home() -> Element {
     });
 
     rsx! {
-        h1 { "Users" }
         div { id: "users-list",
             for item in users.iter() {
                 Link {

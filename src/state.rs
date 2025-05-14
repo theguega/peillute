@@ -63,6 +63,10 @@ impl AppState {
         self.peer_addrs.clone()
     }
 
+    pub fn get_peers_string(&self) -> Vec<String> {
+        self.peer_addrs.iter().map(|x| x.to_string()).collect()
+    }
+
     pub fn increment_lamport(&mut self) -> i64 {
         self.clocks.increment_lamport()
     }

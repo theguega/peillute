@@ -41,14 +41,6 @@ pub fn History(name: String) -> Element {
                                             strong { "Amount:" }
                                             " {transaction.amount:.2}"
                                         }
-                                        p {
-                                            strong { "Timestamp:" }
-                                            " {transaction.lamport_time}"
-                                        }
-                                        p {
-                                            strong { "Source Node:" }
-                                            " {transaction.source_node}"
-                                        }
                                         if let Some(msg) = &transaction.optional_msg {
                                             if !msg.is_empty() {
                                                 p {
@@ -81,7 +73,6 @@ pub fn Withdraw(name: String) -> Element {
 
     rsx! {
         div { id: "withdraw-form",
-            h1 { "Pay page for {name}" }
             form {
                 label { r#for: "fwithdraw", "Withdraw amount :" }
                 input {
@@ -267,14 +258,6 @@ pub fn Refund(name: String) -> Element {
                                         p {
                                             strong { "Amount:" }
                                             " {transaction.amount:.2}"
-                                        }
-                                        p {
-                                            strong { "Timestamp:" }
-                                            " {transaction.lamport_time}"
-                                        }
-                                        p {
-                                            strong { "Source Node:" }
-                                            " {transaction.source_node}"
                                         }
                                         if let Some(msg) = &transaction.optional_msg {
                                             if !msg.is_empty() {
