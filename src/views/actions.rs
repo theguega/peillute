@@ -138,7 +138,7 @@ pub fn Pay(name: String) -> Element {
     let name_for_payment = name.clone();
 
     // Function to add product to cart
-    let add_to_cart = move |product_name: String, price: f64| {
+    let mut add_to_cart = move |product_name: String, price: f64| {
         let mut updated_cart = cart.read().clone();
 
         // Check if product is already in cart
@@ -147,7 +147,7 @@ pub fn Pay(name: String) -> Element {
             .position(|(name, _, _)| name == &product_name)
         {
             // Update quantity
-            let (name, price, quantity) = updated_cart[index];
+            let (name, price, quantity) = updated_cart[index].clone();
             updated_cart[index] = (name, price, quantity + 1);
         } else {
             // Add new product to cart
@@ -164,14 +164,14 @@ pub fn Pay(name: String) -> Element {
     };
 
     // Function to remove product from cart
-    let remove_from_cart = move |product_name: String| {
+    let mut remove_from_cart = move |product_name: String| {
         let mut updated_cart = cart.read().clone();
 
         if let Some(index) = updated_cart
             .iter()
             .position(|(name, _, _)| name == &product_name)
         {
-            let (name, price, quantity) = updated_cart[index];
+            let (name, price, quantity) = updated_cart[index].clone();
 
             if quantity > 1 {
                 // Decrease quantity
