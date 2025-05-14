@@ -124,7 +124,9 @@ async fn main_loop(
                     (local_vc_clock, local_lamport_time)
                 };
                 let command = run_cli(line);
-                let _ = handle_command_from_cli(command, &local_lamport_time, node_name,&local_vc_clock).await;
+                if let Err(e) = handle_command_from_cli(command, &local_lamport_time, node_name,&local_vc_clock).await{
+                    log::error!("Error handling command:\n{}", e);
+                }
                 print!("> ");
                 std_io::stdout().flush().unwrap();
             }

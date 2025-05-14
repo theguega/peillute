@@ -62,7 +62,7 @@ pub async fn handle_command_from_cli(
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
-            super::db::create_user(&name).unwrap();
+            super::db::create_user(&name)?;
 
             use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
             use crate::network::send_message_to_all;
@@ -76,22 +76,23 @@ pub async fn handle_command_from_cli(
         }
 
         Command::UserAccounts => {
-            super::db::print_users().unwrap();
+            super::db::print_users()?;
         }
 
         Command::PrintUserTransactions => {
             let name = prompt("Username");
-            super::db::print_transaction_for_user(&name).unwrap();
+            super::db::print_transaction_for_user(&name)?;
         }
 
         Command::PrintTransactions => {
-            super::db::print_transactions().unwrap();
+            super::db::print_transactions()?;
         }
 
         Command::Deposit => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(&name, amount, lamport_time, node, vector_clock).unwrap();
+            super::db::deposit(&name, amount, lamport_time, node, vector_clock)?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
             use crate::network::send_message_to_all;
@@ -106,8 +107,12 @@ pub async fn handle_command_from_cli(
 
         Command::Withdraw => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Withdraw amount");
-            super::db::withdraw(&name, amount, lamport_time, node, vector_clock).unwrap();
+            if amount < 0.0 {
+
+            }
+            super::db::withdraw(&name, amount, lamport_time, node, vector_clock)?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
             use crate::network::send_message_to_all;
@@ -122,9 +127,11 @@ pub async fn handle_command_from_cli(
 
         Command::Transfer => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Transfer amount");
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
+
 
             super::db::create_transaction(
                 &name,
@@ -134,8 +141,7 @@ pub async fn handle_command_from_cli(
                 node,
                 "",
                 vector_clock,
-            )
-            .unwrap();
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
             use crate::network::send_message_to_all;
@@ -159,8 +165,7 @@ pub async fn handle_command_from_cli(
                 node,
                 "",
                 vector_clock,
-            )
-            .unwrap();
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Pay};
             use crate::network::send_message_to_all;
@@ -185,8 +190,7 @@ pub async fn handle_command_from_cli(
                 lamport_time,
                 node,
                 vector_clock,
-            )
-            .unwrap();
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Refund};
             use crate::network::send_message_to_all;
@@ -261,7 +265,7 @@ pub async fn handle_command_from_network(
 
     match msg {
         MessageInfo::CreateUser(create_user) => {
-            super::db::create_user(&create_user.name).unwrap();
+            super::db::create_user(&create_user.name)?;
         }
 
         MessageInfo::Deposit(deposit) => {
@@ -271,8 +275,7 @@ pub async fn handle_command_from_network(
                 lamport_time,
                 node,
                 vector_clock,
-            )
-            .unwrap();
+            )?;
         }
 
         MessageInfo::Withdraw(withdraw) => {
@@ -282,8 +285,7 @@ pub async fn handle_command_from_network(
                 lamport_time,
                 node,
                 vector_clock,
-            )
-            .unwrap();
+            )?;
         }
 
         MessageInfo::Transfer(transfer) => {
@@ -295,8 +297,7 @@ pub async fn handle_command_from_network(
                 node,
                 "",
                 vector_clock,
-            )
-            .unwrap();
+            )?;
         }
 
         MessageInfo::Pay(pay) => {
@@ -308,8 +309,7 @@ pub async fn handle_command_from_network(
                 node,
                 "",
                 vector_clock,
-            )
-            .unwrap();
+            )?;
         }
 
         MessageInfo::Refund(refund) => {
@@ -319,8 +319,7 @@ pub async fn handle_command_from_network(
                 lamport_time,
                 node,
                 vector_clock,
-            )
-            .unwrap();
+            )?;
         }
         MessageInfo::None => {
             log::info!("❓ Received None message");
