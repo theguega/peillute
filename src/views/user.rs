@@ -19,8 +19,10 @@ pub fn User(name: String) -> Element {
     }
 
     rsx! {
-        h1 { "Welcome {name}" }
-        h2 { "Solde: {solde}" }
+        div { id: "user-info",
+            h1 { "Welcome {name} !" }
+            h2 { "{solde} €" }
+        }
         div { id: "user-page",
             Link {
                 to: Route::History {

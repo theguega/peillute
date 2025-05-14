@@ -1,4 +1,4 @@
-/* Basic Reset & Variables */
+/* Basic Reset & Modern Variables */
 * {
     margin: 0;
     padding: 0;
@@ -6,84 +6,642 @@
 }
 
 :root {
-    --bg-color: #f4f4f4;
-    --text-color: #333;
-    --header-bg: #e0e0e0;
+    --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    --font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    --bg-color: #ffffff;
+    --text-color: #212529;
+    --header-bg: #f8f9fa;
     --card-bg: #ffffff;
-    --border-color: #ccc;
-    --button-bg: #d0d0d0;
-    --button-text: #333;
+    --border-color: #dee2e6;
     --input-bg: #ffffff;
-    --input-border: #ccc;
-    --accent-color: orange;
-    --positive-color: #28a745;
+    --input-border: #ced4da;
+    --input-focus-border: #86b7fe;
+    --input-focus-shadow: rgba(13, 110, 253, 0.25);
+
+    --primary-color: #0d6efd;
+    /* Modern Blue */
+    --primary-color-hover: #0b5ed7;
+    --accent-color: #fd7e14;
+    /* Orange */
+    --accent-color-hover: #e67312;
+
+    --button-bg: var(--primary-color);
+    --button-text: #ffffff;
+    --button-hover-bg: var(--primary-color-hover);
+
+    --link-color: var(--primary-color);
+    --link-hover-color: var(--primary-color-hover);
+
+    --positive-color: #198754;
+    /* Green */
     --negative-color: #dc3545;
-    --shadow-color: rgba(0, 0, 0, 0.1);
+    /* Red */
+    --shadow-color: rgba(0, 0, 0, 0.075);
+    --shadow-light: 0 2px 4px var(--shadow-color);
+    --shadow-medium: 0 4px 8px var(--shadow-color);
+
+    --border-radius-small: 0.25rem;
+    /* 4px */
+    --border-radius-medium: 0.5rem;
+    /* 8px */
+    --border-radius-large: 0.75rem;
+    /* 12px */
+
+    --spacing-extra-small: 0.25rem;
+    --spacing-small: 0.5rem;
+    --spacing-regular: 0.75rem;
+    --spacing-medium: 1rem;
+    --spacing-large: 1.5rem;
+    --spacing-xlarge: 2rem;
+
+    --transition-speed: 0.2s;
 }
 
 [data-theme="dark"] {
-    --bg-color: #222;
-    --text-color: #f1f1f1;
-    --header-bg: #333;
-    --card-bg: #444;
-    --border-color: #555;
-    --button-bg: #555;
-    --button-text: #f1f1f1;
-    --input-bg: #555;
-    --input-border: #666;
-    --accent-color: orange;
-    --positive-color: #33cc55;
+    --bg-color: #121212;
+    --text-color: #e9ecef;
+    --header-bg: #1c1c1c;
+    --card-bg: #1e1e1e;
+    --border-color: #3a3a3a;
+    --input-bg: #2a2a2a;
+    --input-border: #4a4a4a;
+    --input-focus-border: #589dfd;
+    --input-focus-shadow: rgba(37, 133, 253, 0.3);
+
+    --primary-color: #2585fd;
+    --primary-color-hover: #0d6efd;
+    --accent-color: #ff9933;
+    --accent-color-hover: #ff8a1f;
+
+    --button-bg: var(--primary-color);
+    --button-text: #ffffff;
+    /* Or a very light gray if #fff is too stark on primary */
+    --button-hover-bg: var(--primary-color-hover);
+
+    --link-color: var(--primary-color);
+    --link-hover-color: var(--primary-color-hover);
+
+    --positive-color: #28a745;
     --negative-color: #ff4d4d;
-    --shadow-color: rgba(255, 255, 255, 0.1);
+    --shadow-color: rgba(255, 255, 255, 0.05);
 }
 
+/* Base Styles */
 body {
-    font-family: sans-serif;
+    font-family: var(--font-family-sans);
     background-color: var(--bg-color);
     color: var(--text-color);
     line-height: 1.6;
-    transition: background-color 0.3s, color 0.3s;
-    padding: 10px;
+    transition: background-color var(--transition-speed) ease-in-out, color var(--transition-speed) ease-in-out;
+    padding: var(--spacing-medium);
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin-bottom: var(--spacing-regular);
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+h1 {
+    font-size: 2rem;
+}
+
+h2 {
+    font-size: 1.75rem;
+}
+
+h3 {
+    font-size: 1.5rem;
+}
+
+h4 {
+    font-size: 1.25rem;
+}
+
+p {
+    margin-bottom: var(--spacing-medium);
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+    transition: color var(--transition-speed) ease-in-out;
+}
+
+a:hover {
+    color: var(--link-hover-color);
+    text-decoration: underline;
+}
+
+/* Main App Container (applied to elements wrapping Outlet content) */
+.app-content {
+    padding: var(--spacing-large);
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Navbar */
 #navbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 15px;
+    padding: var(--spacing-regular) var(--spacing-large);
     background-color: var(--header-bg);
     border-bottom: 1px solid var(--border-color);
+    margin-bottom: var(--spacing-large);
+    /* Space before page content */
+    border-radius: var(--border-radius-medium);
+    box-shadow: var(--shadow-light);
 }
 
 #navbar h1 {
-    font-size: 1.4em;
+    font-size: 1.6em;
     font-weight: bold;
+    color: var(--accent-color);
+    margin: 0;
+    /* Reset margin for h1 inside flex */
 }
 
-#user-page {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background-color: var(--card-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+#navbar a {
+    font-weight: 500;
+    padding: var(--spacing-small) var(--spacing-regular);
+    border-radius: var(--border-radius-small);
 }
 
-#users-list {
+#navbar a:hover {
+    background-color: color-mix(in srgb, var(--text-color) 10%, transparent);
+    text-decoration: none;
+}
+
+
+/* Forms General Styling */
+form {
     display: flex;
     flex-direction: column;
-    padding: 10px 15px;
+    gap: var(--spacing-medium);
+    padding: var(--spacing-large);
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-medium);
+    max-width: 500px;
+    /* Constrain form width */
+    margin: var(--spacing-medium) auto;
+    /* Center forms */
 }
 
-a {
-    text-decoration: none;
+form h1 {
+    text-align: center;
+    margin-bottom: var(--spacing-large);
+}
+
+label {
+    font-weight: 500;
+    margin-bottom: var(--spacing-extra-small);
+    display: block;
+    /* Ensure label takes full width and margin applies */
+}
+
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+select {
+    width: 100%;
+    padding: var(--spacing-regular);
+    background-color: var(--input-bg);
     color: var(--text-color);
+    border: 1px solid var(--input-border);
+    border-radius: var(--border-radius-medium);
+    font-size: 1em;
+    transition: border-color var(--transition-speed) ease-in-out, box-shadow var(--transition-speed) ease-in-out;
 }
 
-a:hover {
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--input-focus-border);
+    box-shadow: 0 0 0 0.2rem var(--input-focus-shadow);
+}
+
+/* Buttons */
+button,
+.button-link {
+    /* For Link components styled as buttons */
+    padding: var(--spacing-regular) var(--spacing-medium);
+    font-size: 1em;
+    font-weight: 500;
+    color: var(--button-text);
+    background-color: var(--button-bg);
+    border: none;
+    border-radius: var(--border-radius-medium);
+    cursor: pointer;
+    text-align: center;
+    transition: background-color var(--transition-speed) ease-in-out, transform 0.1s ease;
+    display: inline-block;
+    /* For Link components */
+    text-decoration: none;
+    /* For Link components */
+}
+
+button:hover,
+.button-link:hover {
+    background-color: var(--button-hover-bg);
+    color: var(--button-text);
+    /* Ensure text color remains if button-text isn't just white */
+    text-decoration: none;
+    /* For Link components */
+    transform: translateY(-1px);
+}
+
+button:active,
+.button-link:active {
+    transform: translateY(0px);
+}
+
+button:disabled,
+.button-link[disabled] {
+    /* Dioxus might not use disabled attribute on Link, but good practice */
+    background-color: color-mix(in srgb, var(--button-bg) 50%, var(--bg-color));
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+
+button.secondary {
+    background-color: var(--card-bg);
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+button.secondary:hover {
+    background-color: color-mix(in srgb, var(--primary-color) 10%, var(--card-bg));
+}
+
+/* Page Specific Styles */
+
+/* Home Page (home.rs) */
+#users-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-medium);
+    padding: var(--spacing-medium);
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-light);
+    margin-bottom: var(--spacing-large);
+}
+
+#users-list>a {
+    /* Targeting the Link components */
+    display: block;
+    padding: var(--spacing-regular);
+    background-color: var(--header-bg);
+    /* Slightly different bg for items */
+    border-radius: var(--border-radius-medium);
+    text-align: center;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+}
+
+#users-list>a:hover {
+    background-color: color-mix(in srgb, var(--accent-color) 15%, var(--header-bg));
     color: var(--accent-color);
+    text-decoration: none;
+    border-color: var(--accent-color);
+}
+
+#add-user-form {
+    margin-top: var(--spacing-xlarge);
+}
+
+#add-user-form button#submit {
+    margin-top: var(--spacing-small);
+    /* Add some space if label/input are tight */
+}
+
+/* User Page (user.rs) - User Info and Action Links */
+#user-info {
+    text-align: center;
+    /* Centers h1 and h2 content */
+    margin-bottom: var(--spacing-large);
+    padding: var(--spacing-large);
+    /* Increased padding for a bit more emphasis */
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius-large);
+    /* Consistent with other cards */
+    box-shadow: var(--shadow-medium);
+}
+
+#user-info h1 {
+    /* "Welcome {name}" */
+    color: var(--text-color);
+    /* Standard text color for the welcome message */
+    font-size: 2rem;
+    /* Default h1 size from base styles */
+    margin-bottom: var(--spacing-small);
+    /* Space between welcome and solde */
+}
+
+#user-info h2 {
+    /* "Solde: {solde}" */
+    color: var(--accent-color);
+    /* Solde in accent color as requested */
+    font-size: 1.75rem;
+    /* Default h2 size from base styles */
+    font-weight: bold;
+    /* Make the solde stand out more */
+}
+
+/* Styles for #user-page (the container for action links) remain the same as previously provided */
+#user-page {
+    /* Container for action links on user page */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--spacing-medium);
+    padding: var(--spacing-medium);
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-medium);
+    margin-bottom: var(--spacing-large);
+}
+
+#user-page a {
+    /* The Link components */
+    display: block;
+    /* Make the whole area clickable */
+    padding: var(--spacing-medium);
+    background-color: var(--primary-color);
+    color: var(--button-text);
+    text-align: center;
+    border-radius: var(--border-radius-medium);
+    font-weight: 500;
+    transition: background-color var(--transition-speed) ease;
+}
+
+#user-page a:hover {
+    background-color: var(--primary-color-hover);
+    text-decoration: none;
+}
+
+/* History Page & Refund Page (actions.rs) */
+#history-page {
+    /* Also used by Refund */
+    padding: var(--spacing-regular);
+}
+
+#history-page>h1 {
+    text-align: center;
+    margin-bottom: var(--spacing-large);
+    color: var(--accent-color);
+}
+
+.transactions-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-medium);
+}
+
+.transaction-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-medium);
+    padding: var(--spacing-medium);
+    box-shadow: var(--shadow-light);
+}
+
+.transaction-card p {
+    margin-bottom: var(--spacing-small);
+    font-size: 0.95em;
+}
+
+.transaction-card p:last-child {
+    margin-bottom: 0;
+}
+
+.transaction-card strong {
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-right: var(--spacing-extra-small);
+}
+
+.transaction-card button {
+    /* For the Refund button */
+    margin-top: var(--spacing-regular);
+    padding: var(--spacing-small) var(--spacing-regular);
+    background-color: var(--negative-color);
+    /* Distinct color for refund */
+}
+
+.transaction-card button:hover {
+    background-color: color-mix(in srgb, var(--negative-color) 80%, black);
+}
+
+/* Withdraw, Deposit, Transfer Pages (actions.rs) */
+/* These use the general form styling already defined */
+#withdraw-form,
+#deposit-form,
+#transfer-page {
+    /* general form styles apply */
+}
+
+#transfer-page select,
+#transfer-page input {
+    margin-bottom: var(--spacing-small);
+    /* Ensure consistent spacing in transfer form */
+}
+
+
+/* Pay Page (actions.rs) */
+#pay-page>h1 {
+    text-align: center;
+    margin-bottom: var(--spacing-large);
+    color: var(--accent-color);
+}
+
+/* Products section */
+#pay-page>div:first-of-type {
+    /* The div wrapping the product loop */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-medium);
+    margin-bottom: var(--spacing-xlarge);
+}
+
+/* Individual product card (div with key) */
+#pay-page>div:first-of-type>div {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-medium);
+    padding: var(--spacing-medium);
+    box-shadow: var(--shadow-light);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+#pay-page img {
+    max-width: 120px;
+    height: 120px;
+    object-fit: contain;
+    margin-bottom: var(--spacing-regular);
+    border-radius: var(--border-radius-small);
+}
+
+.product-info h3 {
+    font-size: 1.2em;
+    margin-bottom: var(--spacing-extra-small);
+}
+
+.product-info p {
+    /* Price */
+    font-size: 1.1em;
+    font-weight: bold;
+    color: var(--positive-color);
+    margin-bottom: var(--spacing-regular);
+}
+
+.product-info div label {
+    /* "Quantity:" */
+    margin-right: var(--spacing-small);
+}
+
+.product-info div input[type="number"] {
+    width: 80px;
+    padding: var(--spacing-small);
+    text-align: center;
+}
+
+.cart-summary {
+    background-color: var(--header-bg);
+    padding: var(--spacing-large);
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-medium);
+    text-align: center;
+    margin: var(--spacing-xlarge) auto 0;
+    max-width: 500px;
+}
+
+.cart-summary h2 {
+    margin-bottom: var(--spacing-small);
+}
+
+.cart-summary h3 {
+    /* Total amount */
+    font-size: 1.8em;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-medium);
+}
+
+.cart-summary button {
+    /* Pay Now button */
+    width: 100%;
+    padding: var(--spacing-medium);
+    font-size: 1.1em;
+}
+
+/* Info Page (info.rs) */
+#info-page {
+    padding: var(--spacing-large);
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-large);
+    box-shadow: var(--shadow-medium);
+    max-width: 700px;
+    margin: var(--spacing-medium) auto;
+}
+
+#info-page h1,
+#info-page h2,
+#info-page h3 {
+    color: var(--accent-color);
+}
+
+#info-page h2 {
+    font-size: 1.5rem;
+    margin-top: var(--spacing-large);
+}
+
+#info-page h3 {
+    font-size: 1.2rem;
+    margin-top: var(--spacing-regular);
+}
+
+
+/* Utility Classes */
+.error-message {
+    color: var(--negative-color);
+    background-color: color-mix(in srgb, var(--negative-color) 10%, transparent);
+    padding: var(--spacing-regular);
+    border: 1px solid var(--negative-color);
+    border-radius: var(--border-radius-medium);
+    margin-bottom: var(--spacing-medium);
+    text-align: center;
+}
+
+.loading-message,
+.no-data-message {
+    /* General styling for loading/empty states */
+    text-align: center;
+    padding: var(--spacing-large);
+    color: var(--text-color);
+    opacity: 0.8;
+    font-style: italic;
+}
+
+/* Responsive Adjustments (Optional, but good for modern UI) */
+@media (max-width: 768px) {
+    body {
+        padding: var(--spacing-small);
+    }
+
+    #navbar {
+        flex-direction: column;
+        gap: var(--spacing-regular);
+        padding: var(--spacing-regular);
+    }
+
+    #navbar h1 {
+        margin-bottom: var(--spacing-small);
+    }
+
+    #navbar a {
+        width: 100%;
+        text-align: center;
+    }
+
+
+    form {
+        padding: var(--spacing-medium);
+    }
+
+    #pay-page>div:first-of-type {
+        /* Product grid */
+        grid-template-columns: 1fr;
+        /* Stack products on smaller screens */
+    }
+
+    .user-header,
+    #user-page,
+    #users-list,
+    #info-page,
+    .cart-summary {
+        margin-left: 0;
+        margin-right: 0;
+    }
 }

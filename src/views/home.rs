@@ -26,7 +26,7 @@ pub fn Home() -> Element {
         }
         div { id: "add-user-form",
             form {
-                label { r#for: "fusername", "User name :" }
+                label { r#for: "fusername", "Enter a new user:" }
                 input {
                     r#type: "text",
                     id: "form-username",
@@ -59,7 +59,7 @@ pub fn Home() -> Element {
                             users.set(data);
                         }
                     },
-                    text { "Submit" }
+                    "Submit"
                 }
             }
         }

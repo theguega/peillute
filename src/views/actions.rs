@@ -13,8 +13,6 @@ pub fn History(name: String) -> Element {
 
     rsx! {
         div { id: "history-page",
-            h1 { "History page for {name}" }
-
             match &*transactions_resource.read() {
                 None => rsx! {
                     p { "Loading history..." }
@@ -119,11 +117,16 @@ pub fn Withdraw(name: String) -> Element {
     }
 }
 
-const PRODUCTS: &[(&str, f64, &str)] = &[
-    ("Coca", 1.50, "/assets/images/coca.png"),
-    ("Chips", 2.00, "/assets/images/chips.png"),
-    ("Sandwich", 4.50, "/assets/images/sandwich.png"),
-    ("Coffee", 1.20, "/assets/images/coffee.png"),
+const COCA_IMG: Asset = asset!("/assets/images/coca.png");
+const CHIPS_IMG: Asset = asset!("/assets/images/chips.png");
+const SANDWICH_IMG: Asset = asset!("/assets/images/sandwich.png");
+const COFFEE_IMG: Asset = asset!("/assets/images/coffee.png");
+
+const PRODUCTS: &[(&str, f64, Asset)] = &[
+    ("Coca", 1.50, COCA_IMG),
+    ("Chips", 2.00, CHIPS_IMG),
+    ("Sandwich", 4.50, SANDWICH_IMG),
+    ("Coffee", 1.20, COFFEE_IMG),
 ];
 
 // take the username and collect the an amount (float from form) to make a payment
@@ -175,9 +178,6 @@ pub fn Pay(name: String) -> Element {
 
     rsx! {
         div { id: "pay-page",
-            h1 { "Welcome {name}, select your products" }
-
-            // Products section
             div {
                 for (index , (product_name , price , image_path)) in PRODUCTS.iter().enumerate() {
                     div { key: "{product_name}-{index}",
@@ -239,9 +239,7 @@ pub fn Refund(name: String) -> Element {
     });
 
     rsx! {
-        div { id: "history-page",
-            h1 { "History page for {name}" }
-
+        div { id: "refund-page",
             match &*transactions_resource.read() {
                 None => rsx! {
                     p { "Loading history..." }
@@ -327,8 +325,6 @@ pub fn Transfer(name: String) -> Element {
 
     rsx! {
         div { id: "transfer-page",
-            h1 { "Transfer page for {name}" }
-
             match &*users_resource.read() {
                 None => rsx! {
                     p { "Loading users..." }
@@ -416,7 +412,6 @@ pub fn Deposit(name: String) -> Element {
 
     rsx! {
         div { id: "deposit-form",
-            h1 { "Deposit page for {name}" }
             form {
                 label { r#for: "fdeposit", "Deposit amount :" }
                 input {
