@@ -474,3 +474,22 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
         Ok(())
     }
 }
+
+// func to get all accounts and their balances
+// map <user, balance>
+pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String, f64>> {
+    let mut state = std::collections::HashMap::new();
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
+        let users = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })?;
+
+        for user in users {
+            let (name, solde) = user?;
+            state.insert(name, solde);
+        }
+    }
+    Ok(state)
+}

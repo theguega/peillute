@@ -260,37 +260,23 @@ pub async fn handle_command_from_network(
     use log;
 
     match msg {
-        MessageInfo::CreateUser(create_user) => {
-            super::db::create_user(&create_user.name).unwrap();
+        MessageInfo::CreateUser(data) => {
+            super::db::create_user(&data.name).unwrap();
         }
 
-        MessageInfo::Deposit(deposit) => {
-            super::db::deposit(
-                &deposit.name,
-                deposit.amount,
-                lamport_time,
-                node,
-                vector_clock,
-            )
-            .unwrap();
+        MessageInfo::Deposit(data) => {
+            super::db::deposit(&data.name, data.amount, lamport_time, node, vector_clock).unwrap();
         }
 
-        MessageInfo::Withdraw(withdraw) => {
-            super::db::withdraw(
-                &withdraw.name,
-                withdraw.amount,
-                lamport_time,
-                node,
-                vector_clock,
-            )
-            .unwrap();
+        MessageInfo::Withdraw(data) => {
+            super::db::withdraw(&data.name, data.amount, lamport_time, node, vector_clock).unwrap();
         }
 
-        MessageInfo::Transfer(transfer) => {
+        MessageInfo::Transfer(data) => {
             super::db::create_transaction(
-                &transfer.name,
-                &transfer.beneficiary,
-                transfer.amount,
+                &data.name,
+                &data.beneficiary,
+                data.amount,
                 lamport_time,
                 node,
                 "",
@@ -299,11 +285,11 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Pay(pay) => {
+        MessageInfo::Pay(data) => {
             super::db::create_transaction(
-                &pay.name,
+                &data.name,
                 "NULL",
-                pay.amount,
+                data.amount,
                 lamport_time,
                 node,
                 "",
@@ -312,16 +298,23 @@ pub async fn handle_command_from_network(
             .unwrap();
         }
 
-        MessageInfo::Refund(refund) => {
+        MessageInfo::Refund(data) => {
             super::db::refund_transaction(
-                refund.transac_time,
-                &refund.transac_node,
+                data.transac_time,
+                &data.transac_node,
                 lamport_time,
                 node,
                 vector_clock,
             )
             .unwrap();
         }
+
+        MessageInfo::SnapshotResponse(data) => {
+            log::info!("📸 Snapshot response received");
+            log::info!("Snapshot response: {:?}", data);
+            // Handle the snapshot response here
+        }
+
         MessageInfo::None => {
             log::info!("❓ Received None message");
         }

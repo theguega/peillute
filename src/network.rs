@@ -222,6 +222,35 @@ pub async fn handle_message(
                 let mut state = LOCAL_APP_STATE.lock().await;
                 state.remove_peer(message.sender_addr);
             }
+            NetworkMessageCode::SnapshotRequest => {
+                log::debug!("Snapshot request message received: {:?}", message);
+                // respond usig the clock and the current state of the user's balance
+                let user_balances = crate::db::get_local_db_state();
+                let (site_id, clock, local_addr) = {
+                    let state = LOCAL_APP_STATE.lock().await;
+                    (
+                        state.get_site_id().to_string(),
+                        state.get_clock().clone(),
+                        state.get_local_addr().to_string(),
+                    )
+                };
+                let _ = send_message(
+                    &message.sender_addr.to_string(),
+                    MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
+                        site_id: site_id.clone(),
+                        clock: clock.clone(),
+                        user_balances: user_balances.unwrap(),
+                    }),
+                    None,
+                    NetworkMessageCode::SnapshotResponse,
+                    &local_addr,
+                    &site_id,
+                    clock,
+                );
+            }
+            NetworkMessageCode::SnapshotResponse => {
+                log::debug!("Snapshot response message received: {:?}", message);
+            }
             NetworkMessageCode::Sync => {
                 log::debug!("Sync message received: {:?}", message);
                 on_sync().await;

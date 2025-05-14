@@ -14,6 +14,8 @@ pub enum NetworkMessageCode {
     Error,
     Disconnect,
     Sync,
+    SnapshotRequest,
+    SnapshotResponse,
 }
 
 impl NetworkMessageCode {
@@ -27,6 +29,8 @@ impl NetworkMessageCode {
             NetworkMessageCode::Error => "error",
             NetworkMessageCode::Disconnect => "disconnect",
             NetworkMessageCode::Sync => "sync",
+            NetworkMessageCode::SnapshotRequest => "snapshot_request",
+            NetworkMessageCode::SnapshotResponse => "snapshot_response",
         }
     }
     #[allow(unused)]
@@ -39,6 +43,8 @@ impl NetworkMessageCode {
             "error" => Some(NetworkMessageCode::Error),
             "disconnect" => Some(NetworkMessageCode::Disconnect),
             "sync" => Some(NetworkMessageCode::Sync),
+            "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
+            "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
             _ => None,
         }
     }
@@ -64,7 +70,15 @@ pub enum MessageInfo {
     Transfer(Transfer),
     Pay(Pay),
     Refund(Refund),
+    SnapshotResponse(SnapshotResponse),
     None,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct SnapshotResponse {
+    pub site_id: String,
+    pub clock: crate::clock::Clock,
+    pub user_balances: std::collections::HashMap<String, f64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
