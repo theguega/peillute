@@ -311,7 +311,7 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Transfer(data) => {
+        MessageInfo::Transfer(transfer) => {
             super::db::create_transaction(
                 &transfer.name,
                 &transfer.beneficiary,
@@ -323,9 +323,9 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Pay(data) => {
+        MessageInfo::Pay(pay) => {
             super::db::create_transaction(
-                &data.name,
+                &pay.name,
                 "NULL",
                 pay.amount,
                 &local_lamport_time,
@@ -335,7 +335,7 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Refund(data) => {
+        MessageInfo::Refund(refund) => {
             super::db::refund_transaction(
                 refund.transac_time,
                 &refund.transac_node,
