@@ -108,7 +108,6 @@ async fn main_loop(
     listener: tokio::net::TcpListener,
 ) {
     use crate::control::{handle_command_from_cli, run_cli};
-    use crate::state::LOCAL_APP_STATE;
     use std::io::{self as std_io, Write};
     use tokio::select;
 
