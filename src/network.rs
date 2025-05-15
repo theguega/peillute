@@ -154,7 +154,7 @@ pub async fn handle_message(
 
         log::debug!("Received {} bytes from {}", n, addr);
 
-        let message: Message = match decode::from_slice(&buf[..n]) {
+        let message: &Message = match decode::from_slice(&buf[..n]) {
             Ok(msg) => msg,
             Err(e) => {
                 log::error!("Error decoding message: {}", e);
@@ -190,7 +190,7 @@ pub async fn handle_message(
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
                 #[allow(unused)]
-                if let Some(cmd) = message.command {
+                if let Some(cmd) = *message.command {
 
                     let site_id = {
                         let mut state = LOCAL_APP_STATE.lock().await;
@@ -202,16 +202,71 @@ pub async fn handle_message(
 
                     use crate::control::handle_command_from_network;
                     if let Err(e) = handle_command_from_network(
-                        message.info,
+                        *message.info,
                         &site_id
                     )
                     .await{
                         log::error!("Error handling command:\n{}", e);
                     }
+                    // wave diffusion
+                    {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        if state.parent_address == "0.0.0.0".parse().unwrap() {
+                            state.set_parent_address(message.sender_addr);
+                            state.nb_of_attended_neighbors -= 1;
+                            if state.nb_of_attended_neighbors > 0 {
+                                diffuse_message(message);
+                            }else{
+                                // Acquit message to parent
+                                send_message(state.get_parent_address().into(),
+                                             MessageInfo::None,
+                                             None,
+                                             NetworkMessageCode::TransactionAcknowledgement,
+                                             state.get_local_addr().into(),
+                                             state.get_site_id().into(),
+                                             state.get_clock().clone()
+                                ).await?;
+                            }
+                        }else{
+                            // Acquit message to parent
+                            send_message(state.get_parent_address().into(),
+                                         MessageInfo::None,
+                                         None,
+                                         NetworkMessageCode::TransactionAcknowledgement,
+                                         state.get_local_addr().into(),
+                                         state.get_site_id().into(),
+                                         state.get_clock().clone()
+                            ).await?;
+                        }
+
+                    }
+
+
                 } else {
                     log::error!("Command is None for Transaction message");
                 }
             }
+            NetworkMessageCode::TransactionAcknowledgement => {
+                let mut state = LOCAL_APP_STATE.lock().await;
+                state.nb_of_attended_neighbors -= 1;
+                if state.nb_of_attended_neighbors == 0 {
+                    // site initateur
+                    if state.parent_address == state.local_addr {
+                        // diffusion terminée
+                    }else{
+                        send_message(state.get_parent_address().into(),
+                                     MessageInfo::None,
+                                     None,
+                                     NetworkMessageCode::TransactionAcknowledgement,
+                                     state.get_local_addr().into(),
+                                     state.get_site_id().into(),
+                                     state.get_clock().clone()
+                        ).await?;
+                    }
+                }
+            }
+
+
             NetworkMessageCode::Acknowledgment => {
                 log::debug!("Acknowledgment message received: {:?}", message);
                 let mut state = LOCAL_APP_STATE.lock().await;
@@ -255,7 +310,7 @@ pub async fn handle_message(
             }
 
             NetworkMessageCode::SnapshotResponse => {
-                if let MessageInfo::SnapshotResponse(resp) = message.info {
+                if let MessageInfo::SnapshotResponse(resp) = message.info.clone() {
                     let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
                     if let Some(gs) = mgr.push(resp) {
                         log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
@@ -351,6 +406,42 @@ pub async fn send_message_to_all(
             clock.clone(),
         )
         .await?;
+    }
+    Ok(())
+}
+
+// Vague de diffusion des messages
+pub async fn diffuse_message(
+    message: &Message,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_addr, site_id, peer_addrs, clock,parent_address) = {
+        let state = LOCAL_APP_STATE.lock().await;
+        (
+            state.get_local_addr().to_string(),
+            state.get_site_id().to_string(),
+            state.get_peers(),
+            state.get_clock().clone(),
+            state.get_parent_address(),
+        )
+    };
+
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        if peer_addr != parent_address {
+            send_message(
+                &peer_addr_str,
+                message.info.clone(),
+                message.command.clone(),
+                message.code.clone(),
+                &local_addr,
+                &site_id,
+                clock.clone(),
+            )
+                .await?;
+        }
+
     }
     Ok(())
 }

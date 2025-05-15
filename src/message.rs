@@ -10,6 +10,7 @@ pub struct Transaction {
 pub enum NetworkMessageCode {
     Discovery,
     Transaction,
+    TransactionAcknowledgement,
     Acknowledgment,
     Error,
     Disconnect,
@@ -25,6 +26,7 @@ impl NetworkMessageCode {
         match self {
             NetworkMessageCode::Discovery => "discovery",
             NetworkMessageCode::Transaction => "transaction",
+            NetworkMessageCode::TransactionAcknowledgement => "transaction_acknowledgement",
             NetworkMessageCode::Acknowledgment => "acknowledgment",
             NetworkMessageCode::Error => "error",
             NetworkMessageCode::Disconnect => "disconnect",
@@ -39,6 +41,7 @@ impl NetworkMessageCode {
         match code {
             "discovery" => Some(NetworkMessageCode::Discovery),
             "transaction" => Some(NetworkMessageCode::Transaction),
+            "transaction_acknowledgement" => Some(NetworkMessageCode::TransactionAcknowledgement),
             "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
             "error" => Some(NetworkMessageCode::Error),
             "disconnect" => Some(NetworkMessageCode::Disconnect),

@@ -5,6 +5,10 @@ pub struct AppState {
     pub peer_addrs: Vec<std::net::SocketAddr>,
     pub local_addr: std::net::SocketAddr,
 
+    // --- Message Diffusion Info ---
+    pub nb_of_attended_neighbors: usize,
+    pub parent_address: std::net::SocketAddr,
+
     // --- Logical Clocks ---
     pub clocks: crate::clock::Clock,
 }
@@ -16,6 +20,8 @@ impl AppState {
         nb_sites_on_network: usize,
         local_addr: std::net::SocketAddr,
         peer_addrs: Vec<std::net::SocketAddr>,
+        nb_of_attended_neighbors: usize,
+        parent_address: std::net::SocketAddr
     ) -> Self {
         let clocks = crate::clock::Clock::new();
 
@@ -24,7 +30,9 @@ impl AppState {
             nb_sites_on_network,
             local_addr,
             peer_addrs,
-            clocks,
+            nb_of_attended_neighbors,
+            parent_address,
+            clocks
         }
     }
     #[allow(unused)]
@@ -101,6 +109,19 @@ impl AppState {
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.clocks.update_lamport(received_lamport);
     }
+    pub fn get_number_of_attended_neighbors(&self) -> usize {
+        self.nb_sites_on_network
+    }
+    pub fn set_number_of_attended_neighbors(&mut self, n: usize) {
+        self.nb_sites_on_network = n;
+    }
+    pub fn get_parent_address(&self) -> std::net::SocketAddr {
+        self.parent_address
+    }
+
+    pub fn set_parent_address(&mut self, addr: std::net::SocketAddr) {
+        self.parent_address = addr;
+    }
 }
 
 // Singleton
@@ -110,7 +131,9 @@ lazy_static::lazy_static! {
             "".to_string(), // empty site id at start
             0,
             "0.0.0.0:0".parse().unwrap(),
-            Vec::new()
+            Vec::new(),
+            0,
+            "0.0.0.0:0".parse().unwrap(),
         )));
 }
 
@@ -128,7 +151,7 @@ mod tests {
         ];
         let local_addr: std::net::SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
         let shared_state =
-            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone(),num_sites, "0.0.0.0:0".parse().unwrap(),);
 
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.nb_sites_on_network, num_sites);
@@ -146,7 +169,7 @@ mod tests {
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
         let mut shared_state =
-            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone(),num_sites, "0.0.0.0:0".parse().unwrap(),);
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
 
@@ -165,7 +188,7 @@ mod tests {
         ];
         let local_addr = "127.0.0.1:8080".parse().unwrap();
         let mut shared_state =
-            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone());
+            AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone(),num_sites, "0.0.0.0:0".parse().unwrap(),);
 
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
         shared_state.remove_peer("127.0.0.1:8081".parse().unwrap());
