@@ -3,6 +3,7 @@ mod control;
 mod db;
 mod message;
 mod network;
+mod snapshot;
 mod state;
 
 const LOW_PORT: u16 = 10000;
@@ -70,11 +71,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         let _ = db::init_db();
     }
 
-    let (mut local_lamport_time, node_name) = {
+    let node_name = {
         let state = LOCAL_APP_STATE.lock().await;
-        let lamport_time = state.get_lamport().clone();
         let site_id = state.get_site_id().to_string();
-        (lamport_time, site_id)
+        site_id
     };
 
     let stdin: tokio_io::Stdin = tokio_io::stdin();
@@ -94,7 +94,6 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let _ = main_loop(
         main_loop_app_state,
         &mut lines,
-        &mut local_lamport_time,
         node_name.as_str(),
         listener,
     )
@@ -106,11 +105,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
-    local_lamport_time: &mut i64,
     node_name: &str,
     listener: tokio::net::TcpListener,
 ) {
-    use crate::control::{handle_command, run_cli};
+    use crate::control::{handle_command_from_cli, run_cli};
     use crate::state::LOCAL_APP_STATE;
     use std::io::{self as std_io, Write};
     use tokio::select;
@@ -118,13 +116,16 @@ async fn main_loop(
     loop {
         select! {
             line = lines.next_line() => {
-                {
+                let (local_vc_clock,local_lamport_time)={
                     let mut state = LOCAL_APP_STATE.lock().await;
                     state.increment_vector_current();
                     state.increment_lamport();
-                }
+                    let local_lamport_time = state.get_lamport();
+                    let local_vc_clock = state.get_vector().clone();
+                    (local_vc_clock, local_lamport_time)
+                };
                 let command = run_cli(line);
-                let _ = handle_command(command, local_lamport_time, node_name, false).await;
+                let _ = handle_command_from_cli(command, &local_lamport_time, node_name,&local_vc_clock).await;
                 print!("> ");
                 std_io::stdout().flush().unwrap();
             }
