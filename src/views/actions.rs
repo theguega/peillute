@@ -69,6 +69,8 @@ pub fn Withdraw(name: String) -> Element {
     let mut withdraw_amount = use_signal(|| 0f64);
     let name = std::rc::Rc::new(name);
 
+    let mut error_signal = use_signal(|| None::<String>);
+
     let name_for_future = name.clone();
 
     rsx! {
@@ -88,21 +90,36 @@ pub fn Withdraw(name: String) -> Element {
                     },
                 }
                 button {
-                    id: "submit",
                     r#type: "submit",
                     onclick: move |_| {
                         let name = name_for_future.clone();
+                        let amount = *withdraw_amount.read();
                         async move {
-                            if withdraw_for_user_server(name.to_string(), *withdraw_amount.read())
-                                .await
-                                .is_ok()
-                            {
-                                withdraw_amount.set(0.0);
+                            if amount >= 0.0 {
+                                match withdraw_for_user_server(name.to_string(), amount).await {
+                                    Ok(_) => {
+                                        withdraw_amount.set(0.0);
+                                        error_signal.set(None);
+                                    }
+                                    Err(e) => {
+                                        error_signal.set(Some(format!("Withdraw failed: {e}")));
+                                    }
+                                }
+                            } else {
+                                error_signal
+                                    .set(
+                                        Some(
+                                            format!("Please enter a positive amount, you gave {amount}."),
+                                        ),
+                                    );
                             }
                         }
                     },
                     "Submit"
                 }
+            }
+            if let Some(error) = &*error_signal.read() {
+                p { class: "error-message", "{error}" }
             }
         }
     }
@@ -128,6 +145,8 @@ pub fn Pay(name: String) -> Element {
     let mut product_quantities = use_signal(|| vec![0u32; PRODUCTS.len()]);
     let name_for_payment = std::rc::Rc::new(name.clone());
 
+    let mut error_signal = use_signal(|| None::<String>);
+
     let handle_pay = move |_| {
         let current_quantities = product_quantities.read().clone();
         let name_clone = name_for_payment.clone();
@@ -139,21 +158,26 @@ pub fn Pay(name: String) -> Element {
             }
         }
 
-        if total_amount > 0.0 {
-            spawn(async move {
+        spawn(async move {
+            if total_amount > 0.0 {
                 match pay_for_user_server(name_clone.to_string(), total_amount).await {
                     Ok(_) => {
-                        log::info!("Payment successful toast/notification would show here.");
+                        log::info!("Payment successful.");
                         product_quantities.set(vec![0u32; PRODUCTS.len()]);
+                        error_signal.set(None);
                     }
                     Err(e) => {
                         log::error!("Payment failed: {}", e);
+                        error_signal.set(Some(format!("Payment failed: {e}")));
                     }
                 }
-            });
-        } else {
-            log::warn!("Attempted to pay with a total of 0.0. No action taken.");
-        }
+            } else {
+                log::warn!("Attempted to pay with a total of 0.0. No action taken.");
+                error_signal.set(Some(
+                    "Cannot pay €0. Please select at least one item.".to_string(),
+                ));
+            }
+        });
     };
 
     let current_total_display = use_memo(move || {
@@ -207,11 +231,18 @@ pub fn Pay(name: String) -> Element {
             div { class: "cart-summary",
                 h2 { "Order Summary" }
                 h3 { "Total: €{current_total_display():.2}" }
-                button {
-                    disabled: current_total_display() == 0.0,
-                    onclick: handle_pay,
-                    "Pay Now"
+                form {
+                    button {
+                        r#type: "submit",
+                        disabled: current_total_display() == 0.0,
+                        onclick: handle_pay,
+                        "Pay Now"
+                    }
                 }
+            }
+
+            if let Some(error) = &*error_signal.read() {
+                p { class: "error-message", "{error}" }
             }
         }
     }
@@ -223,6 +254,8 @@ pub fn Pay(name: String) -> Element {
 pub fn Refund(name: String) -> Element {
     let name = std::rc::Rc::new(name);
     let name_for_future = name.clone();
+
+    let mut error_signal = use_signal(|| None::<String>);
 
     let transactions_resource = use_resource(move || {
         let name_clone = name_for_future.clone();
@@ -236,9 +269,10 @@ pub fn Refund(name: String) -> Element {
                     p { "Loading history..." }
                 },
                 Some(Ok(transactions)) => {
+                    let name_clone = name.clone();
                     if transactions.is_empty() {
                         rsx! {
-                            p { "No transactions found for {name}." }
+                            p { "No transactions found for {name_clone}." }
                         }
                     } else {
                         rsx! {
@@ -267,25 +301,54 @@ pub fn Refund(name: String) -> Element {
                                                 }
                                             }
                                         }
-                                        button {
-                                            r#type: "button",
-                                            onclick: move |_| {
-                                                async move {
-                                                    if let Err(e) = debug_print(true).await {
-                                                        log::error!("Error: {e}");
-                                                    }
+                                        {
+                                            let transaction_for_refund = transaction.clone();
+                                            let name_for_refund = name.clone();
+                                            let mut resource_to_refresh = transactions_resource.clone();
+                                            rsx! {
+                                                button {
+                                                    r#type: "submit",
+                                                    onclick: move |_| {
+                                                        let name_for_future = name_for_refund.clone();
+                                                        let transaction_for_future = transaction_for_refund.clone();
+                                                        async move {
+                                                            match refund_transaction_server(
+                                                                    transaction_for_future.lamport_time,
+                                                                    transaction_for_future.source_node,
+                                                                )
+                                                                .await
+                                                            {
+                                                                Ok(_) => {
+                                                                    if let Ok(_) = get_transactions_for_user_server(
+                                                                            name_for_future.to_string(),
+                                                                        )
+                                                                        .await
+                                                                    {
+                                                                        error_signal.set(None);
+                                                                        resource_to_refresh.restart();
+                                                                    }
+                                                                }
+                                                                Err(e) => {
+                                                                    error_signal.set(Some(e.to_string()));
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "Refund"
                                                 }
-                                            },
-                                            "Refund"
+                                            }
                                         }
                                     }
                                 }
+                            }
+                            if let Some(error) = &*error_signal.read() {
+                                p { class: "error-message", "{error}" }
                             }
                         }
                     }
                 }
                 Some(Err(e)) => rsx! {
-                    p { class: "error-message", "Error loading history: {e}" }
+                    p { class: "error-message", "Error loading transactions: {e}" }
                 },
             }
         }
@@ -302,6 +365,8 @@ pub fn Transfer(name: String) -> Element {
     let mut selected_user = use_signal(String::new);
     let name = std::rc::Rc::new(name);
     let name_for_future = name.clone();
+
+    let mut error_signal = use_signal(|| None::<String>);
 
     let users_resource = use_resource({
         move || {
@@ -362,6 +427,17 @@ pub fn Transfer(name: String) -> Element {
                             },
                         }
                         button {
+                            r#type: "button",
+                            onclick: move |_| {
+                                async move {
+                                    if let Ok(message) = get_random_message_server().await {
+                                        transfer_message.set(message);
+                                    }
+                                }
+                            },
+                            "Select a random message"
+                        }
+                        button {
                             r#type: "submit",
                             onclick: move |_| {
                                 let to_user = selected_user.read().clone();
@@ -370,19 +446,32 @@ pub fn Transfer(name: String) -> Element {
                                 let from_user = name.clone();
                                 async move {
                                     if !to_user.is_empty() && amount > 0.0 {
-                                        if transfer_from_user_to_user_server(
+                                        match transfer_from_user_to_user_server(
                                                 from_user.to_string(),
                                                 to_user,
                                                 amount,
                                                 message,
                                             )
                                             .await
-                                            .is_ok()
                                         {
-                                            transfer_amount.set(0.0);
-                                            transfer_message.set(String::new());
-                                            selected_user.set(String::new());
+                                            Ok(_) => {
+                                                transfer_amount.set(0.0);
+                                                transfer_message.set(String::new());
+                                                selected_user.set(String::new());
+                                                error_signal.set(None);
+                                            }
+                                            Err(e) => {
+                                                error_signal.set(Some(format!("Transfer failed: {e}")));
+                                            }
                                         }
+                                    } else {
+                                        error_signal
+                                            .set(
+                                                Some(
+                                                    "Please select a user and enter a positive amount."
+                                                        .to_string(),
+                                                ),
+                                            );
                                     }
                                 }
                             },
@@ -390,6 +479,9 @@ pub fn Transfer(name: String) -> Element {
                         }
                     }
                 },
+            }
+            if let Some(error) = &*error_signal.read() {
+                p { class: "error-message", "{error}" }
             }
         }
     }
@@ -400,6 +492,8 @@ pub fn Transfer(name: String) -> Element {
 pub fn Deposit(name: String) -> Element {
     let mut deposit_amount = use_signal(|| 0f64);
     let name = std::rc::Rc::new(name);
+
+    let mut error_signal = use_signal(|| None::<String>);
 
     let name_for_future = name.clone();
 
@@ -420,24 +514,95 @@ pub fn Deposit(name: String) -> Element {
                     },
                 }
                 button {
-                    id: "submit",
                     r#type: "submit",
                     onclick: move |_| {
                         let name = name_for_future.clone();
+                        let amount = *deposit_amount.read();
                         async move {
-                            if deposit_for_user_server(name.to_string(), *deposit_amount.read())
-                                .await
-                                .is_ok()
-                            {
-                                deposit_amount.set(0.0);
+                            if amount >= 0.0 {
+                                match deposit_for_user_server(name.to_string(), amount).await {
+                                    Ok(_) => {
+                                        deposit_amount.set(0.0);
+                                        error_signal.set(None);
+                                    }
+                                    Err(e) => {
+                                        error_signal.set(Some(format!("Deposit failed: {e}")));
+                                    }
+                                }
+                            } else {
+                                error_signal
+                                    .set(
+                                        Some(
+                                            format!("Please enter a positive amount, you gave {amount}."),
+                                        ),
+                                    );
                             }
                         }
                     },
                     "Submit"
                 }
             }
+            if let Some(error) = &*error_signal.read() {
+                p { class: "error-message", "{error}" }
+            }
         }
     }
+}
+
+#[cfg(feature = "server")]
+const RANDOM_MESSAGE: &[&str] = &[
+    "Prend tes 200 balles et va te payer des cours de theatre",
+    "C'est pour toi bb",
+    "Love sur toi",
+    "Phrase non aléatoire",
+    "Votre argent messire",
+    "Acompte sur livraison cocaine",
+    "Votre argent seigneur",
+    "Pour tout ce que tu fais pour moi",
+    "Remboursement horny.com",
+    "Puta, où tu étais quand j'mettais des sept euros d'essence",
+    "Parce que l'argent n'est pas un problème pour moi",
+    "Tiens le rat",
+    "Pour le rein",
+    "Abonnement OnlyFans",
+    "Pour notre dernière nuit, pourboire non compris",
+    "ça fait beaucoup la non ?",
+    "Chantage SexTape",
+    "Argent sale",
+    "Adhésion front national",
+    "Ce que tu sais...",
+    "Remboursement dot de ta soeur",
+    "Rien à ajouter",
+    "Téléphone rose",
+    "Raison : \"GnaGnaGna moi je paye pas pour vous\"",
+    "Fond de tiroir",
+    "Epilation des zones intimes",
+    "Pour m’avoir gratouillé le dos",
+    "La reine Babeth vous offre cet argent",
+];
+
+#[cfg(feature = "server")]
+fn get_seed() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+}
+
+#[cfg(feature = "server")]
+fn lcg(seed: u64) -> u64 {
+    const A: u64 = 6364136223846793005;
+    const C: u64 = 1;
+    seed.wrapping_mul(A).wrapping_add(C)
+}
+
+#[server]
+async fn get_random_message_server() -> Result<String, ServerFnError> {
+    let seed = get_seed();
+    let random_number = lcg(seed);
+    let message = RANDOM_MESSAGE[random_number as usize % RANDOM_MESSAGE.len()];
+    Ok(message.to_string())
 }
 
 #[server]
@@ -516,6 +681,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
+
     Ok(())
 }
 
