@@ -1,5 +1,3 @@
-use crate::control::handle_command_from_network;
-
 pub struct PeerConnection {
     pub sender: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
@@ -202,7 +200,7 @@ pub async fn handle_message(
                         )
                     };
 
-
+                    use crate::control::handle_command_from_network;
                     if let Err(e) = handle_command_from_network(
                         message.info,
                         &site_id
