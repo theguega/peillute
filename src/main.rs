@@ -109,23 +109,16 @@ async fn main_loop(
     listener: tokio::net::TcpListener,
 ) {
     use crate::control::{handle_command_from_cli, run_cli};
-    use crate::state::LOCAL_APP_STATE;
     use std::io::{self as std_io, Write};
     use tokio::select;
 
     loop {
         select! {
             line = lines.next_line() => {
-                let (local_vc_clock,local_lamport_time)={
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.increment_vector_current();
-                    state.increment_lamport();
-                    let local_lamport_time = state.get_lamport();
-                    let local_vc_clock = state.get_vector().clone();
-                    (local_vc_clock, local_lamport_time)
-                };
                 let command = run_cli(line);
-                let _ = handle_command_from_cli(command, &local_lamport_time, node_name,&local_vc_clock).await;
+                if let Err(e) = handle_command_from_cli(command, node_name).await{
+                    log::error!("Error handling command:\n{}", e);
+                }
                 print!("> ");
                 std_io::stdout().flush().unwrap();
             }

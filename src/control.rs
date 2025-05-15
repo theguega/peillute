@@ -1,3 +1,5 @@
+use crate::state::LOCAL_APP_STATE;
+
 pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
@@ -54,17 +56,24 @@ fn parse_command(input: &str) -> Command {
 
 pub async fn handle_command_from_cli(
     cmd: Command,
-    lamport_time: &i64,
     node: &str,
-    vector_clock: &std::collections::HashMap<String, i64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
     use log;
 
+    let (local_vc_clock,local_lamport_time)={
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        (local_vc_clock, local_lamport_time)
+    };
+
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
-            super::db::create_user(&name).unwrap();
+            super::db::create_user(&name)?;
 
             use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
             use crate::network::send_message_to_all;
@@ -78,22 +87,23 @@ pub async fn handle_command_from_cli(
         }
 
         Command::UserAccounts => {
-            super::db::print_users().unwrap();
+            super::db::print_users()?;
         }
 
         Command::PrintUserTransactions => {
             let name = prompt("Username");
-            super::db::print_transaction_for_user(&name).unwrap();
+            super::db::print_transaction_for_user(&name)?;
         }
 
         Command::PrintTransactions => {
-            super::db::print_transactions().unwrap();
+            super::db::print_transactions()?;
         }
 
         Command::Deposit => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(&name, amount, lamport_time, node, vector_clock).unwrap();
+            super::db::deposit(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
             use crate::network::send_message_to_all;
@@ -108,8 +118,12 @@ pub async fn handle_command_from_cli(
 
         Command::Withdraw => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Withdraw amount");
-            super::db::withdraw(&name, amount, lamport_time, node, vector_clock).unwrap();
+            if amount < 0.0 {
+
+            }
+            super::db::withdraw(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
             use crate::network::send_message_to_all;
@@ -124,20 +138,21 @@ pub async fn handle_command_from_cli(
 
         Command::Transfer => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Transfer amount");
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
+
 
             super::db::create_transaction(
                 &name,
                 &beneficiary,
                 amount,
-                lamport_time,
+                &local_lamport_time,
                 node,
                 "",
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
             use crate::network::send_message_to_all;
@@ -157,12 +172,11 @@ pub async fn handle_command_from_cli(
                 &name,
                 "NULL",
                 amount,
-                lamport_time,
+                &local_lamport_time,
                 node,
                 "",
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Pay};
             use crate::network::send_message_to_all;
@@ -184,11 +198,10 @@ pub async fn handle_command_from_cli(
             super::db::refund_transaction(
                 transac_time,
                 &transac_node,
-                lamport_time,
+                &local_lamport_time,
                 node,
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Refund};
             use crate::network::send_message_to_all;
@@ -259,61 +272,77 @@ pub async fn handle_command_from_cli(
 
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    lamport_time: &i64,
     node: &str,
-    vector_clock: &std::collections::HashMap<String, i64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::MessageInfo;
     use log;
 
+    let (local_vc_clock,local_lamport_time)={
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        (local_vc_clock, local_lamport_time)
+    };
+
     match msg {
-        MessageInfo::CreateUser(data) => {
-            super::db::create_user(&data.name).unwrap();
+        MessageInfo::CreateUser(create_user) => {
+            super::db::create_user(&create_user.name)?;
         }
 
-        MessageInfo::Deposit(data) => {
-            super::db::deposit(&data.name, data.amount, lamport_time, node, vector_clock).unwrap();
+        MessageInfo::Deposit(deposit) => {
+            super::db::deposit(
+                &deposit.name,
+                deposit.amount,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
         }
 
-        MessageInfo::Withdraw(data) => {
-            super::db::withdraw(&data.name, data.amount, lamport_time, node, vector_clock).unwrap();
+        MessageInfo::Withdraw(withdraw) => {
+            super::db::withdraw(
+                &withdraw.name,
+                withdraw.amount,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
         }
 
         MessageInfo::Transfer(data) => {
             super::db::create_transaction(
-                &data.name,
-                &data.beneficiary,
-                data.amount,
-                lamport_time,
+                &transfer.name,
+                &transfer.beneficiary,
+                transfer.amount,
+                &local_lamport_time,
                 node,
                 "",
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
         }
 
         MessageInfo::Pay(data) => {
             super::db::create_transaction(
                 &data.name,
                 "NULL",
-                data.amount,
-                lamport_time,
+                pay.amount,
+                &local_lamport_time,
                 node,
                 "",
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
         }
 
         MessageInfo::Refund(data) => {
             super::db::refund_transaction(
-                data.transac_time,
-                &data.transac_node,
-                lamport_time,
+                refund.transac_time,
+                &refund.transac_node,
+                &local_lamport_time,
                 node,
-                vector_clock,
-            )
-            .unwrap();
+                &local_vc_clock,
+            )?;
         }
 
         MessageInfo::SnapshotResponse(data) => {

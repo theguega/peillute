@@ -193,18 +193,23 @@ pub async fn handle_message(
                 log::debug!("Transaction message received: {:?}", message);
                 #[allow(unused)]
                 if let Some(cmd) = message.command {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.increment_lamport();
-                    state.increment_vector_current();
-                    state.update_vector(&message.clock.get_vector());
-                    state.update_lamport(message.clock.get_lamport());
-                    handle_command_from_network(
+
+                    let site_id = {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                        (
+                            state.get_site_id().to_string()
+                        )
+                    };
+
+
+                    if let Err(e) = handle_command_from_network(
                         message.info,
-                        &state.get_lamport(),
-                        state.get_site_id(),
-                        state.get_vector(),
+                        &site_id
                     )
-                    .await?;
+                    .await{
+                        log::error!("Error handling command:\n{}", e);
+                    }
                 } else {
                     log::error!("Command is None for Transaction message");
                 }

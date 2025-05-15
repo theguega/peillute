@@ -135,9 +135,14 @@ pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
 
 pub fn update_solde(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
+
     if !user_exists(name)? {
-        log::error!("User '{}' does not exist.", name);
-        return Ok(());
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("User '{}' does not exist.", name).into())
+        );
+
+        return Err(err);
     }
     let solde = calculate_solde(name)?;
     {
@@ -168,12 +173,13 @@ pub fn create_transaction(
 ) -> rusqlite::Result<()> {
     use rusqlite::params;
     if from_user != NULL && calculate_solde(from_user)? < amount {
-        log::error!(
-            "Insufficient funds: '{}' has less than {}.",
-            from_user,
-            amount
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("Insufficient funds: '{}' has less than {}.",
+                         from_user, amount).into())
         );
-        return Err(rusqlite::Error::InvalidQuery);
+
+        return Err(err);
     }
 
     ensure_user(from_user)?;
@@ -223,13 +229,24 @@ pub fn deposit(
     source_node: &str,
     vector_clock: &std::collections::HashMap<String, i64>,
 ) -> rusqlite::Result<()> {
-    if amount < 0.0 {
-        log::error!("Negative deposit amount: {}", amount);
-        return Err(rusqlite::Error::InvalidQuery);
-    }
     if !user_exists(user)? {
-        return Err(rusqlite::Error::InvalidQuery);
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("Unknown User: {}", user).into())
+        );
+
+        return Err(err);
     }
+
+    if amount < 0.0 {
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("Negative deposit amount: {}", amount).into())
+        );
+
+        return Err(err);
+    }
+
     create_transaction(
         NULL,
         user,
@@ -249,14 +266,28 @@ pub fn withdraw(
     vector_clock: &std::collections::HashMap<String, i64>,
 ) -> rusqlite::Result<()> {
     if amount < 0.0 {
-        log::error!("Negative withdrawal amount: {}", amount);
-        return Err(rusqlite::Error::InvalidQuery);
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("Negative withdrawal amount: {}", amount).into())
+        );
+
+        return Err(err);
     }
     if !user_exists(user)? {
-        return Err(rusqlite::Error::InvalidQuery);
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("Unknown user: {}", user).into())
+        );
+
+        return Err(err);
     }
     if calculate_solde(user)? < amount {
-        return Err(rusqlite::Error::InvalidQuery);
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("User {} not enough money", user).into())
+        );
+
+        return Err(err);
     }
     create_transaction(
         user,
@@ -289,6 +320,24 @@ pub fn create_user_with_solde(
     )
 }
 
+pub fn has_been_refunded(
+    transac_time: i64,
+    node: &str,
+) -> rusqlite::Result<bool> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM Transactions WHERE optional_msg = ?1)",
+        )?;
+    
+        let optional_msg = format!("Refund transaction {}-{}", node, transac_time);
+        let exists: bool = stmt.query_row(params![optional_msg], |row| row.get(0))?;
+    
+        Ok(exists)
+    }
+}
+
 pub fn refund_transaction(
     transac_time: i64,
     node: &str,
@@ -297,21 +346,48 @@ pub fn refund_transaction(
     vector_clock: &std::collections::HashMap<String, i64>,
 ) -> rusqlite::Result<()> {
     if let Some(tx) = get_transaction(transac_time, node)? {
+        if calculate_solde(&tx.to_user)? < tx.amount {
+            let err = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+                Some(format!("User {} has not enough money to give back", &tx.to_user).into())
+            );
+            return Err(err);
+        }
+
+        if tx.optional_msg.is_some() && tx.optional_msg.unwrap().starts_with("Refund transaction") {
+            let err = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+                Some(format!("Transaction {}-{} is a refund transaction", node, transac_time).into())
+            );
+            return Err(err);
+        }
+
+        if has_been_refunded(transac_time, node)? {
+            let err = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+                Some(format!("Transaction {}-{} already refunded", node, transac_time).into())
+            );
+            return Err(err);
+        }
+
         create_transaction(
             &tx.to_user,
             &tx.from_user,
             tx.amount,
             lamport_time,
             source_node,
-            "Refund",
+            &format!("Refund transaction {}-{}", node, transac_time),
             vector_clock,
         )?;
     } else {
-        log::error!(
-            "No transaction found at time {} from node {}",
-            transac_time,
-            node
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("No transaction found at time {} from node {}",
+                         transac_time,
+                         node).into())
         );
+
+        return Err(err);
     }
     Ok(())
 }
