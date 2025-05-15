@@ -15,11 +15,35 @@ pub fn Home() -> Element {
     rsx! {
         div { id: "users-list",
             for item in users.iter() {
-                Link {
-                    to: Route::History {
-                        name: item.to_string(),
-                    },
-                    "{item}"
+                div { class: "user-card",
+                    div { class: "user-content",
+                        Link {
+                            to: Route::History {
+                                name: item.to_string(),
+                            },
+                            span { class: "user-name", "{item}" }
+                        }
+                    }
+                    {
+                        let item_for_delete = item.clone();
+                        rsx! {
+                            button {
+                                r#type: "button",
+                                class: "delete-btn",
+                                onclick: move |_| {
+                                    let username = item_for_delete.clone();
+                                    spawn(async move {
+                                        if let Ok(_) = delete_user(username).await {
+                                            if let Ok(data) = get_users().await {
+                                                users.set(data);
+                                            }
+                                        }
+                                    });
+                                },
+                                "X"
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -79,5 +103,12 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
         return Err(ServerFnError::new("User name cannot be empty."));
     }
     db::create_user(&name)?;
+    Ok(())
+}
+
+#[server]
+async fn delete_user(name: String) -> Result<(), ServerFnError> {
+    use crate::db;
+    db::delete_user(&name)?;
     Ok(())
 }

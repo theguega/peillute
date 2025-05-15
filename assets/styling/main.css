@@ -290,45 +290,86 @@ button.secondary:hover {
 
 /* Page Specific Styles */
 
-/* Home Page (home.rs) */
 #users-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: var(--spacing-medium);
     padding: var(--spacing-medium);
     background-color: var(--card-bg);
-    border: 1px solid var(--border-color);
     border-radius: var(--border-radius-large);
     box-shadow: var(--shadow-light);
     margin-bottom: var(--spacing-large);
 }
 
-#users-list>a {
-    /* Targeting the Link components */
-    display: block;
-    padding: var(--spacing-regular);
+.user-card {
+    position: relative;
+    display: flex;
     background-color: var(--header-bg);
-    /* Slightly different bg for items */
     border-radius: var(--border-radius-medium);
-    text-align: center;
-    font-weight: 500;
+    overflow: hidden;
+    transition: all 0.2s ease-in-out;
     border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-#users-list>a:hover {
-    background-color: color-mix(in srgb, var(--accent-color) 15%, var(--header-bg));
-    color: var(--accent-color);
-    text-decoration: none;
+.user-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     border-color: var(--accent-color);
 }
 
-#add-user-form {
-    margin-top: var(--spacing-xlarge);
+.user-content {
+    flex-grow: 1;
+    padding: 0;
 }
 
-#add-user-form button#submit {
-    margin-top: var(--spacing-small);
-    /* Add some space if label/input are tight */
+.user-card a {
+    display: block;
+    padding: var(--spacing-regular);
+    width: 100%;
+    height: 100%;
+    color: var(--text-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.user-card a:hover {
+    color: var(--accent-color);
+}
+
+.user-name {
+    display: block;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.user-card .delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: transparent;
+    border: none;
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    color: var(--negative-color);
+}
+
+.user-card:hover .delete-btn {
+    opacity: 1;
+}
+
+.icon {
+    width: 16px;
+    height: 16px;
 }
 
 /* User Page (user.rs) - User Info and Action Links */
