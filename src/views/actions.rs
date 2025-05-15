@@ -443,10 +443,26 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    //FIXME: clock are wrong here
-    let mut lamport_clock = 21934;
-    let node_name: &str = "E";
-    if let Err(e) = db::deposit(&user, amount, &mut lamport_clock, node_name) {
+
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
+    };
+
+    if let Err(e) = db::deposit(
+        &user,
+        amount,
+        &local_lamport_time,
+        node.as_str(),
+        &local_vc_clock,
+    ) {
         return Err(ServerFnError::new(e.to_string()));
     }
     Ok(())
@@ -458,10 +474,26 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    //FIXME: clock are wrong here
-    let mut lamport_clock = 21934;
-    let node_name: &str = "E";
-    if let Err(e) = db::withdraw(&user, amount, &mut lamport_clock, node_name) {
+
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
+    };
+
+    if let Err(e) = db::withdraw(
+        &user,
+        amount,
+        &local_lamport_time,
+        node.as_str(),
+        &local_vc_clock,
+    ) {
         return Err(ServerFnError::new(e.to_string()));
     }
     Ok(())
@@ -473,11 +505,27 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    //FIXME: clock are wrong here
-    let mut lamport_clock = 21934;
-    let node_name: &str = "E";
-    if let Err(e) = db::create_transaction(&user, "NULL", amount, &mut lamport_clock, node_name, "")
-    {
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
+    };
+
+    if let Err(e) = db::create_transaction(
+        &user,
+        "NULL",
+        amount,
+        &local_lamport_time,
+        node.as_str(),
+        "",
+        &local_vc_clock,
+    ) {
         return Err(ServerFnError::new(e.to_string()));
     }
     Ok(())
@@ -494,16 +542,26 @@ async fn transfer_from_user_to_user_server(
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    //FIXME: clock are wrong here
-    let mut lamport_clock = 21934;
-    let node_name: &str = "E";
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
+    };
+
     if let Err(e) = db::create_transaction(
         &from_user,
         &to_user,
         amount,
-        &mut lamport_clock,
-        node_name,
-        &optional_message,
+        &local_lamport_time,
+        node.as_str(),
+        optional_message.as_str(),
+        &local_vc_clock,
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
@@ -530,14 +588,24 @@ async fn refund_transaction_server(
 ) -> Result<(), ServerFnError> {
     use crate::db;
 
-    //FIXME: clock are wrong here
-    let mut lamport_clock = 21934;
-    let node_name: &str = "E";
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
+    };
+
     if let Err(e) = db::refund_transaction(
         lamport_time,
         transac_node.as_str(),
-        &mut lamport_clock,
-        node_name,
+        &local_lamport_time,
+        node.as_str(),
+        &local_vc_clock,
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }

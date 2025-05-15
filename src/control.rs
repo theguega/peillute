@@ -56,20 +56,17 @@ fn parse_command(input: &str) -> Command {
 }
 
 #[cfg(feature = "server")]
-pub async fn handle_command_from_cli(
-    cmd: Command,
-    node: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
-    use log;
 
-    let (local_vc_clock,local_lamport_time)={
+    let (local_vc_clock, local_lamport_time, node) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
-        (local_vc_clock, local_lamport_time)
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
     };
 
     match cmd {
@@ -105,7 +102,13 @@ pub async fn handle_command_from_cli(
             let name = prompt("Username");
 
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
+            super::db::deposit(
+                &name,
+                amount,
+                &local_lamport_time,
+                node.as_str(),
+                &local_vc_clock,
+            )?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
             use crate::network::send_message_to_all;
@@ -122,10 +125,14 @@ pub async fn handle_command_from_cli(
             let name = prompt("Username");
 
             let amount = prompt_parse::<f64>("Withdraw amount");
-            if amount < 0.0 {
-
-            }
-            super::db::withdraw(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
+            if amount < 0.0 {}
+            super::db::withdraw(
+                &name,
+                amount,
+                &local_lamport_time,
+                node.as_str(),
+                &local_vc_clock,
+            )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
             use crate::network::send_message_to_all;
@@ -145,13 +152,12 @@ pub async fn handle_command_from_cli(
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
 
-
             super::db::create_transaction(
                 &name,
                 &beneficiary,
                 amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
@@ -175,7 +181,7 @@ pub async fn handle_command_from_cli(
                 "NULL",
                 amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
@@ -201,7 +207,7 @@ pub async fn handle_command_from_cli(
                 transac_time,
                 &transac_node,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 &local_vc_clock,
             )?;
 
@@ -218,6 +224,7 @@ pub async fn handle_command_from_cli(
 
         Command::Help => {
             println!("📜 Command list:");
+            println!("----------------------------------------");
             println!("/create_user      - Create a personal account");
             println!("/user_accounts    - List all users");
             println!("/print_user_tsx   - Show a user’s transactions");
@@ -229,10 +236,13 @@ pub async fn handle_command_from_cli(
             println!("/refund           - Refund a transaction");
             println!("/info             - Show system information");
             println!("/start_snapshot   - Start a snapshot");
+            println!("----------------------------------------");
         }
 
         Command::Snapshot => {
+            println!("📸 Starting snapshot...");
             super::snapshot::start_snapshot().await?;
+            println!("📸 Snapshot completed successfully!");
         }
 
         Command::Info => {
@@ -247,23 +257,28 @@ pub async fn handle_command_from_cli(
                 )
             };
 
-            println!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
-            println!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
-            println!("ℹ️  License: MIT");
-            println!("ℹ️  Local address: {}", local_addr);
-            println!("ℹ️  Site ID: {}", site_id);
-            println!("ℹ️  Peers: {:?}", peer_addrs);
-            println!("ℹ️  Number of sites on network: {}", nb_sites);
-            println!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
-            println!("ℹ️  Vector clock: {:?}", clock.get_vector_clock());
+            println!("ℹ️  System Information:");
+            println!("----------------------------------------");
+            println!("📦 Version: {}", env!("CARGO_PKG_VERSION"));
+            println!("👥 Authors: {}", env!("CARGO_PKG_AUTHORS"));
+            println!("📄 License: MIT");
+            println!("🌐 Local address: {}", local_addr);
+            println!("🆔 Site ID: {}", site_id);
+            println!("🤝 Peers: {:?}", peer_addrs);
+            println!("🌍 Number of sites on network: {}", nb_sites);
+            println!("⏰ Lamport clock: {:?}", clock.get_lamport());
+            println!("⏱️ Vector clock: {:?}", clock.get_vector_clock());
+            println!("----------------------------------------");
         }
 
         Command::Unknown(cmd) => {
             println!("❓ Unknown command: {}", cmd);
+            println!("💡 Use /help to see the list of available commands.");
         }
 
         Command::Error(err) => {
-            log::error!("❌ Error: {}", err);
+            println!("❌ Error: {}", err);
+            println!("🛠️ Please try again or contact support if the issue persists.");
         }
     }
     Ok(())
@@ -275,9 +290,10 @@ pub async fn handle_command_from_network(
     node: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::MessageInfo;
+    use crate::state::LOCAL_APP_STATE;
     use log;
 
-    let (local_vc_clock,local_lamport_time)={
+    let (local_vc_clock, local_lamport_time) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();

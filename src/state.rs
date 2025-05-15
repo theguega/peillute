@@ -12,7 +12,6 @@ pub struct AppState {
 
 #[cfg(feature = "server")]
 impl AppState {
-    #[allow(unused)]
     pub fn new(
         site_id: String,
         nb_sites_on_network: usize,
