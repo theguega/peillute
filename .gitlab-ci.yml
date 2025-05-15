@@ -12,6 +12,7 @@ test:
   before_script:
     - apt-get update && apt-get install -y libsqlite3-dev
   script:
+    - cargo clean
     - cargo test
   rules:
     - when: always
