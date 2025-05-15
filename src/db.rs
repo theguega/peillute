@@ -1,13 +1,13 @@
 #[allow(unused)]
 #[derive(Debug)]
 pub struct Transaction {
-    from_user: String,
-    to_user: String,
-    amount: f64,
-    lamport_time: i64,
-    source_node: String,
-    optional_msg: Option<String>,
-    vector_clock: std::collections::HashMap<String, i64>,
+    pub from_user: String,
+    pub to_user: String,
+    pub amount: f64,
+    pub lamport_time: i64,
+    pub source_node: String,
+    pub optional_msg: Option<String>,
+    pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
 lazy_static::lazy_static! {
@@ -549,4 +549,47 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
         }
         Ok(())
     }
+}
+
+#[allow(dead_code)]
+#[allow(unused)]
+pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String, f64>> {
+    let mut state = std::collections::HashMap::new();
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
+        let users = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })?;
+
+        for user in users {
+            let (name, solde) = user?;
+            state.insert(name, solde);
+        }
+    }
+    Ok(state)
+}
+
+pub fn get_local_transaction_log() -> rusqlite::Result<Vec<Transaction>> {
+    let conn = DB_CONN.lock().unwrap();
+    let mut stmt = conn.prepare(
+        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg, vector_clock_id
+         FROM Transactions")?;
+    let rows = stmt.query_map([], |row| {
+        Ok(Transaction {
+            from_user: row.get(0)?,
+            to_user: row.get(1)?,
+            amount: row.get(2)?,
+            lamport_time: row.get(3)?,
+            source_node: row.get(4)?,
+            optional_msg: row.get(5)?,
+            vector_clock: std::collections::HashMap::new(),
+        })
+    })?;
+
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
 }

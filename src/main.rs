@@ -3,6 +3,7 @@ mod control;
 mod db;
 mod message;
 mod network;
+mod snapshot;
 mod state;
 
 const LOW_PORT: u16 = 10000;

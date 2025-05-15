@@ -33,6 +33,7 @@ pub enum Command {
     Info,
     Unknown(String),
     Error(String),
+    Snapshot,
 }
 
 fn parse_command(input: &str) -> Command {
@@ -48,6 +49,7 @@ fn parse_command(input: &str) -> Command {
         "/refund" => Command::Refund,
         "/help" => Command::Help,
         "/info" => Command::Info,
+        "/start_snapshot" => Command::Snapshot,
         other => Command::Unknown(other.to_string()),
     }
 }
@@ -224,6 +226,11 @@ pub async fn handle_command_from_cli(
             log::info!("/pay              - Make a payment (to NULL)");
             log::info!("/refund           - Refund a transaction");
             log::info!("/info             - Show system information");
+            log::info!("/start_snapshot    - Start a snapshot");
+        }
+
+        Command::Snapshot => {
+            super::snapshot::start_snapshot().await?;
         }
 
         Command::Info => {
@@ -304,7 +311,7 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Transfer(transfer) => {
+        MessageInfo::Transfer(data) => {
             super::db::create_transaction(
                 &transfer.name,
                 &transfer.beneficiary,
@@ -316,9 +323,9 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Pay(pay) => {
+        MessageInfo::Pay(data) => {
             super::db::create_transaction(
-                &pay.name,
+                &data.name,
                 "NULL",
                 pay.amount,
                 &local_lamport_time,
@@ -328,7 +335,7 @@ pub async fn handle_command_from_network(
             )?;
         }
 
-        MessageInfo::Refund(refund) => {
+        MessageInfo::Refund(data) => {
             super::db::refund_transaction(
                 refund.transac_time,
                 &refund.transac_node,
@@ -337,6 +344,12 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
+
+        MessageInfo::SnapshotResponse(data) => {
+            //do nothing
+            log::info!("Snapshot response: {:?}", data);
+        }
+
         MessageInfo::None => {
             log::info!("❓ Received None message");
         }
