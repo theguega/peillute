@@ -198,13 +198,23 @@ pub async fn handle_message(
                 log::debug!("Transaction message received: {:?}", message);
                 #[allow(unused)]
                 if let Some(cmd) = message.command {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.increment_lamport();
-                    state.increment_vector_current();
-                    state.update_vector(&message.clock.get_vector());
-                    state.update_lamport(message.clock.get_lamport());
 
-                    // handle_command(cmd).await;
+                    let site_id = {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
+                        (
+                            state.get_site_id().to_string()
+                        )
+                    };
+
+                    use crate::control::handle_command_from_network;
+                    if let Err(e) = handle_command_from_network(
+                        message.info,
+                        &site_id
+                    )
+                    .await{
+                        log::error!("Error handling command:\n{}", e);
+                    }
                 } else {
                     log::error!("Command is None for Transaction message");
                 }
@@ -221,6 +231,44 @@ pub async fn handle_message(
                 log::debug!("Disconnect message received: {:?}", message);
                 let mut state = LOCAL_APP_STATE.lock().await;
                 state.remove_peer(message.sender_addr);
+            }
+            NetworkMessageCode::SnapshotRequest => {
+                let txs = crate::db::get_local_transaction_log()?;
+                let summaries: Vec<_> = txs.iter().map(|t| t.into()).collect();
+
+                let (site_id, clock, local_addr) = {
+                    let st = LOCAL_APP_STATE.lock().await;
+                    (
+                        st.get_site_id().to_string(),
+                        st.get_clock().clone(),
+                        st.get_local_addr().to_string(),
+                    )
+                };
+
+                send_message(
+                    &message.sender_addr.to_string(),
+                    MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
+                        site_id: site_id.clone(),
+                        clock: clock.clone(),
+                        tx_log: summaries,
+                    }),
+                    None,
+                    NetworkMessageCode::SnapshotResponse,
+                    &local_addr,
+                    &site_id,
+                    clock,
+                )
+                .await?;
+            }
+
+            NetworkMessageCode::SnapshotResponse => {
+                if let MessageInfo::SnapshotResponse(resp) = message.info {
+                    let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
+                    if let Some(gs) = mgr.push(resp) {
+                        log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
+                        crate::snapshot::persist(&gs).await.unwrap();
+                    }
+                }
             }
             NetworkMessageCode::Sync => {
                 log::debug!("Sync message received: {:?}", message);

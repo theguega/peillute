@@ -33,6 +33,7 @@ pub enum Command {
     Info,
     Unknown(String),
     Error(String),
+    Snapshot,
 }
 
 #[cfg(feature = "server")]
@@ -49,125 +50,145 @@ fn parse_command(input: &str) -> Command {
         "/refund" => Command::Refund,
         "/help" => Command::Help,
         "/info" => Command::Info,
+        "/start_snapshot" => Command::Snapshot,
         other => Command::Unknown(other.to_string()),
     }
 }
 
 #[cfg(feature = "server")]
-pub async fn handle_command(
+pub async fn handle_command_from_cli(
     cmd: Command,
-    lamport_time: &mut i64,
     node: &str,
-    from_network: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
     use log;
 
+    let (local_vc_clock,local_lamport_time)={
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        (local_vc_clock, local_lamport_time)
+    };
+
     match cmd {
         Command::CreateUser => {
             let name = prompt("Username");
-            super::db::create_user(&name).unwrap();
+            super::db::create_user(&name)?;
 
-            if !from_network {
-                use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-                use crate::network::send_message_to_all;
+            use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
+            use crate::network::send_message_to_all;
 
-                let _ = send_message_to_all(
-                    Some(Command::CreateUser),
-                    NetworkMessageCode::Transaction,
-                    MessageInfo::CreateUser(CreateUser::new(name.clone())),
-                )
-                .await?;
-            }
+            let _ = send_message_to_all(
+                Some(Command::CreateUser),
+                NetworkMessageCode::Transaction,
+                MessageInfo::CreateUser(CreateUser::new(name.clone())),
+            )
+            .await?;
         }
 
         Command::UserAccounts => {
-            super::db::print_users().unwrap();
+            super::db::print_users()?;
         }
 
         Command::PrintUserTransactions => {
             let name = prompt("Username");
-            super::db::print_transaction_for_user(&name).unwrap();
+            super::db::print_transaction_for_user(&name)?;
         }
 
         Command::PrintTransactions => {
-            super::db::print_transactions().unwrap();
+            super::db::print_transactions()?;
         }
 
         Command::Deposit => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(&name, amount, lamport_time, node).unwrap();
+            super::db::deposit(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
 
-            if !from_network {
-                use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-                use crate::network::send_message_to_all;
+            use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
+            use crate::network::send_message_to_all;
 
-                let _ = send_message_to_all(
-                    Some(Command::Deposit),
-                    NetworkMessageCode::Transaction,
-                    MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
-                )
-                .await?;
-            }
+            let _ = send_message_to_all(
+                Some(Command::Deposit),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
+            )
+            .await?;
         }
 
         Command::Withdraw => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Withdraw amount");
-            super::db::withdraw(&name, amount, lamport_time, node).unwrap();
+            if amount < 0.0 {
 
-            if !from_network {
-                use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-                use crate::network::send_message_to_all;
-
-                let _ = send_message_to_all(
-                    Some(Command::Withdraw),
-                    NetworkMessageCode::Transaction,
-                    MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
-                )
-                .await?;
             }
+            super::db::withdraw(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
+
+            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
+            use crate::network::send_message_to_all;
+
+            let _ = send_message_to_all(
+                Some(Command::Withdraw),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
+            )
+            .await?;
         }
 
         Command::Transfer => {
             let name = prompt("Username");
+
             let amount = prompt_parse::<f64>("Transfer amount");
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
 
-            super::db::create_transaction(&name, &beneficiary, amount, lamport_time, node, "")
-                .unwrap();
 
-            if !from_network {
-                use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-                use crate::network::send_message_to_all;
+            super::db::create_transaction(
+                &name,
+                &beneficiary,
+                amount,
+                &local_lamport_time,
+                node,
+                "",
+                &local_vc_clock,
+            )?;
 
-                let _ = send_message_to_all(
-                    Some(Command::Transfer),
-                    NetworkMessageCode::Transaction,
-                    MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
-                )
-                .await?;
-            }
+            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
+            use crate::network::send_message_to_all;
+
+            let _ = send_message_to_all(
+                Some(Command::Transfer),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
+            )
+            .await?;
         }
 
         Command::Pay => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Payment amount");
-            super::db::create_transaction(&name, "NULL", amount, lamport_time, node, "").unwrap();
+            super::db::create_transaction(
+                &name,
+                "NULL",
+                amount,
+                &local_lamport_time,
+                node,
+                "",
+                &local_vc_clock,
+            )?;
 
-            if !from_network {
-                use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-                use crate::network::send_message_to_all;
+            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
+            use crate::network::send_message_to_all;
 
-                let _ = send_message_to_all(
-                    Some(Command::Pay),
-                    NetworkMessageCode::Transaction,
-                    MessageInfo::Pay(Pay::new(name.clone(), amount)),
-                )
-                .await?;
-            }
+            let _ = send_message_to_all(
+                Some(Command::Pay),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Pay(Pay::new(name.clone(), amount)),
+            )
+            .await?;
         }
 
         Command::Refund => {
@@ -176,11 +197,23 @@ pub async fn handle_command(
 
             let transac_time = prompt_parse::<i64>("Lamport time");
             let transac_node = prompt("Node");
-            super::db::refund_transaction(transac_time, &transac_node, lamport_time, node).unwrap();
+            super::db::refund_transaction(
+                transac_time,
+                &transac_node,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
 
-            if !from_network {
-                // TODO : send message
-            }
+            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
+            use crate::network::send_message_to_all;
+
+            let _ = send_message_to_all(
+                Some(Command::Refund),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
+            )
+            .await?;
         }
 
         Command::Help => {
@@ -195,6 +228,11 @@ pub async fn handle_command(
             println!("/pay              - Make a payment (to NULL)");
             println!("/refund           - Refund a transaction");
             println!("/info             - Show system information");
+            println!("/start_snapshot   - Start a snapshot");
+        }
+
+        Command::Snapshot => {
+            super::snapshot::start_snapshot().await?;
         }
 
         Command::Info => {
@@ -209,10 +247,6 @@ pub async fn handle_command(
                 )
             };
 
-            println!(
-                "ℹ️  {} : A distributed banking system.",
-                env!("CARGO_PKG_NAME")
-            );
             println!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
             println!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
             println!("ℹ️  License: MIT");
@@ -236,6 +270,93 @@ pub async fn handle_command(
 }
 
 #[cfg(feature = "server")]
+pub async fn handle_command_from_network(
+    msg: crate::message::MessageInfo,
+    node: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::message::MessageInfo;
+    use log;
+
+    let (local_vc_clock,local_lamport_time)={
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_lamport_time = state.get_lamport();
+        let local_vc_clock = state.get_vector().clone();
+        (local_vc_clock, local_lamport_time)
+    };
+
+    match msg {
+        MessageInfo::CreateUser(create_user) => {
+            super::db::create_user(&create_user.name)?;
+        }
+
+        MessageInfo::Deposit(deposit) => {
+            super::db::deposit(
+                &deposit.name,
+                deposit.amount,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
+        }
+
+        MessageInfo::Withdraw(withdraw) => {
+            super::db::withdraw(
+                &withdraw.name,
+                withdraw.amount,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
+        }
+
+        MessageInfo::Transfer(transfer) => {
+            super::db::create_transaction(
+                &transfer.name,
+                &transfer.beneficiary,
+                transfer.amount,
+                &local_lamport_time,
+                node,
+                "",
+                &local_vc_clock,
+            )?;
+        }
+
+        MessageInfo::Pay(pay) => {
+            super::db::create_transaction(
+                &pay.name,
+                "NULL",
+                pay.amount,
+                &local_lamport_time,
+                node,
+                "",
+                &local_vc_clock,
+            )?;
+        }
+
+        MessageInfo::Refund(refund) => {
+            super::db::refund_transaction(
+                refund.transac_time,
+                &refund.transac_node,
+                &local_lamport_time,
+                node,
+                &local_vc_clock,
+            )?;
+        }
+
+        MessageInfo::SnapshotResponse(data) => {
+            //do nothing
+            log::info!("Snapshot response: {:?}", data);
+        }
+
+        MessageInfo::None => {
+            log::info!("❓ Received None message");
+        }
+    }
+    Ok(())
+}
+
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
     let mut input = String::new();

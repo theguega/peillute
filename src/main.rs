@@ -5,6 +5,7 @@ mod control;
 mod db;
 mod message;
 mod network;
+mod snapshot;
 mod state;
 
 #[derive(clap::Parser, Debug)]
@@ -79,11 +80,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         let _ = db::init_db();
     }
 
-    let (mut local_lamport_time, node_name) = {
+    let node_name = {
         let state = LOCAL_APP_STATE.lock().await;
-        let lamport_time = state.get_lamport().clone();
         let site_id = state.get_site_id().to_string();
-        (lamport_time, site_id)
+        site_id
     };
 
     let stdin: tokio_io::Stdin = tokio_io::stdin();
@@ -117,7 +117,6 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     main_loop(
         main_loop_app_state,
         &mut lines,
-        &mut local_lamport_time,
         node_name.as_str(),
         listener,
     )
@@ -133,25 +132,20 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
-    local_lamport_time: &mut i64,
     node_name: &str,
     listener: tokio::net::TcpListener,
 ) {
-    use crate::control::{handle_command, run_cli};
-    use crate::state::LOCAL_APP_STATE;
+    use crate::control::{handle_command_from_cli, run_cli};
     use std::io::{self as std_io, Write};
     use tokio::select;
 
     loop {
         select! {
             line = lines.next_line() => {
-                {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.increment_vector_current();
-                    state.increment_lamport();
-                }
                 let command = run_cli(line);
-                let _ = handle_command(command, local_lamport_time, node_name, false).await;
+                if let Err(e) = handle_command_from_cli(command, node_name).await{
+                    log::error!("Error handling command:\n{}", e);
+                }
                 print!("> ");
                 std_io::stdout().flush().unwrap();
             }
