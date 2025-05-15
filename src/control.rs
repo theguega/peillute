@@ -1,5 +1,4 @@
-use crate::state::LOCAL_APP_STATE;
-
+#[cfg(feature = "server")]
 pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
@@ -8,7 +7,7 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
             command
         }
         Ok(None) => {
-            log::info!("Aucun input");
+            println!("Aucun input");
             Command::Unknown("Aucun input".to_string())
         }
         Err(e) => {
@@ -18,6 +17,7 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     }
 }
 
+#[cfg(feature = "server")]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum Command {
     CreateUser,
@@ -36,6 +36,7 @@ pub enum Command {
     Snapshot,
 }
 
+#[cfg(feature = "server")]
 fn parse_command(input: &str) -> Command {
     match input.trim() {
         "/create_user" => Command::CreateUser,
@@ -54,6 +55,7 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
+#[cfg(feature = "server")]
 pub async fn handle_command_from_cli(
     cmd: Command,
     node: &str,
@@ -215,18 +217,18 @@ pub async fn handle_command_from_cli(
         }
 
         Command::Help => {
-            log::info!("📜 Command list:");
-            log::info!("/create_user      - Create a personal account");
-            log::info!("/user_accounts    - List all users");
-            log::info!("/print_user_tsx   - Show a user’s transactions");
-            log::info!("/print_tsx        - Show all system transactions");
-            log::info!("/deposit          - Deposit money to an account");
-            log::info!("/withdraw         - Withdraw money from an account");
-            log::info!("/transfer         - Transfer money to another user");
-            log::info!("/pay              - Make a payment (to NULL)");
-            log::info!("/refund           - Refund a transaction");
-            log::info!("/info             - Show system information");
-            log::info!("/start_snapshot    - Start a snapshot");
+            println!("📜 Command list:");
+            println!("/create_user      - Create a personal account");
+            println!("/user_accounts    - List all users");
+            println!("/print_user_tsx   - Show a user’s transactions");
+            println!("/print_tsx        - Show all system transactions");
+            println!("/deposit          - Deposit money to an account");
+            println!("/withdraw         - Withdraw money from an account");
+            println!("/transfer         - Transfer money to another user");
+            println!("/pay              - Make a payment (to NULL)");
+            println!("/refund           - Refund a transaction");
+            println!("/info             - Show system information");
+            println!("/start_snapshot   - Start a snapshot");
         }
 
         Command::Snapshot => {
@@ -245,22 +247,19 @@ pub async fn handle_command_from_cli(
                 )
             };
 
-            log::info!("ℹ️  Info: This is a distributed banking system.");
-            log::info!("ℹ️  Version: 0.0.1");
-            log::info!(
-                "ℹ️  Authors: Aubin Vert, Théo Guegan, Alexandre Eberhardt, Léopold Chappuis"
-            );
-            log::info!("ℹ️  License: MIT");
-            log::info!("ℹ️  Local address: {}", local_addr);
-            log::info!("ℹ️  Site ID: {}", site_id);
-            log::info!("ℹ️  Peers: {:?}", peer_addrs);
-            log::info!("ℹ️  Number of sites on network: {}", nb_sites);
-            log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
-            log::info!("ℹ️  Vector clock: {:?}", clock.get_vector());
+            println!("ℹ️  Version: {}", env!("CARGO_PKG_VERSION"));
+            println!("ℹ️  Authors: {}", env!("CARGO_PKG_AUTHORS"));
+            println!("ℹ️  License: MIT");
+            println!("ℹ️  Local address: {}", local_addr);
+            println!("ℹ️  Site ID: {}", site_id);
+            println!("ℹ️  Peers: {:?}", peer_addrs);
+            println!("ℹ️  Number of sites on network: {}", nb_sites);
+            println!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
+            println!("ℹ️  Vector clock: {:?}", clock.get_vector_clock());
         }
 
         Command::Unknown(cmd) => {
-            log::info!("❓ Unknown command: {}", cmd);
+            println!("❓ Unknown command: {}", cmd);
         }
 
         Command::Error(err) => {
@@ -270,6 +269,7 @@ pub async fn handle_command_from_cli(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
     node: &str,
@@ -366,6 +366,7 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+#[cfg(feature = "server")]
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where
     T::Err: std::fmt::Debug,

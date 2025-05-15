@@ -1,5 +1,4 @@
-#[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
     pub from_user: String,
     pub to_user: String,
@@ -10,13 +9,16 @@ pub struct Transaction {
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
         std::sync::Mutex::new(rusqlite::Connection::open("peillute.db").unwrap());
 }
 
+#[cfg(feature = "server")]
 const NULL: &str = "NULL";
 
+#[cfg(feature = "server")]
 pub fn init_db() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -70,6 +72,7 @@ pub fn init_db() -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn is_database_initialized() -> rusqlite::Result<bool> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -82,6 +85,7 @@ pub fn is_database_initialized() -> rusqlite::Result<bool> {
 }
 
 #[allow(unused)]
+#[cfg(feature = "server")]
 pub fn drop_tables() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -92,6 +96,7 @@ pub fn drop_tables() -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     {
         use rusqlite::params;
@@ -102,6 +107,7 @@ pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     }
 }
 
+#[cfg(feature = "server")]
 pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     if user_exists(unique_name)? {
@@ -119,6 +125,7 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     }
 }
 
+#[cfg(feature = "server")]
 pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     {
         use rusqlite::params;
@@ -133,6 +140,7 @@ pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     }
 }
 
+#[cfg(feature = "server")]
 pub fn update_solde(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
 
@@ -151,10 +159,12 @@ pub fn update_solde(name: &str) -> rusqlite::Result<()> {
             "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
             params![solde, name],
         )?;
+        log::debug!("Updated solde for {} to {}", name, solde);
         Ok(())
     }
 }
 
+#[cfg(feature = "server")]
 pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     if name != NULL && !user_exists(name)? {
         create_user(name)?;
@@ -162,6 +172,7 @@ pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn create_transaction(
     from_user: &str,
     to_user: &str,
@@ -184,6 +195,13 @@ pub fn create_transaction(
 
     ensure_user(from_user)?;
     ensure_user(to_user)?;
+
+    log::debug!(
+        "Creating transaction from {} to {} with amount {}",
+        from_user,
+        to_user,
+        amount
+    );
 
     {
         let conn = DB_CONN.lock().unwrap();
@@ -222,6 +240,7 @@ pub fn create_transaction(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn deposit(
     user: &str,
     amount: f64,
@@ -237,6 +256,13 @@ pub fn deposit(
 
         return Err(err);
     }
+    log::debug!("Depositing {} to {}", amount, user);
+
+    if let Err(e) = create_transaction(NULL, user, amount, lamport_time, source_node, "Deposit") {
+        log::error!("Error while creating deposit transaction: {}", e);
+        return Err(e);
+    }
+    Ok(())
 
     if amount < 0.0 {
         let err = rusqlite::Error::SqliteFailure(
@@ -258,6 +284,7 @@ pub fn deposit(
     )
 }
 
+#[cfg(feature = "server")]
 pub fn withdraw(
     user: &str,
     amount: f64,
@@ -301,6 +328,7 @@ pub fn withdraw(
 }
 
 #[allow(unused)]
+#[cfg(feature = "server")]
 pub fn create_user_with_solde(
     unique_name: &str,
     solde: f64,
@@ -320,6 +348,7 @@ pub fn create_user_with_solde(
     )
 }
 
+#[cfg(feature = "server")]
 pub fn has_been_refunded(
     transac_time: i64,
     node: &str,
@@ -338,6 +367,7 @@ pub fn has_been_refunded(
     }
 }
 
+#[cfg(feature = "server")]
 pub fn refund_transaction(
     transac_time: i64,
     node: &str,
@@ -392,6 +422,7 @@ pub fn refund_transaction(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option<Transaction>> {
     use rusqlite::params;
     {
@@ -438,6 +469,7 @@ pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option
     }
 }
 
+#[cfg(feature = "server")]
 pub fn print_users() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -446,15 +478,30 @@ pub fn print_users() -> rusqlite::Result<()> {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
         })?;
 
-        log::info!("-- Users --");
+        println!("-- Users --");
         for user in users {
             let (name, solde) = user?;
-            log::info!("{}: {:.2}", name, solde);
+            println!("{}: {:.2}", name, solde);
         }
         Ok(())
     }
 }
 
+#[cfg(feature = "server")]
+pub fn get_users() -> rusqlite::Result<Vec<String>> {
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT unique_name FROM User")?;
+        let users = stmt.query_map([], |row| Ok(row.get::<_, String>(0)?))?;
+        let mut users_vec = Vec::new();
+        for user in users {
+            users_vec.push(user?);
+        }
+        Ok(users_vec)
+    }
+}
+
+#[cfg(feature = "server")]
 pub fn print_transactions() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -473,7 +520,7 @@ pub fn print_transactions() -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions --");
+        println!("-- Transactions --");
         for tx in txs {
             let (from, to, amount, time, node, msg, vector_clock_id) = tx?;
             let mut clock_map = std::collections::HashMap::new();
@@ -502,6 +549,7 @@ pub fn print_transactions() -> rusqlite::Result<()> {
     }
 }
 
+#[cfg(feature = "server")]
 pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     {
@@ -523,7 +571,7 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions for user {} --", name);
+        println!("-- Transactions for user {} --", name);
         for tx in txs {
             let (from, to, amount, time, node, msg, vector_clock_id) = tx?;
             let mut clock_map = std::collections::HashMap::new();
@@ -551,8 +599,43 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
     }
 }
 
-#[allow(dead_code)]
-#[allow(unused)]
+#[cfg(feature = "server")]
+pub fn get_transactions_for_user(name: &str) -> rusqlite::Result<Vec<Transaction>> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg
+        FROM Transactions WHERE from_user = ?1",
+        )?;
+
+        let txs = stmt.query_map(params![name], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })?;
+
+        let mut txs_vec = Vec::new();
+        for tx in txs {
+            let (from, to, amount, time, node, msg) = tx?;
+            txs_vec.push(Transaction {
+                from_user: from,
+                to_user: to,
+                amount: amount,
+                lamport_time: time,
+                source_node: node,
+                optional_msg: msg,
+            });
+        }
+        Ok(txs_vec)
+    }
+
+#[cfg(feature = "server")]
 pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String, f64>> {
     let mut state = std::collections::HashMap::new();
     {
@@ -570,6 +653,7 @@ pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String
     Ok(state)
 }
 
+#[cfg(feature = "server")]
 pub fn get_local_transaction_log() -> rusqlite::Result<Vec<Transaction>> {
     let conn = DB_CONN.lock().unwrap();
     let mut stmt = conn.prepare(

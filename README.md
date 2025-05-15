@@ -1,58 +1,103 @@
-# Application Répartie en Rust
+# Distributed Application in Rust
 
-Ce projet est une application répartie en Rust utilisant TCP pour la communication entre les nœuds.
-L'objectif est d'implémenter manuellement des mécanismes comme les horloges vectorielles, la gestion des réplicats et la prise de snapshots.
+This project is a distributed application in Rust using TCP for communication between nodes. The goal is to manually implement mechanisms such as vector clocks, replica management, and snapshot taking.
 
 ## 🚀 Installation
 
-### 1. Cloner le repo
+### Prerequisites
+
+Make sure you have the following installed on your system:
+- Rust
+- Cargo
+- Dioxus
+
+### 1. Clone the Repository
+
 ```sh
-https://gitlab.utc.fr/guegathe/peillute.git -j8
+git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 ```
 
-### 2. Installer les dépendances
-Assurez-vous d'avoir Rust et Cargo installés, puis exécutez :
-```sh
-# Check & Test
-cargo check && cargo test
+### 2. Automatically Install Dependencies and Run Peillute Instance
 
-# Build
-cargo build
+```sh
+./launch_peillute_instance.sh
+
+# To be more verbose:
+./launch_peillute_instance.sh -debug
 ```
 
-## 📡 Lancer un nœud
+### 3. Manually Install Dependencies
 
-Chaque instance fonctionne comme un nœud sur le réseau local. Exemple pour lancer 3 nœuds :
+If you prefer to install dependencies manually, follow these steps:
+
+#### Install Rust
+
 ```sh
-# Terminal 1
-RUST_LOG=DEBUG cargo run
-
-# Terminal 2
-RUST_LOG=INFO cargo run
-
-# Terminal 3
-RUST_LOG=ERROR cargo run
-```
-Le choix du port ainsi que les id de sites sont optionnels mais peuvent être spécifiés:
-```sh
-# Terminal 1
-RUST_LOG=DEBUG cargo run -- --site-id A --port 8000
-
-# Terminal 2
-RUST_LOG=INFO cargo run -- --site-id B --port 8001
-
-# Terminal 3
-RUST_LOG=ERROR cargo run -- --site-id C --port 8002
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-## 🛠️ Développement et Tests
+#### Install Cargo bin-install
 
-### Lancer les tests unitaires :
 ```sh
-cargo test
+curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 ```
 
-### Formater le code:
+#### Install Dioxus
+
+```sh
+cargo binstall dioxus-cli
+```
+
+#### For Linux and Windows Users
+
+Refer to the [Dioxus Getting Started Guide](https://dioxuslabs.com/learn/0.6/getting_started/#) for additional setup instructions.
+
+## 🚀 Compile and Run
+
+### 1. Compile and Run Without the UI
+
+```sh
+cargo run --release
+```
+
+### Use Arguments to Specify the Port and Peers
+
+```sh
+cargo run --features server -- --port 8080 --peers 127.0.0.1:8081,127.0.0.1:8082
+```
+
+### 2. Compile with Dioxus (Merges Client and Server)
+
+```sh
+dx bundle --release --platform web
+```
+
+### 3. Run the Binary
+
+Manually run the server:
+
+```sh
+cd target/dx/peillute/release/web
+RUST_LOG=info ./server
+
+# with specific port and peers:
+RUST_LOG=info ./server --port 8080 --peers 127.0.0.1:8081,127.0.0.1:8082
+```
+
+## 🛠️ Development and Testing
+
+### Run Unit Tests
+
+```sh
+cargo test --all-features
+```
+
+### Format the Code
+
 ```sh
 cargo fmt
 ```
+
+## 📜 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.

@@ -1,6 +1,3 @@
-- is singleton really needed ?
-- add tests for database interactions
-- use vector clock in database as well as lamport clock
-- auto setup node name based in peers
-- review database initialization in main
-- implement network command
+- cach database error in front
+- modify database path to be the same all around the app depending on site id
+- replace NIULL in database with explicit value for REFUND, BANK etc..

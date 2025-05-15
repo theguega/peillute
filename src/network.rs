@@ -1,12 +1,14 @@
+#[cfg(feature = "server")]
 pub struct PeerConnection {
     pub sender: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
 
+#[cfg(feature = "server")]
 pub struct NetworkManager {
     pub nb_active_connections: u16,
     pub connection_pool: std::collections::HashMap<std::net::SocketAddr, PeerConnection>,
 }
-
+#[cfg(feature = "server")]
 impl NetworkManager {
     pub fn new() -> Self {
         Self {
@@ -51,11 +53,13 @@ impl NetworkManager {
     }
 }
 
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref NETWORK_MANAGER: std::sync::Arc<tokio::sync::Mutex<NetworkManager>> =
         std::sync::Arc::new(tokio::sync::Mutex::new(NetworkManager::new()));
 }
 
+#[cfg(feature = "server")]
 pub async fn spawn_writer_task(
     stream: tokio::net::TcpStream,
     mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
@@ -74,6 +78,7 @@ pub async fn spawn_writer_task(
     });
 }
 
+#[cfg(feature = "server")]
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -123,6 +128,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     }
 }
 
+#[cfg(feature = "server")]
 pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::SocketAddr) {
     log::debug!("Accepted connection from: {}", addr);
 
@@ -133,6 +139,7 @@ pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::Sock
     });
 }
 
+#[cfg(feature = "server")]
 pub async fn handle_message(
     mut stream: tokio::net::TcpStream,
     addr: std::net::SocketAddr,
@@ -276,6 +283,7 @@ pub async fn handle_message(
     }
 }
 
+#[cfg(feature = "server")]
 pub async fn send_message(
     address: &str,
     info: crate::message::MessageInfo,
@@ -322,6 +330,7 @@ pub async fn send_message(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub async fn send_message_to_all(
     command: Option<crate::control::Command>,
     code: crate::message::NetworkMessageCode,
@@ -355,11 +364,14 @@ pub async fn send_message_to_all(
     Ok(())
 }
 
+#[cfg(feature = "server")]
+#[allow(unused)]
 pub async fn on_sync() {
     // TODO: implement sync
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
     use tokio::net::TcpListener;

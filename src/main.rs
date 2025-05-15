@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 mod clock;
 mod control;
 mod db;
@@ -5,10 +7,6 @@ mod message;
 mod network;
 mod snapshot;
 mod state;
-
-const LOW_PORT: u16 = 10000;
-const HIGH_PORT: u16 = 11000;
-const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -23,6 +21,7 @@ struct Args {
     ip: String,
 }
 
+#[cfg(feature = "server")]
 #[tokio::main]
 async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
@@ -31,6 +30,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     use std::net::SocketAddr;
     use tokio::io::{self as tokio_io, AsyncBufReadExt, BufReader};
     use tokio::net::TcpListener;
+
+    const LOW_PORT: u16 = 10000;
+    const HIGH_PORT: u16 = 11000;
+    const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
     env_logger::init();
 
@@ -67,6 +70,12 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
+    let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
+    let router = router.into_make_service();
+    let backend_listener = tokio::net::TcpListener::bind(client_server_interaction_addr)
+        .await
+        .unwrap();
+
     if !db::is_database_initialized()? {
         let _ = db::init_db();
     }
@@ -81,17 +90,31 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
     let mut lines: tokio_io::Lines<_> = reader.lines();
 
-    log::info!(
-        "Welcome on peillute, write /help to get the command list, access the web interface at {}",
-        format! {"http://{}", client_server_interaction_addr}
+    network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
+
+    println!(
+        "\n\
+        ===================================================\n\
+            💰  Welcome to Peillute! 💰\n\
+        ===================================================\n\
+        \n\
+            📌 Write /help to get the command list.\n\
+            🌐 Access the web interface at: http://{}\n\
+        ===================================================\n\
+        ",
+        client_server_interaction_addr
     );
     print!("> ");
     std_io::stdout().flush().unwrap();
 
-    network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
-
     let main_loop_app_state = LOCAL_APP_STATE.clone();
-    let _ = main_loop(
+
+    // Spawn the web server
+    let server_task = tokio::spawn(async move {
+        axum::serve(backend_listener, router).await.unwrap();
+    });
+
+    main_loop(
         main_loop_app_state,
         &mut lines,
         node_name.as_str(),
@@ -99,9 +122,13 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
+    // Ensure the server task finishes cleanly if ever reached
+    server_task.await?;
+
     Ok(())
 }
 
+#[cfg(feature = "server")]
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
@@ -127,13 +154,14 @@ async fn main_loop(
             }
             _ = tokio::signal::ctrl_c() => {
                 disconnect().await;
-                log::info!("👋 Bye !");
+                println!("👋 Bye !");
                 std::process::exit(0);
             }
         }
     }
 }
 
+#[cfg(feature = "server")]
 async fn disconnect() {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -177,6 +205,65 @@ async fn disconnect() {
             error!("Error sending message to {}: {}", peer_addr_str, e);
         }
     }
+}
+
+use dioxus::prelude::*;
+
+#[cfg(not(feature = "server"))]
+fn main() {
+    dioxus::launch(App);
+}
+
+mod views;
+use views::*;
+
+const FAVICON: Asset = asset!("/assets/icon.png");
+const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
+
+#[component]
+fn App() -> Element {
+    rsx! {
+        document::Link { rel: "icon", href: FAVICON }
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
+
+        Router::<Route> {}
+    }
+}
+
+#[derive(Debug, Clone, Routable, PartialEq)]
+#[rustfmt::skip]
+enum Route {
+    #[layout(Navbar)]
+        #[route("/")]
+        Home {},
+        #[route("/info")]
+        Info {},
+        #[nest("/:name")]
+        #[layout(User)]
+            #[route("/history")]
+            History {
+                name: String,
+            },
+            #[route("/withdraw")]
+            Withdraw {
+                name: String,
+            },
+            #[route("/pay")]
+            Pay {
+                name: String,
+            },
+            #[route("/refund")]
+            Refund {
+                name: String,
+            },
+            #[route("/transfer")]
+            Transfer {
+                name: String,
+            },
+            #[route("/deposit")]
+            Deposit {
+                name: String,
+            },
 }
 
 #[cfg(test)]
