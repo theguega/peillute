@@ -320,6 +320,24 @@ pub fn create_user_with_solde(
     )
 }
 
+pub fn has_been_refunded(
+    transac_time: i64,
+    node: &str,
+) -> rusqlite::Result<bool> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM Transactions WHERE optional_msg = ?1)",
+        )?;
+    
+        let optional_msg = format!("Refund transaction {}-{}", node, transac_time);
+        let exists: bool = stmt.query_row(params![optional_msg], |row| row.get(0))?;
+    
+        Ok(exists)
+    }
+}
+
 pub fn refund_transaction(
     transac_time: i64,
     node: &str,
@@ -333,16 +351,32 @@ pub fn refund_transaction(
                 rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
                 Some(format!("User {} has not enough money to give back", &tx.to_user).into())
             );
-
             return Err(err);
         }
+
+        if tx.optional_msg.is_some() && tx.optional_msg.unwrap().starts_with("Refund transaction") {
+            let err = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+                Some(format!("Transaction {}-{} is a refund transaction", node, transac_time).into())
+            );
+            return Err(err);
+        }
+
+        if has_been_refunded(transac_time, node)? {
+            let err = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+                Some(format!("Transaction {}-{} already refunded", node, transac_time).into())
+            );
+            return Err(err);
+        }
+
         create_transaction(
             &tx.to_user,
             &tx.from_user,
             tx.amount,
             lamport_time,
             source_node,
-            "Refund",
+            &format!("Refund transaction {}-{}", node, transac_time),
             vector_clock,
         )?;
     } else {
