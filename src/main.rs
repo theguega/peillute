@@ -93,8 +93,16 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
 
     println!(
-        "Welcome on peillute, write /help to get the command list, access the web interface at {}",
-        format! {"http://{}", client_server_interaction_addr}
+        "\n\
+        ===================================================\n\
+            💰  Welcome to Peillute! 💰\n\
+        ===================================================\n\
+        \n\
+            📌 Write /help to get the command list.\n\
+            🌐 Access the web interface at: http://{}\n\
+        ===================================================\n\
+        ",
+        client_server_interaction_addr
     );
     print!("> ");
     std_io::stdout().flush().unwrap();
