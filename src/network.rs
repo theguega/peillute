@@ -412,7 +412,7 @@ pub async fn send_message_to_all(
 
 // Vague de diffusion des messages
 pub async fn diffuse_message(
-    message: &Message,
+    message: &crate::message::Message,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
