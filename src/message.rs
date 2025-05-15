@@ -23,7 +23,6 @@ pub enum NetworkMessageCode {
 #[cfg(feature = "server")]
 impl NetworkMessageCode {
     #[allow(unused)]
-    #[allow(dead_code)]
     pub fn code(&self) -> &'static str {
         match self {
             NetworkMessageCode::Discovery => "discovery",
@@ -37,7 +36,6 @@ impl NetworkMessageCode {
         }
     }
     #[allow(unused)]
-    #[allow(dead_code)]
     pub fn from_code(code: &str) -> Option<Self> {
         match code {
             "discovery" => Some(NetworkMessageCode::Discovery),

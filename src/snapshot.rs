@@ -1,9 +1,11 @@
+#[cfg(feature = "server")]
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Hash)]
 pub struct TxSummary {
     pub lamport_time: i64,
     pub source_node: String,
 }
 
+#[cfg(feature = "server")]
 impl From<&crate::db::Transaction> for TxSummary {
     fn from(tx: &crate::db::Transaction) -> Self {
         Self {
@@ -13,6 +15,7 @@ impl From<&crate::db::Transaction> for TxSummary {
     }
 }
 
+#[cfg(feature = "server")]
 #[derive(Clone)]
 pub struct LocalSnapshot {
     pub site_id: String,
@@ -20,12 +23,14 @@ pub struct LocalSnapshot {
     pub tx_log: std::collections::HashSet<TxSummary>,
 }
 
+#[cfg(feature = "server")]
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct GlobalSnapshot {
     pub all_transactions: std::collections::HashSet<TxSummary>,
     pub missing: std::collections::HashMap<String, std::collections::HashSet<TxSummary>>,
 }
 
+#[cfg(feature = "server")]
 impl GlobalSnapshot {
     pub fn is_consistent(snaps: &[LocalSnapshot]) -> bool {
         for si in snaps {
@@ -44,11 +49,13 @@ impl GlobalSnapshot {
     }
 }
 
+#[cfg(feature = "server")]
 pub struct SnapshotManager {
     pub expected: usize,
     pub received: Vec<LocalSnapshot>,
 }
 
+#[cfg(feature = "server")]
 impl SnapshotManager {
     pub fn new(expected: usize) -> Self {
         Self {
@@ -130,6 +137,7 @@ impl SnapshotManager {
     }
 }
 
+#[cfg(feature = "server")]
 pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
@@ -164,6 +172,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     use std::io::Write;
 
@@ -182,12 +191,14 @@ pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref LOCAL_SNAPSHOT_MANAGER: tokio::sync::Mutex<SnapshotManager> =
         tokio::sync::Mutex::new(SnapshotManager::new(0));
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
 

@@ -100,28 +100,28 @@ pub fn Info() -> Element {
             h2 { "System Information" }
 
             div { class: "info-item",
-                strong { "Local Address: " }
+                strong { "🌐 Local Address: " }
                 span { "{local_addr}" }
             }
             div { class: "info-item",
-                strong { "Site ID: " }
+                strong { "🆔 Site ID: " }
                 span { "{site_id}" }
             }
             div { class: "info-item",
-                strong { "Lamport Timestamp: " }
+                strong { "⏰ Lamport Timestamp: " }
                 span { "{lamport}" }
             }
             div { class: "info-item",
-                strong { "Vector Clock (value): " }
+                strong { "⏱️ Vector Clock : " }
                 span { "{vector_clock}" }
-            } // Adjust if vector_clock is more complex
+            }
             div { class: "info-item",
-                strong { "Number of Sites in Network: " }
+                strong { "🌍 Number of Sites in Network: " }
                 span { "{nb_sites}" }
             }
 
             div { class: "info-item",
-                strong { "Connected Peers: " }
+                strong { "🤝 Connected Peers: " }
                 if peers.read().is_empty() {
                     span { "No peers currently connected." }
                 } else {

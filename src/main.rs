@@ -80,12 +80,6 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         let _ = db::init_db();
     }
 
-    let node_name = {
-        let state = LOCAL_APP_STATE.lock().await;
-        let site_id = state.get_site_id().to_string();
-        site_id
-    };
-
     let stdin: tokio_io::Stdin = tokio_io::stdin();
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
     let mut lines: tokio_io::Lines<_> = reader.lines();
@@ -114,13 +108,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         axum::serve(backend_listener, router).await.unwrap();
     });
 
-    main_loop(
-        main_loop_app_state,
-        &mut lines,
-        node_name.as_str(),
-        listener,
-    )
-    .await;
+    main_loop(main_loop_app_state, &mut lines, listener).await;
 
     // Ensure the server task finishes cleanly if ever reached
     server_task.await?;
@@ -132,7 +120,6 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 async fn main_loop(
     _state: std::sync::Arc<tokio::sync::Mutex<crate::state::AppState>>,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
-    node_name: &str,
     listener: tokio::net::TcpListener,
 ) {
     use crate::control::{handle_command_from_cli, run_cli};
@@ -143,7 +130,7 @@ async fn main_loop(
         select! {
             line = lines.next_line() => {
                 let command = run_cli(line);
-                if let Err(e) = handle_command_from_cli(command, node_name).await{
+                if let Err(e) = handle_command_from_cli(command).await{
                     log::error!("Error handling command:\n{}", e);
                 }
                 print!("> ");
