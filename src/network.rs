@@ -196,16 +196,9 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
-                #[allow(unused)]
-                if let Some(cmd) = message.command {
-                    let site_id = {
-                        let mut state = LOCAL_APP_STATE.lock().await;
-                        state.add_peer(message.sender_id.as_str(), message.sender_addr);
-                        (state.get_site_id().to_string())
-                    };
-
+                if let Some(_) = message.command {
                     use crate::control::handle_command_from_network;
-                    if let Err(e) = handle_command_from_network(message.info, &site_id).await {
+                    if let Err(e) = handle_command_from_network(message.info).await {
                         log::error!("Error handling command:\n{}", e);
                     }
                 } else {

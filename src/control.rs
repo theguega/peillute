@@ -205,7 +205,7 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             let transac_node = prompt("Node");
             super::db::refund_transaction(
                 transac_time,
-                &transac_node,
+                &transac_node.as_str(),
                 &local_lamport_time,
                 node.as_str(),
                 &local_vc_clock,
@@ -287,19 +287,19 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
 #[cfg(feature = "server")]
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    node: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::MessageInfo;
     use crate::state::LOCAL_APP_STATE;
     use log;
 
-    let (local_vc_clock, local_lamport_time) = {
+    let (local_vc_clock, local_lamport_time, node) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
-        (local_vc_clock, local_lamport_time)
+        let node = state.get_site_id().to_string();
+        (local_vc_clock, local_lamport_time, node)
     };
 
     match msg {
@@ -312,7 +312,7 @@ pub async fn handle_command_from_network(
                 &deposit.name,
                 deposit.amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 &local_vc_clock,
             )?;
         }
@@ -322,7 +322,7 @@ pub async fn handle_command_from_network(
                 &withdraw.name,
                 withdraw.amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 &local_vc_clock,
             )?;
         }
@@ -333,7 +333,7 @@ pub async fn handle_command_from_network(
                 &transfer.beneficiary,
                 transfer.amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
@@ -345,7 +345,7 @@ pub async fn handle_command_from_network(
                 "NULL",
                 pay.amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
@@ -354,9 +354,9 @@ pub async fn handle_command_from_network(
         MessageInfo::Refund(refund) => {
             super::db::refund_transaction(
                 refund.transac_time,
-                &refund.transac_node,
+                &refund.transac_node.as_str(),
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 &local_vc_clock,
             )?;
         }

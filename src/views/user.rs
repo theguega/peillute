@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 #[component]
 pub fn User(name: String) -> Element {
     let mut solde = use_signal(|| 0f64);
+
     let name = std::rc::Rc::new(name);
     let name_for_future = name.clone();
 
@@ -18,48 +19,37 @@ pub fn User(name: String) -> Element {
         });
     }
 
+    let history_route = Route::History {
+        name: name.to_string(),
+    };
+    let withdraw_route = Route::Withdraw {
+        name: name.to_string(),
+    };
+    let pay_route = Route::Pay {
+        name: name.to_string(),
+    };
+    let refund_route = Route::Refund {
+        name: name.to_string(),
+    };
+    let transfer_route = Route::Transfer {
+        name: name.to_string(),
+    };
+    let deposit_route = Route::Deposit {
+        name: name.to_string(),
+    };
+
     rsx! {
         div { id: "user-info",
-            h1 { "Welcome {name} !" }
-            h2 { "{solde} €" }
+            h1 { "Welcome {name}!" }
+            h2 { "{solde()} €" }
         }
         div { id: "user-page",
-            Link {
-                to: Route::History {
-                    name: name.to_string(),
-                },
-                "History"
-            }
-            Link {
-                to: Route::Withdraw {
-                    name: name.to_string(),
-                },
-                "Withdraw"
-            }
-            Link {
-                to: Route::Pay {
-                    name: name.to_string(),
-                },
-                "Pay"
-            }
-            Link {
-                to: Route::Refund {
-                    name: name.to_string(),
-                },
-                "Refund"
-            }
-            Link {
-                to: Route::Transfer {
-                    name: name.to_string(),
-                },
-                "Transfer"
-            }
-            Link {
-                to: Route::Deposit {
-                    name: name.to_string(),
-                },
-                "Deposit"
-            }
+            Link { to: history_route, "History" }
+            Link { to: withdraw_route, "Withdraw" }
+            Link { to: pay_route, "Pay" }
+            Link { to: refund_route, "Refund" }
+            Link { to: transfer_route, "Transfer" }
+            Link { to: deposit_route, "Deposit" }
         }
         Outlet::<Route> {}
     }

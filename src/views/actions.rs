@@ -313,6 +313,7 @@ pub fn Refund(name: String) -> Element {
                                                         let transaction_for_future = transaction_for_refund.clone();
                                                         async move {
                                                             match refund_transaction_server(
+                                                                    name_for_future.to_string(),
                                                                     transaction_for_future.lamport_time,
                                                                     transaction_for_future.source_node,
                                                                 )
@@ -624,15 +625,12 @@ async fn get_users_server() -> Result<Vec<String>, ServerFnError> {
 
 #[server]
 async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), ServerFnError> {
-    use crate::db;
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
     let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
@@ -641,7 +639,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = db::deposit(
+    if let Err(e) = crate::db::deposit(
         &user,
         amount,
         &local_lamport_time,
@@ -650,20 +648,30 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
+
+    if let Err(e) = crate::network::send_message_to_all(
+        Some(crate::control::Command::Deposit),
+        crate::message::NetworkMessageCode::Transaction,
+        crate::message::MessageInfo::Deposit(crate::message::Deposit::new(user.clone(), amount)),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
+    };
+
     Ok(())
 }
 
 #[server]
 async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), ServerFnError> {
-    use crate::db;
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
     let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
@@ -672,7 +680,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = db::withdraw(
+    if let Err(e) = crate::db::withdraw(
         &user,
         amount,
         &local_lamport_time,
@@ -680,6 +688,18 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         &local_vc_clock,
     ) {
         return Err(ServerFnError::new(e.to_string()));
+    }
+
+    if let Err(e) = crate::network::send_message_to_all(
+        Some(crate::control::Command::Withdraw),
+        crate::message::NetworkMessageCode::Transaction,
+        crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(user.clone(), amount)),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
     }
 
     Ok(())
@@ -687,14 +707,12 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
 
 #[server]
 async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnError> {
-    use crate::db;
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    use crate::state::LOCAL_APP_STATE;
 
     let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
@@ -703,7 +721,7 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = db::create_transaction(
+    if let Err(e) = crate::db::create_transaction(
         &user,
         "NULL",
         amount,
@@ -714,6 +732,19 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
+
+    if let Err(e) = crate::network::send_message_to_all(
+        Some(crate::control::Command::Pay),
+        crate::message::NetworkMessageCode::Transaction,
+        crate::message::MessageInfo::Pay(crate::message::Pay::new(user.clone(), amount)),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
+    }
+
     Ok(())
 }
 
@@ -724,14 +755,12 @@ async fn transfer_from_user_to_user_server(
     amount: f64,
     optional_message: String,
 ) -> Result<(), ServerFnError> {
-    use crate::db;
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
-    use crate::state::LOCAL_APP_STATE;
 
     let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
@@ -740,7 +769,7 @@ async fn transfer_from_user_to_user_server(
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = db::create_transaction(
+    if let Err(e) = crate::db::create_transaction(
         &from_user,
         &to_user,
         amount,
@@ -751,6 +780,22 @@ async fn transfer_from_user_to_user_server(
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
+
+    if let Err(e) = crate::network::send_message_to_all(
+        Some(crate::control::Command::Transfer),
+        crate::message::NetworkMessageCode::Transaction,
+        crate::message::MessageInfo::Transfer(crate::message::Transfer::new(
+            from_user.clone(),
+            to_user.clone(),
+            amount,
+        )),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
+    }
     Ok(())
 }
 
@@ -758,9 +803,7 @@ async fn transfer_from_user_to_user_server(
 async fn get_transactions_for_user_server(
     name: String,
 ) -> Result<Vec<crate::db::Transaction>, ServerFnError> {
-    use crate::db;
-
-    if let Ok(data) = db::get_transactions_for_user(&name) {
+    if let Ok(data) = crate::db::get_transactions_for_user(&name) {
         Ok(data)
     } else {
         Err(ServerFnError::new("User not found."))
@@ -769,15 +812,12 @@ async fn get_transactions_for_user_server(
 
 #[server]
 async fn refund_transaction_server(
+    name: String,
     lamport_time: i64,
     transac_node: String,
 ) -> Result<(), ServerFnError> {
-    use crate::db;
-
-    use crate::state::LOCAL_APP_STATE;
-
     let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
@@ -786,7 +826,7 @@ async fn refund_transaction_server(
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = db::refund_transaction(
+    if let Err(e) = crate::db::refund_transaction(
         lamport_time,
         transac_node.as_str(),
         &local_lamport_time,
@@ -795,5 +835,22 @@ async fn refund_transaction_server(
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
+
+    if let Err(e) = crate::network::send_message_to_all(
+        Some(crate::control::Command::Refund),
+        crate::message::NetworkMessageCode::Transaction,
+        crate::message::MessageInfo::Refund(crate::message::Refund::new(
+            name.clone(),
+            lamport_time,
+            transac_node,
+        )),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
+    }
+
     Ok(())
 }

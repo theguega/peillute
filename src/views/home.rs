@@ -98,11 +98,28 @@ async fn get_users() -> Result<Vec<String>, ServerFnError> {
 
 #[server]
 async fn add_user(name: String) -> Result<(), ServerFnError> {
+    use crate::control::Command;
     use crate::db;
+    use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
+    use crate::network::send_message_to_all;
+
     if name == "" {
         return Err(ServerFnError::new("User name cannot be empty."));
     }
+
     db::create_user(&name)?;
+
+    if let Err(e) = send_message_to_all(
+        Some(Command::CreateUser),
+        NetworkMessageCode::Transaction,
+        MessageInfo::CreateUser(CreateUser::new(name.clone())),
+    )
+    .await
+    {
+        return Err(ServerFnError::new(format!(
+            "Failed to send message to all nodes: {e}"
+        )));
+    }
     Ok(())
 }
 
