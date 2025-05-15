@@ -285,7 +285,6 @@ pub fn withdraw(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
             Some(format!("Negative withdrawal amount: {}", amount).into()),
         );
-
         return Err(err);
     }
     if !user_exists(user)? {
@@ -293,7 +292,6 @@ pub fn withdraw(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
             Some(format!("Unknown user: {}", user).into()),
         );
-
         return Err(err);
     }
     if calculate_solde(user)? < amount {
@@ -301,9 +299,11 @@ pub fn withdraw(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
             Some(format!("User {} not enough money", user).into()),
         );
-
         return Err(err);
     }
+
+    log::debug!("Withdrawing {} from {}", amount, user);
+
     create_transaction(
         user,
         NULL,

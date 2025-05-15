@@ -267,7 +267,17 @@ pub fn Refund(name: String) -> Element {
                                                 }
                                             }
                                         }
-                                        button { "Refund" }
+                                        button {
+                                            r#type: "button",
+                                            onclick: move |_| {
+                                                async move {
+                                                    if let Err(e) = debug_print(true).await {
+                                                        log::error!("Error: {e}");
+                                                    }
+                                                }
+                                            },
+                                            "Refund"
+                                        }
                                     }
                                 }
                             }
@@ -427,6 +437,16 @@ pub fn Deposit(name: String) -> Element {
                 }
             }
         }
+    }
+}
+
+#[server]
+async fn debug_print(input: bool) -> Result<(), ServerFnError> {
+    if input {
+        println!("debug print triggered");
+        Ok(())
+    } else {
+        return Err(ServerFnError::new("debug with error"));
     }
 }
 

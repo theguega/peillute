@@ -373,6 +373,7 @@ pub async fn handle_command_from_network(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
     let mut input = String::new();
