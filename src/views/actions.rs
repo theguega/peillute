@@ -1,6 +1,16 @@
+//! Transaction action components for the Peillute application
+//!
+//! This module provides components for various financial transactions in the system,
+//! including viewing transaction history, making deposits, withdrawals, payments,
+//! refunds, and transfers between users.
+
 use dioxus::prelude::*;
 
 // show all transactions as vertical card list
+/// Transaction history component
+///
+/// Displays a list of all transactions for a specific user, showing details such as
+/// the source and destination users, amount, and any associated messages.
 #[component]
 pub fn History(name: String) -> Element {
     let name = std::rc::Rc::new(name);
@@ -64,6 +74,10 @@ pub fn History(name: String) -> Element {
 }
 
 // take the username and collect the an amount (float from form) to make a withdrawal
+/// Withdrawal component
+///
+/// Provides a form for users to withdraw money from their account, with input
+/// validation to ensure positive amounts and sufficient funds.
 #[component]
 pub fn Withdraw(name: String) -> Element {
     let mut withdraw_amount = use_signal(|| 0f64);
@@ -138,8 +152,11 @@ const PRODUCTS: &[(&str, f64, Asset)] = &[
 ];
 
 // take the username and collect the an amount (float from form) to make a payment
-// to-do : create some products to buy as a list of product cards
-// (product card : name, price, quantity, total price)
+/// Payment component
+///
+/// Implements a product catalog interface where users can select items to purchase,
+/// with a running total and order summary. Supports multiple products with
+/// individual quantity selection.
 #[component]
 pub fn Pay(name: String) -> Element {
     let mut product_quantities = use_signal(|| vec![0u32; PRODUCTS.len()]);
@@ -250,6 +267,11 @@ pub fn Pay(name: String) -> Element {
 
 // show all transactions as vertical card list
 // allow the user to select a transaction to refund it
+/// Refund component
+///
+/// Displays a list of transactions that can be refunded, allowing users to
+/// reverse previous transactions. Shows transaction details and provides
+/// refund functionality.
 #[component]
 pub fn Refund(name: String) -> Element {
     let name = std::rc::Rc::new(name);
@@ -359,6 +381,13 @@ pub fn Refund(name: String) -> Element {
 // allow to select a user between all users (except the current one)
 // and allow user to transfer money with an amout (float from form) to another user
 // allow user to add a message to the transaction
+/// Transfer component
+///
+/// Enables users to transfer money to other users in the system, with features for:
+/// - Selecting the recipient from a list of available users
+/// - Specifying the transfer amount
+/// - Adding an optional message to the transaction
+/// - Generating random messages for fun
 #[component]
 pub fn Transfer(name: String) -> Element {
     let mut transfer_amount = use_signal(|| 0f64);
@@ -489,6 +518,10 @@ pub fn Transfer(name: String) -> Element {
 }
 
 // take the username and collect the an amount (float from form) to make a deposit
+/// Deposit component
+///
+/// Provides a form for users to deposit money into their account, with input
+/// validation to ensure positive amounts.
 #[component]
 pub fn Deposit(name: String) -> Element {
     let mut deposit_amount = use_signal(|| 0f64);
@@ -578,7 +611,7 @@ const RANDOM_MESSAGE: &[&str] = &[
     "Raison : \"GnaGnaGna moi je paye pas pour vous\"",
     "Fond de tiroir",
     "Epilation des zones intimes",
-    "Pour m’avoir gratouillé le dos",
+    "Pour m'avoir gratouillé le dos",
     "La reine Babeth vous offre cet argent",
 ];
 

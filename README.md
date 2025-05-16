@@ -2,6 +2,10 @@
 
 This project is a distributed application in Rust using TCP for communication between nodes. The goal is to manually implement mechanisms such as vector clocks, replica management, and snapshot taking.
 
+## Project documentation
+
+All documentation can be found here : [peillute](https://guegathe.gitlab.utc.fr/peillute/doc/peillute/)
+
 ## 🚀 Installation
 
 ### Prerequisites
@@ -96,6 +100,12 @@ cargo test --all-features
 
 ```sh
 cargo fmt
+```
+
+### Generate the documentation
+
+```sh
+cargo doc
 ```
 
 ## 📜 License

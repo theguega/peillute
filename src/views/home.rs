@@ -1,6 +1,17 @@
+//! Home page component for the Peillute application
+//!
+//! This component provides the main user interface for managing users in the system,
+//! including listing existing users, adding new users, and deleting users.
+
 use crate::Route;
 use dioxus::prelude::*;
 
+/// Home page component
+///
+/// Renders the main user management interface with the following features:
+/// - List of existing users with links to their transaction history
+/// - Form for adding new users
+/// - Delete buttons for removing users
 #[component]
 pub fn Home() -> Element {
     let mut user_input = use_signal(|| "".to_string());
@@ -89,6 +100,7 @@ pub fn Home() -> Element {
     }
 }
 
+/// Server function to retrieve the list of users
 #[server]
 async fn get_users() -> Result<Vec<String>, ServerFnError> {
     use crate::db;
@@ -96,6 +108,10 @@ async fn get_users() -> Result<Vec<String>, ServerFnError> {
     Ok(users)
 }
 
+/// Server function to add a new user
+///
+/// Creates a user in the local database and broadcasts the creation
+/// to all nodes in the network.
 #[server]
 async fn add_user(name: String) -> Result<(), ServerFnError> {
     use crate::control::Command;
@@ -123,6 +139,9 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+/// Server function to delete a user
+///
+/// Removes a user from the local database.
 #[server]
 async fn delete_user(name: String) -> Result<(), ServerFnError> {
     use crate::db;

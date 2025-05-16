@@ -1,15 +1,27 @@
+//! Network communication and peer management
+//!
+//! This module handles all network-related functionality, including peer discovery,
+//! message sending/receiving, and connection management in the distributed system.
+
 #[cfg(feature = "server")]
+/// Represents a connection to a peer node
 pub struct PeerConnection {
+    /// Channel sender for sending messages to the peer
     pub sender: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
 
 #[cfg(feature = "server")]
+/// Manages network connections and peer communication
 pub struct NetworkManager {
+    /// Number of currently active peer connections
     pub nb_active_connections: u16,
+    /// Pool of active peer connections
     pub connection_pool: std::collections::HashMap<std::net::SocketAddr, PeerConnection>,
 }
+
 #[cfg(feature = "server")]
 impl NetworkManager {
+    /// Creates a new NetworkManager instance
     pub fn new() -> Self {
         Self {
             nb_active_connections: 0,
@@ -17,6 +29,7 @@ impl NetworkManager {
         }
     }
 
+    /// Adds a new peer connection to the connection pool
     pub fn add_connection(
         &mut self,
         addr: std::net::SocketAddr,
@@ -26,6 +39,7 @@ impl NetworkManager {
         self.nb_active_connections += 1;
     }
 
+    /// Establishes a new connection to a peer
     pub async fn create_connection(
         &mut self,
         addr: std::net::SocketAddr,
@@ -40,6 +54,7 @@ impl NetworkManager {
         Ok(())
     }
 
+    /// Returns the message sender for a specific peer address
     pub fn get_sender(
         &self,
         addr: &std::net::SocketAddr,
@@ -47,6 +62,7 @@ impl NetworkManager {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
     }
 
+    /// Returns a list of all connected peer addresses
     #[allow(unused)]
     pub fn get_all_connections(&self) -> Vec<std::net::SocketAddr> {
         self.connection_pool.keys().cloned().collect()
@@ -60,6 +76,7 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(feature = "server")]
+/// Spawns a task to handle writing messages to a peer connection
 pub async fn spawn_writer_task(
     stream: tokio::net::TcpStream,
     mut rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
@@ -79,6 +96,7 @@ pub async fn spawn_writer_task(
 }
 
 #[cfg(feature = "server")]
+/// Announces this node's presence to potential peers in the network
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -129,6 +147,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
 }
 
 #[cfg(feature = "server")]
+/// Starts listening for messages from a new peer connection
 pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::SocketAddr) {
     log::debug!("Accepted connection from: {}", addr);
 
@@ -140,6 +159,7 @@ pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::Sock
 }
 
 #[cfg(feature = "server")]
+/// Handles incoming messages from a peer connection
 pub async fn handle_message(
     mut stream: tokio::net::TcpStream,
     addr: std::net::SocketAddr,
@@ -168,8 +188,6 @@ pub async fn handle_message(
                 continue;
             }
         };
-
-        // tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         match message.code {
             NetworkMessageCode::Discovery => {
@@ -246,7 +264,6 @@ pub async fn handle_message(
                 )
                 .await?;
             }
-
             NetworkMessageCode::SnapshotResponse => {
                 if let MessageInfo::SnapshotResponse(resp) = message.info {
                     let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;

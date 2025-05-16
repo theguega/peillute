@@ -1,27 +1,48 @@
+//! Message handling for distributed transactions
+//!
+//! This module defines the message types and structures used for communication
+//! between nodes in the distributed system, including transaction messages,
+//! network control messages, and various financial operations.
+
 #[cfg(feature = "server")]
+/// Represents a financial transaction in the system
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
+    /// Unique identifier for the transaction
     pub id: u64,
+    /// ID of the user performing the transaction
     pub user_id: String,
+    /// Transaction amount
     pub amount: f64,
+    /// Description of the transaction
     pub description: String,
 }
 
 #[cfg(feature = "server")]
+/// Types of network messages used for communication between nodes
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum NetworkMessageCode {
+    /// Message for discovering other nodes in the network
     Discovery,
+    /// Message containing a financial transaction
     Transaction,
+    /// Message acknowledging receipt of a previous message
     Acknowledgment,
+    /// Message indicating an error condition
     Error,
+    /// Message for gracefully disconnecting from the network
     Disconnect,
+    /// Message for synchronizing state between nodes
     Sync,
+    /// Message requesting a state snapshot
     SnapshotRequest,
+    /// Message containing a state snapshot
     SnapshotResponse,
 }
 
 #[cfg(feature = "server")]
 impl NetworkMessageCode {
+    /// Returns the string representation of the message code
     #[allow(unused)]
     pub fn code(&self) -> &'static str {
         match self {
@@ -35,6 +56,8 @@ impl NetworkMessageCode {
             NetworkMessageCode::SnapshotResponse => "snapshot_response",
         }
     }
+
+    /// Converts a string code to a NetworkMessageCode variant
     #[allow(unused)]
     pub fn from_code(code: &str) -> Option<Self> {
         match code {
@@ -53,80 +76,123 @@ impl NetworkMessageCode {
 
 // TODO : add message status (failed, success, etc.)
 #[cfg(feature = "server")]
+/// Represents a message exchanged between nodes in the network
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Message {
+    /// ID of the sending node
     pub sender_id: String,
+    /// Network address of the sending node
     pub sender_addr: std::net::SocketAddr,
+    /// Logical clock state of the sending node
     pub clock: crate::clock::Clock,
+    /// Optional command to be executed
     pub command: Option<crate::control::Command>,
+    /// Message payload containing the actual data
     pub info: MessageInfo,
+    /// Type of the message
     pub code: NetworkMessageCode,
 }
 
 #[cfg(feature = "server")]
+/// Types of message payloads for different operations
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum MessageInfo {
+    /// Create a new user
     CreateUser(CreateUser),
+    /// Deposit money into an account
     Deposit(Deposit),
+    /// Withdraw money from an account
     Withdraw(Withdraw),
+    /// Transfer money between accounts
     Transfer(Transfer),
+    /// Make a payment
     Pay(Pay),
+    /// Process a refund
     Refund(Refund),
+    /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
+    /// No payload
     None,
 }
 
 #[cfg(feature = "server")]
+/// Response to a state snapshot request
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct SnapshotResponse {
+    /// ID of the responding node
     pub site_id: String,
+    /// Logical clock state of the responding node
     pub clock: crate::clock::Clock,
+    /// Transaction log summary
     pub tx_log: Vec<crate::snapshot::TxSummary>,
 }
 
+/// Request to create a new user
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CreateUser {
+    /// Name of the user to create
     pub name: String,
 }
+
 #[cfg(feature = "server")]
 impl CreateUser {
+    /// Creates a new CreateUser request
     pub fn new(name: String) -> Self {
         Self { name }
     }
 }
+
 #[cfg(feature = "server")]
+/// Request to deposit money into an account
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Deposit {
+    /// Name of the account
     pub name: String,
+    /// Amount to deposit
     pub amount: f64,
 }
+
 #[cfg(feature = "server")]
 impl Deposit {
+    /// Creates a new Deposit request
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+
 #[cfg(feature = "server")]
+/// Request to withdraw money from an account
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Withdraw {
+    /// Name of the account
     pub name: String,
+    /// Amount to withdraw
     pub amount: f64,
 }
+
 #[cfg(feature = "server")]
 impl Withdraw {
+    /// Creates a new Withdraw request
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+
 #[cfg(feature = "server")]
+/// Request to transfer money between accounts
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Transfer {
+    /// Name of the source account
     pub name: String,
+    /// Name of the destination account
     pub beneficiary: String,
+    /// Amount to transfer
     pub amount: f64,
 }
+
 #[cfg(feature = "server")]
 impl Transfer {
+    /// Creates a new Transfer request
     pub fn new(name: String, beneficiary: String, amount: f64) -> Self {
         Self {
             name,
@@ -135,27 +201,40 @@ impl Transfer {
         }
     }
 }
+
 #[cfg(feature = "server")]
+/// Request to make a payment
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Pay {
+    /// Name of the account
     pub name: String,
+    /// Amount to pay
     pub amount: f64,
 }
+
 #[cfg(feature = "server")]
 impl Pay {
+    /// Creates a new Pay request
     pub fn new(name: String, amount: f64) -> Self {
         Self { name, amount }
     }
 }
+
 #[cfg(feature = "server")]
+/// Request to process a refund
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Refund {
+    /// Name of the account
     pub name: String,
+    /// Timestamp of the original transaction
     pub transac_time: i64,
+    /// ID of the node that processed the original transaction
     pub transac_node: String,
 }
+
 #[cfg(feature = "server")]
 impl Refund {
+    /// Creates a new Refund request
     #[allow(unused)]
     #[allow(dead_code)]
     pub fn new(name: String, transac_time: i64, transac_node: String) -> Self {

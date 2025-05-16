@@ -1,17 +1,29 @@
+//! Application state management for Peillute
+//!
+//! This module handles the global application state, including site information,
+//! peer management, and logical clock synchronization.
+
 #[cfg(feature = "server")]
+/// Represents the global state of a Peillute node
 pub struct AppState {
     // --- Site Info ---
+    /// Unique identifier for this site
     pub site_id: String,
+    /// Total number of sites in the network
     pub nb_sites_on_network: usize,
+    /// List of peer addresses
     pub peer_addrs: Vec<std::net::SocketAddr>,
+    /// Local address for this site
     pub local_addr: std::net::SocketAddr,
 
     // --- Logical Clocks ---
+    /// Logical clock implementation for distributed synchronization
     pub clocks: crate::clock::Clock,
 }
 
 #[cfg(feature = "server")]
 impl AppState {
+    /// Creates a new AppState instance with the given configuration
     pub fn new(
         site_id: String,
         nb_sites_on_network: usize,
@@ -28,12 +40,15 @@ impl AppState {
             clocks,
         }
     }
+
+    /// Updates the site ID and adjusts the logical clock accordingly
     #[allow(unused)]
     pub fn change_site_id(&mut self, site_id: &str) {
         self.clocks.change_current_site_id(&self.site_id, site_id);
         self.site_id = site_id.to_string();
     }
 
+    /// Adds a new peer to the network and updates the logical clock
     pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
@@ -42,6 +57,7 @@ impl AppState {
         }
     }
 
+    /// Removes a peer from the network
     pub fn remove_peer(&mut self, addr: std::net::SocketAddr) {
         if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
             self.peer_addrs.remove(pos);
@@ -50,57 +66,74 @@ impl AppState {
             // self.vector_clock.remove(&addr); ?
         }
     }
+
+    /// Returns the local address as a string
     pub fn get_local_addr(&self) -> String {
         self.local_addr.to_string()
     }
 
+    /// Returns the current site ID
     pub fn get_site_id(&self) -> &str {
         self.site_id.as_str()
     }
 
+    /// Returns a list of all peer addresses
     pub fn get_peers(&self) -> Vec<std::net::SocketAddr> {
         self.peer_addrs.clone()
     }
 
+    /// Returns a list of peer addresses as strings
     pub fn get_peers_string(&self) -> Vec<String> {
         self.peer_addrs.iter().map(|x| x.to_string()).collect()
     }
 
+    /// Increments the Lamport clock and returns the new value
     pub fn increment_lamport(&mut self) -> i64 {
         self.clocks.increment_lamport()
     }
 
+    /// Increments the vector clock for a specific site
     #[allow(unused)]
     #[allow(dead_code)]
     pub fn increment_vector(&mut self, site_id: &str) -> i64 {
         self.clocks.increment_vector(site_id)
     }
 
+    /// Increments the vector clock for the current site
     pub fn increment_vector_current(&mut self) -> i64 {
         self.clocks.increment_vector(self.site_id.as_str())
     }
 
+    /// Returns the current Lamport clock value
     pub fn get_lamport(&self) -> i64 {
         self.clocks.get_lamport()
     }
+
+    /// Returns the current vector clock state
     #[allow(unused)]
     #[allow(dead_code)]
     pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
         self.clocks.get_vector()
     }
 
+    /// Updates the vector clock with received values
     pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
         self.clocks.update_vector(received_vc);
     }
+
+    /// Returns the current vector clock as a list
     #[allow(unused)]
     #[allow(dead_code)]
     pub fn get_vector_clock(&self) -> Vec<i64> {
         self.clocks.get_vector_clock()
     }
 
+    /// Returns a reference to the clock implementation
     pub fn get_clock(&self) -> &crate::clock::Clock {
         &self.clocks
     }
+
+    /// Updates the Lamport clock with a received value
     #[allow(unused)]
     #[allow(dead_code)]
     pub fn update_lamport(&mut self, received_lamport: i64) {
