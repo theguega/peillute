@@ -1,7 +1,7 @@
 pub struct AppState {
     // --- Site Info ---
     pub site_id: String,
-    pub nb_sites_on_network: usize,
+    pub nb_neighbors: usize,
     pub peer_addrs: Vec<std::net::SocketAddr>,
     pub local_addr: std::net::SocketAddr,
 
@@ -17,7 +17,7 @@ impl AppState {
     #[allow(unused)]
     pub fn new(
         site_id: String,
-        nb_sites_on_network: usize,
+        nb_neighbors: usize,
         local_addr: std::net::SocketAddr,
         peer_addrs: Vec<std::net::SocketAddr>,
         nb_of_attended_neighbors: usize,
@@ -27,7 +27,7 @@ impl AppState {
 
         Self {
             site_id,
-            nb_sites_on_network,
+            nb_neighbors,
             local_addr,
             peer_addrs,
             nb_of_attended_neighbors,
@@ -44,7 +44,7 @@ impl AppState {
     pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
-            self.nb_sites_on_network += 1;
+            self.nb_neighbors += 1;
             self.clocks.add_peer(site_id);
         }
     }
@@ -52,7 +52,7 @@ impl AppState {
     pub fn remove_peer(&mut self, addr: std::net::SocketAddr) {
         if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
             self.peer_addrs.remove(pos);
-            self.nb_sites_on_network -= 1;
+            self.nb_neighbors -= 1;
             // TODO : decide what to do with the vector clock
             // self.vector_clock.remove(&addr); ?
         }
@@ -110,10 +110,10 @@ impl AppState {
         self.clocks.update_lamport(received_lamport);
     }
     pub fn get_number_of_attended_neighbors(&self) -> usize {
-        self.nb_sites_on_network
+        self.nb_of_attended_neighbors
     }
     pub fn set_number_of_attended_neighbors(&mut self, n: usize) {
-        self.nb_sites_on_network = n;
+        self.nb_of_attended_neighbors = n;
     }
     pub fn get_parent_address(&self) -> std::net::SocketAddr {
         self.parent_address
@@ -121,6 +121,10 @@ impl AppState {
 
     pub fn set_parent_address(&mut self, addr: std::net::SocketAddr) {
         self.parent_address = addr;
+    }
+
+    pub fn get_nb_sites_on_network(&self) -> usize {
+        self.nb_neighbors
     }
 }
 
@@ -154,7 +158,7 @@ mod tests {
             AppState::new(site_id.clone(), num_sites, local_addr, peer_addrs.clone(),num_sites, "0.0.0.0:0".parse().unwrap(),);
 
         assert_eq!(shared_state.site_id, site_id);
-        assert_eq!(shared_state.nb_sites_on_network, num_sites);
+        assert_eq!(shared_state.nb_neighbors, num_sites);
         assert_eq!(shared_state.peer_addrs, peer_addrs);
         assert_eq!(shared_state.clocks.get_vector().len(), 0); // Initially empty
     }
@@ -174,7 +178,7 @@ mod tests {
         shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
 
         assert_eq!(shared_state.peer_addrs.len(), 3);
-        assert_eq!(shared_state.nb_sites_on_network, 3);
+        assert_eq!(shared_state.nb_neighbors, 3);
         assert!(shared_state.clocks.get_vector().contains_key("B"));
     }
 
@@ -194,7 +198,7 @@ mod tests {
         shared_state.remove_peer("127.0.0.1:8081".parse().unwrap());
 
         assert_eq!(shared_state.peer_addrs.len(), 2);
-        assert_eq!(shared_state.nb_sites_on_network, 2);
+        assert_eq!(shared_state.nb_neighbors, 2);
 
         // Ensure the vector clock is updated correctly ??
         // Do we want the clock to remove the site when it is removed from the peer list?

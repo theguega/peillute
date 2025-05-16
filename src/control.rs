@@ -59,7 +59,7 @@ pub async fn handle_command_from_cli(
     use crate::state::LOCAL_APP_STATE;
     use log;
 
-    let (local_vc_clock,local_lamport_time,local_clk,local_addr, local_id)={
+    let (local_vc_clock,local_lamport_time,local_clk,local_addr )={
         let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
@@ -67,8 +67,7 @@ pub async fn handle_command_from_cli(
         let local_vc_clock = state.get_vector().clone();
         let local_clk = state.get_clock().clone();
         let local_addr = state.get_local_addr().clone();
-        let local_id = state.get_site_id().clone();
-        (local_vc_clock, local_lamport_time,local_clk, local_addr, local_id)
+        (local_vc_clock, local_lamport_time,local_clk, local_addr)
     };
 
     match cmd {
@@ -184,14 +183,15 @@ pub async fn handle_command_from_cli(
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-            use crate::network::send_message_to_all;
 
-            let _ = send_message_to_all(
-                Some(Command::Transfer),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
-            )
-            .await?;
+            // Perfect network
+            // use crate::network::send_message_to_all;
+            // let _ = send_message_to_all(
+            //     Some(Command::Transfer),
+            //     NetworkMessageCode::Transaction,
+            //     MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
+            // )
+            // .await?;
 
             // Non-perfect network
             use crate::message::Message;
@@ -221,15 +221,16 @@ pub async fn handle_command_from_cli(
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-            use crate::network::send_message_to_all;
+
 
             // Perfect networks
-            let _ = send_message_to_all(
-                Some(Command::Pay),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Pay(Pay::new(name.clone(), amount)),
-            )
-            .await?;
+            // use crate::network::send_message_to_all;
+            // let _ = send_message_to_all(
+            //     Some(Command::Pay),
+            //     NetworkMessageCode::Transaction,
+            //     MessageInfo::Pay(Pay::new(name.clone(), amount)),
+            // )
+            // .await?;
 
             // Non-perfect network
             use crate::message::Message;
@@ -260,14 +261,13 @@ pub async fn handle_command_from_cli(
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            use crate::network::send_message_to_all;
-
-            let _ = send_message_to_all(
-                Some(Command::Refund),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
-            )
-            .await?;
+            // use crate::network::send_message_to_all;
+            // let _ = send_message_to_all(
+            //     Some(Command::Refund),
+            //     NetworkMessageCode::Transaction,
+            //     MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
+            // )
+            // .await?;
 
             // Non-perfect network
             use crate::message::Message;
