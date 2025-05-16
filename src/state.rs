@@ -77,6 +77,11 @@ impl AppState {
         self.site_id.as_str()
     }
 
+    /// Returns the number of sites on the network
+    pub fn get_nb_sites_on_network(&self) -> usize {
+        self.nb_sites_on_network
+    }
+
     /// Returns a list of all peer addresses
     pub fn get_peers(&self) -> Vec<std::net::SocketAddr> {
         self.peer_addrs.clone()
