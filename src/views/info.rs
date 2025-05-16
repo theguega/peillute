@@ -1,5 +1,11 @@
+//! System information component for the Peillute application
+//!
+//! This module provides a component for displaying system-wide information,
+//! including network details, logical clock states, and peer connections.
+
 use dioxus::prelude::*;
 
+/// Server function to retrieve the local network address
 #[server]
 async fn get_local_addr() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -7,6 +13,7 @@ async fn get_local_addr() -> Result<String, ServerFnError> {
     Ok(state.get_local_addr().to_string())
 }
 
+/// Server function to retrieve the current site ID
 #[server]
 async fn get_site_id() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -14,6 +21,7 @@ async fn get_site_id() -> Result<String, ServerFnError> {
     Ok(state.get_site_id().to_string())
 }
 
+/// Server function to retrieve the list of connected peers
 #[server]
 async fn get_peers() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -21,6 +29,7 @@ async fn get_peers() -> Result<Vec<String>, ServerFnError> {
     Ok(state.get_peers_string())
 }
 
+/// Server function to retrieve the current Lamport clock value
 #[server]
 async fn get_lamport() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -28,6 +37,7 @@ async fn get_lamport() -> Result<i64, ServerFnError> {
     Ok(state.get_clock().get_lamport())
 }
 
+/// Server function to retrieve the current vector clock state
 #[server]
 async fn get_vector_clock() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -41,6 +51,7 @@ async fn get_vector_clock() -> Result<String, ServerFnError> {
     Ok(vector_clock_string)
 }
 
+/// Server function to retrieve the number of sites in the network
 #[server]
 async fn get_nb_sites() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
@@ -48,7 +59,15 @@ async fn get_nb_sites() -> Result<i64, ServerFnError> {
     Ok(state.nb_sites_on_network as i64)
 }
 
-// Dioxus Component
+/// System information component
+///
+/// Displays real-time information about the distributed system, including:
+/// - Local network address
+/// - Site ID
+/// - Lamport timestamp
+/// - Vector clock state
+/// - Number of connected sites
+/// - List of connected peers
 #[component]
 pub fn Info() -> Element {
     let mut local_addr = use_signal(|| "".to_string());

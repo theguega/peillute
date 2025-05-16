@@ -1,3 +1,9 @@
+//! Peillute - A distributed financial transaction system
+//!
+//! This module serves as the main entry point for the Peillute application, handling both
+//! server and client-side functionality. The application supports distributed transactions
+//! with vector clock synchronization and peer-to-peer communication.
+
 #![allow(non_snake_case)]
 
 mod clock;
@@ -8,15 +14,23 @@ mod network;
 mod snapshot;
 mod state;
 
+/// Command-line arguments for configuring the Peillute application
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Unique identifier for this site in the network
     #[arg(long, default_value_t = std::process::id().to_string())]
     site_id: String,
+
+    /// Port number for peer-to-peer communication
     #[arg(long, default_value_t = 0)]
     port: u16,
+
+    /// List of peer addresses to connect to
     #[arg(long, value_delimiter = ',')]
     peers: Vec<String>,
+
+    /// IP address to bind to
     #[arg(long, default_value_t = String::from("127.0.0.1"))]
     ip: String,
 }
@@ -207,6 +221,7 @@ use views::*;
 const FAVICON: Asset = asset!("/assets/icon.png");
 const MAIN_CSS: Asset = asset!("/assets/styling/main.css");
 
+/// Main application component that sets up the web interface
 #[component]
 fn App() -> Element {
     rsx! {
@@ -217,6 +232,7 @@ fn App() -> Element {
     }
 }
 
+/// Defines the routing structure for the web application
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
 enum Route {

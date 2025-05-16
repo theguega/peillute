@@ -1,7 +1,16 @@
+//! Snapshot management for distributed state consistency
+//!
+//! This module implements a distributed snapshot algorithm for ensuring
+//! consistency across nodes in the distributed system. It handles snapshot
+//! creation, consistency checking, and persistence.
+
 #[cfg(feature = "server")]
+/// Summary of a transaction for snapshot purposes
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Hash)]
 pub struct TxSummary {
+    /// Lamport timestamp of the transaction
     pub lamport_time: i64,
+    /// ID of the node that created the transaction
     pub source_node: String,
 }
 
@@ -16,22 +25,34 @@ impl From<&crate::db::Transaction> for TxSummary {
 }
 
 #[cfg(feature = "server")]
+/// Local snapshot of a node's state
 #[derive(Clone)]
 pub struct LocalSnapshot {
+    /// ID of the node taking the snapshot
     pub site_id: String,
+    /// Vector clock state at the time of the snapshot
     pub vector_clock: std::collections::HashMap<String, i64>,
+    /// Set of transactions known to this node
     pub tx_log: std::collections::HashSet<TxSummary>,
 }
 
 #[cfg(feature = "server")]
+/// Global snapshot combining all local snapshots
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct GlobalSnapshot {
+    /// Union of all transactions across nodes
     pub all_transactions: std::collections::HashSet<TxSummary>,
+    /// Map of missing transactions per node
     pub missing: std::collections::HashMap<String, std::collections::HashSet<TxSummary>>,
 }
 
 #[cfg(feature = "server")]
 impl GlobalSnapshot {
+    /// Checks if a set of local snapshots is consistent
+    ///
+    /// A set of snapshots is consistent if for any pair of nodes i and j,
+    /// the vector clock value of j in i's snapshot is not greater than
+    /// the vector clock value of j in j's own snapshot.
     pub fn is_consistent(snaps: &[LocalSnapshot]) -> bool {
         for si in snaps {
             for sj in snaps {
@@ -50,13 +71,17 @@ impl GlobalSnapshot {
 }
 
 #[cfg(feature = "server")]
+/// Manages the snapshot collection process
 pub struct SnapshotManager {
+    /// Number of snapshots expected to be collected
     pub expected: usize,
+    /// Vector of received local snapshots
     pub received: Vec<LocalSnapshot>,
 }
 
 #[cfg(feature = "server")]
 impl SnapshotManager {
+    /// Creates a new snapshot manager expecting the given number of snapshots
     pub fn new(expected: usize) -> Self {
         Self {
             expected,
@@ -64,6 +89,12 @@ impl SnapshotManager {
         }
     }
 
+    /// Adds a snapshot response to the collection
+    ///
+    /// Returns a global snapshot if all expected snapshots have been received
+    /// and they are consistent. If the snapshots are inconsistent, it will
+    /// attempt to find a consistent subset by backtracking to the minimum
+    /// vector clock values.
     pub fn push(&mut self, resp: crate::message::SnapshotResponse) -> Option<GlobalSnapshot> {
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
@@ -116,6 +147,10 @@ impl SnapshotManager {
         Some(self.build_snapshot(&trimmed))
     }
 
+    /// Builds a global snapshot from a set of local snapshots
+    ///
+    /// Computes the union of all transactions and identifies missing
+    /// transactions for each node.
     fn build_snapshot(&self, snaps: &[LocalSnapshot]) -> GlobalSnapshot {
         let mut union: std::collections::HashSet<TxSummary> = std::collections::HashSet::new();
         for s in snaps {
@@ -138,6 +173,9 @@ impl SnapshotManager {
 }
 
 #[cfg(feature = "server")]
+/// Initiates a new snapshot process
+///
+/// Collects the local transaction log and sends snapshot requests to all peers.
 pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
@@ -173,6 +211,9 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(feature = "server")]
+/// Persists a global snapshot to disk
+///
+/// Saves the snapshot as a JSON file with a timestamp in the filename.
 pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     use std::io::Write;
 

@@ -1,11 +1,25 @@
+//! Database management for the Peillute application
+//!
+//! This module handles all database operations, including user management,
+//! transaction processing, and state synchronization. It uses SQLite as the
+//! underlying database engine.
+
+/// Represents a transaction in the system
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
+    /// Source user of the transaction
     pub from_user: String,
+    /// Destination user of the transaction
     pub to_user: String,
+    /// Transaction amount
     pub amount: f64,
+    /// Lamport timestamp of the transaction
     pub lamport_time: i64,
+    /// ID of the node that created the transaction
     pub source_node: String,
+    /// Optional message associated with the transaction
     pub optional_msg: Option<String>,
+    /// Vector clock state at the time of the transaction
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
@@ -16,13 +30,16 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(feature = "server")]
+/// Special value representing a null user
 const NULL: &str = "NULL";
 
 #[cfg(feature = "server")]
+/// Initializes the database schema
 pub fn init_db() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
 
+        // Create VectorClock table for storing vector clock states
         conn.execute(
             "CREATE TABLE IF NOT EXISTS VectorClock (
             id INTEGER PRIMARY KEY AUTOINCREMENT
@@ -30,6 +47,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create VectorClockEntry table for storing individual vector clock entries
         conn.execute(
             "CREATE TABLE IF NOT EXISTS VectorClockEntry (
                 vector_clock_id INTEGER,
@@ -42,6 +60,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create User table for storing user accounts
         conn.execute(
             "CREATE TABLE IF NOT EXISTS User (
             unique_name TEXT PRIMARY KEY,
@@ -50,6 +69,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create Transactions table for storing transaction history
         conn.execute(
             "CREATE TABLE IF NOT EXISTS Transactions (
                 from_user TEXT,
@@ -73,6 +93,7 @@ pub fn init_db() -> rusqlite::Result<()> {
 }
 
 #[cfg(feature = "server")]
+/// Checks if the database has been initialized
 pub fn is_database_initialized() -> rusqlite::Result<bool> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -85,6 +106,7 @@ pub fn is_database_initialized() -> rusqlite::Result<bool> {
 }
 
 #[cfg(feature = "server")]
+/// Checks if a user exists in the database
 pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     {
         use rusqlite::params;
@@ -96,6 +118,7 @@ pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
 }
 
 #[cfg(feature = "server")]
+/// Creates a new user with zero balance
 pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     if user_exists(unique_name)? {
@@ -115,6 +138,7 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
 
 #[allow(unused)]
 #[cfg(feature = "server")]
+/// Deletes a user from the database
 pub fn delete_user(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     if !user_exists(name)? {
@@ -134,6 +158,7 @@ pub fn delete_user(name: &str) -> rusqlite::Result<()> {
 }
 
 #[cfg(feature = "server")]
+/// Calculates the current balance for a user
 pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     {
         use rusqlite::params;
@@ -149,6 +174,7 @@ pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
 }
 
 #[cfg(feature = "server")]
+/// Updates the stored balance for a user
 pub fn update_solde(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
 
@@ -173,6 +199,7 @@ pub fn update_solde(name: &str) -> rusqlite::Result<()> {
 }
 
 #[cfg(feature = "server")]
+/// Ensures a user exists, creating it if necessary
 pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     if name != NULL && !user_exists(name)? {
         create_user(name)?;
@@ -181,6 +208,7 @@ pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
 }
 
 #[cfg(feature = "server")]
+/// Creates a new transaction between users
 pub fn create_transaction(
     from_user: &str,
     to_user: &str,

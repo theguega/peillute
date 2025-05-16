@@ -1,4 +1,10 @@
+//! Command handling and CLI interface
+//!
+//! This module provides the command-line interface and command handling functionality
+//! for the Peillute application, including both local and network command processing.
+
 #[cfg(feature = "server")]
+/// Processes a line of input from the CLI and converts it to a Command
 pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
@@ -18,25 +24,41 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
 }
 
 #[cfg(feature = "server")]
+/// Available commands in the system
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum Command {
+    /// Create a new user account
     CreateUser,
+    /// List all user accounts
     UserAccounts,
+    /// Display transactions for a specific user
     PrintUserTransactions,
+    /// Display all system transactions
     PrintTransactions,
+    /// Deposit money into an account
     Deposit,
+    /// Withdraw money from an account
     Withdraw,
+    /// Transfer money between accounts
     Transfer,
+    /// Make a payment
     Pay,
+    /// Process a refund
     Refund,
+    /// Display help information
     Help,
+    /// Display system information
     Info,
+    /// Unknown command
     Unknown(String),
+    /// Error command
     Error(String),
+    /// Start a system snapshot
     Snapshot,
 }
 
 #[cfg(feature = "server")]
+/// Parses a command string into a Command enum variant
 fn parse_command(input: &str) -> Command {
     match input.trim() {
         "/create_user" => Command::CreateUser,
@@ -56,6 +78,7 @@ fn parse_command(input: &str) -> Command {
 }
 
 #[cfg(feature = "server")]
+/// Handles commands received from the CLI
 pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
@@ -227,7 +250,7 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("----------------------------------------");
             println!("/create_user      - Create a personal account");
             println!("/user_accounts    - List all users");
-            println!("/print_user_tsx   - Show a user’s transactions");
+            println!("/print_user_tsx   - Show a user's transactions");
             println!("/print_tsx        - Show all system transactions");
             println!("/deposit          - Deposit money to an account");
             println!("/withdraw         - Withdraw money from an account");
@@ -249,65 +272,58 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
-                    state.get_local_addr().to_string(),
+                    state.get_local_addr(),
                     state.get_site_id().to_string(),
-                    state.get_peers(),
+                    state.get_peers_string(),
                     state.get_clock().clone(),
                     state.nb_sites_on_network,
                 )
             };
 
-            println!("ℹ️  System Information:");
+            println!("📊 System Information:");
             println!("----------------------------------------");
-            println!("📦 Version: {}", env!("CARGO_PKG_VERSION"));
-            println!("👥 Authors: {}", env!("CARGO_PKG_AUTHORS"));
-            println!("📄 License: MIT");
-            println!("🌐 Local address: {}", local_addr);
-            println!("🆔 Site ID: {}", site_id);
-            println!("🤝 Peers: {:?}", peer_addrs);
-            println!("🌍 Number of sites on network: {}", nb_sites);
-            println!("⏰ Lamport clock: {:?}", clock.get_lamport());
-            println!("⏱️ Vector clock: {:?}", clock.get_vector_clock());
+            println!("Local Address: {}", local_addr);
+            println!("Site ID: {}", site_id);
+            println!("Number of Sites: {}", nb_sites);
+            println!("Peers: {:?}", peer_addrs);
+            println!("Vector Clock: {:?}", clock.get_vector());
+            println!("Lamport Clock: {}", clock.get_lamport());
             println!("----------------------------------------");
         }
 
-        Command::Unknown(cmd) => {
-            println!("❓ Unknown command: {}", cmd);
-            println!("💡 Use /help to see the list of available commands.");
+        Command::Unknown(msg) => {
+            println!("❌ Unknown command: {}", msg);
         }
 
-        Command::Error(err) => {
-            println!("❌ Error: {}", err);
-            println!("🛠️ Please try again or contact support if the issue persists.");
+        Command::Error(msg) => {
+            println!("❌ Error: {}", msg);
         }
     }
+
     Ok(())
 }
 
 #[cfg(feature = "server")]
+/// Handles commands received from the network
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::message::MessageInfo;
-    use crate::state::LOCAL_APP_STATE;
-    use log;
-
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
-    };
-
     match msg {
-        MessageInfo::CreateUser(create_user) => {
+        crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
         }
+        crate::message::MessageInfo::Deposit(deposit) => {
+            let (local_lamport_time, node, local_vc_clock) = {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_vector_current();
+                state.increment_lamport();
+                (
+                    state.get_lamport(),
+                    state.get_site_id().to_string(),
+                    state.get_vector().clone(),
+                )
+            };
 
-        MessageInfo::Deposit(deposit) => {
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
@@ -316,8 +332,18 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
+        crate::message::MessageInfo::Withdraw(withdraw) => {
+            let (local_lamport_time, node, local_vc_clock) = {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_vector_current();
+                state.increment_lamport();
+                (
+                    state.get_lamport(),
+                    state.get_site_id().to_string(),
+                    state.get_vector().clone(),
+                )
+            };
 
-        MessageInfo::Withdraw(withdraw) => {
             super::db::withdraw(
                 &withdraw.name,
                 withdraw.amount,
@@ -326,8 +352,18 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
+        crate::message::MessageInfo::Transfer(transfer) => {
+            let (local_lamport_time, node, local_vc_clock) = {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_vector_current();
+                state.increment_lamport();
+                (
+                    state.get_lamport(),
+                    state.get_site_id().to_string(),
+                    state.get_vector().clone(),
+                )
+            };
 
-        MessageInfo::Transfer(transfer) => {
             super::db::create_transaction(
                 &transfer.name,
                 &transfer.beneficiary,
@@ -338,8 +374,18 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
+        crate::message::MessageInfo::Pay(pay) => {
+            let (local_lamport_time, node, local_vc_clock) = {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_vector_current();
+                state.increment_lamport();
+                (
+                    state.get_lamport(),
+                    state.get_site_id().to_string(),
+                    state.get_vector().clone(),
+                )
+            };
 
-        MessageInfo::Pay(pay) => {
             super::db::create_transaction(
                 &pay.name,
                 "NULL",
@@ -350,8 +396,18 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
+        crate::message::MessageInfo::Refund(refund) => {
+            let (local_lamport_time, node, local_vc_clock) = {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_vector_current();
+                state.increment_lamport();
+                (
+                    state.get_lamport(),
+                    state.get_site_id().to_string(),
+                    state.get_vector().clone(),
+                )
+            };
 
-        MessageInfo::Refund(refund) => {
             super::db::refund_transaction(
                 refund.transac_time,
                 &refund.transac_node.as_str(),
@@ -360,39 +416,41 @@ pub async fn handle_command_from_network(
                 &local_vc_clock,
             )?;
         }
-
-        MessageInfo::SnapshotResponse(data) => {
-            //do nothing
-            log::info!("Snapshot response: {:?}", data);
+        crate::message::MessageInfo::SnapshotResponse(_) => {
+            // Handle snapshot response
         }
-
-        MessageInfo::None => {
-            log::info!("❓ Received None message");
+        crate::message::MessageInfo::None => {
+            // No action needed
         }
     }
+
     Ok(())
 }
 
-#[cfg(feature = "server")]
+/// Prompts the user for input with a label
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
-    let mut input = String::new();
-    print!("{label} > ");
+    print!("{}: ", label);
     io::stdout().flush().unwrap();
+    let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     input.trim().to_string()
 }
 
-#[cfg(feature = "server")]
+/// Prompts the user for input and parses it to a specific type
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where
     T::Err: std::fmt::Debug,
 {
+    use std::io::{self, Write};
     loop {
-        let input = prompt(label);
-        match input.parse::<T>() {
-            Ok(value) => break value,
-            Err(_) => println!("Invalid input. Try again."),
+        print!("{}: ", label);
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        match input.trim().parse() {
+            Ok(value) => return value,
+            Err(e) => println!("Invalid input: {:?}", e),
         }
     }
 }

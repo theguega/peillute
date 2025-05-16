@@ -1,6 +1,22 @@
+//! User management component for the Peillute application
+//!
+//! This module provides a component for displaying user information and
+//! managing user-specific actions, including viewing balance and accessing
+//! various transaction operations.
+
 use crate::Route;
 use dioxus::prelude::*;
 
+/// User management component
+///
+/// Displays user information and provides navigation to various transaction
+/// operations, including:
+/// - Viewing transaction history
+/// - Making withdrawals
+/// - Making payments
+/// - Processing refunds
+/// - Transferring money
+/// - Making deposits
 #[component]
 pub fn User(name: String) -> Element {
     let mut solde = use_signal(|| 0f64);
@@ -55,6 +71,7 @@ pub fn User(name: String) -> Element {
     }
 }
 
+/// Server function to retrieve a user's current balance
 #[server]
 async fn get_solde(name: String) -> Result<f64, ServerFnError> {
     use crate::db;
