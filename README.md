@@ -67,7 +67,15 @@ cargo run --release
 ### Use Arguments to Specify the Port and Peers
 
 ```sh
-cargo run --features server -- --port 8080 --peers 127.0.0.1:8081,127.0.0.1:8082
+# create a non perfect network with manual peers :
+# terminal 1 :
+RUST_LOG=debug cargo run --features server -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10002
+# terminal 2 :
+RUST_LOG=debug cargo run --features server -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002
+# terminal 3 :
+RUST_LOG=debug cargo run --features server -- --port 10002 --peers 127.0.0.1:10000,127.0.0.1:10001
+# terminal 4 :
+RUST_LOG=debug cargo run --features server -- --port 10003 --peers 127.0.0.1:10001,127.0.0.1:10002
 ```
 
 ### 2. Compile with Dioxus (Merges Client and Server)
@@ -81,11 +89,19 @@ dx bundle --release --platform web
 Manually run the server:
 
 ```sh
+# one instance
 cd target/dx/peillute/release/web
-RUST_LOG=info ./server
+./server
 
-# with specific port and peers:
-RUST_LOG=info ./server --port 8080 --peers 127.0.0.1:8081,127.0.0.1:8082
+# create a non perfect network with manual peers :
+# terminal 1 :
+RUST_LOG=debug ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10002
+# terminal 2 :
+RUST_LOG=debug ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002
+# terminal 3 :
+RUST_LOG=debug ./server --port 10002 --peers 127.0.0.1:10000,127.0.0.1:10001
+# terminal 4 :
+RUST_LOG=debug ./server --port 10003 --peers 127.0.0.1:10001,127.0.0.1:10002
 ```
 
 ## 🛠️ Development and Testing
