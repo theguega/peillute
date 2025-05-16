@@ -97,48 +97,81 @@ pub async fn spawn_writer_task(
 
 #[cfg(feature = "server")]
 /// Announces this node's presence to potential peers in the network
+/// If the user gave specific peers, we will only connect to those peers and not scan all the port range
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_addr, site_id, clocks) = {
+    let (local_addr, site_id, clocks, nb_peers, peer_addrs) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_local_addr().to_string(),
             state.get_site_id().to_string(),
             state.get_clock().clone(),
+            state.get_nb_sites_on_network(),
+            state.get_peers(),
         )
     };
 
     let mut handles = Vec::new();
 
-    for port in start_port..=end_port {
-        if port == selected_port {
-            continue;
+    if nb_peers > 0 {
+        log::debug!("Manually connecting to peers based on args");
+        for peer in peer_addrs.clone() {
+            let address = peer.to_string();
+            let local_addr = local_addr.clone();
+            let site_id = site_id.clone();
+            let clocks = clocks.clone();
+
+            let handle = tokio::spawn(async move {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_lamport();
+                state.increment_vector_current();
+
+                let _ = send_message(
+                    &address,
+                    MessageInfo::None,
+                    None,
+                    NetworkMessageCode::Discovery,
+                    &local_addr,
+                    &site_id,
+                    clocks,
+                )
+                .await;
+            });
+
+            handles.push(handle);
         }
-        let address = format!("{}:{}", ip, port);
-        let local_addr = local_addr.clone();
-        let site_id = site_id.clone();
-        let clocks = clocks.clone();
+    } else {
+        log::debug!("Looking for all ports to find potential peers");
+        for port in start_port..=end_port {
+            if port == selected_port {
+                continue;
+            }
+            let address = format!("{}:{}", ip, port);
+            let local_addr = local_addr.clone();
+            let site_id = site_id.clone();
+            let clocks = clocks.clone();
 
-        let handle = tokio::spawn(async move {
-            let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-            state.increment_lamport();
-            state.increment_vector_current();
+            let handle = tokio::spawn(async move {
+                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+                state.increment_lamport();
+                state.increment_vector_current();
 
-            let _ = send_message(
-                &address,
-                MessageInfo::None,
-                None,
-                NetworkMessageCode::Discovery,
-                &local_addr,
-                &site_id,
-                clocks,
-            )
-            .await;
-        });
+                let _ = send_message(
+                    &address,
+                    MessageInfo::None,
+                    None,
+                    NetworkMessageCode::Discovery,
+                    &local_addr,
+                    &site_id,
+                    clocks,
+                )
+                .await;
+            });
 
-        handles.push(handle);
+            handles.push(handle);
+        }
     }
 
     for handle in handles {
