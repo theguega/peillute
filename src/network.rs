@@ -3,6 +3,8 @@
 //! This module handles all network-related functionality, including peer discovery,
 //! message sending/receiving, and connection management in the distributed system.
 
+use crate::message::{MessageInfo, NetworkMessageCode};
+
 #[cfg(feature = "server")]
 /// Represents a connection to a peer node
 pub struct PeerConnection {
@@ -191,6 +193,13 @@ pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::Sock
     });
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct HalfWave {
+    pub id: String,
+    pub origin: String,
+}
+
+
 #[cfg(feature = "server")]
 /// Handles incoming messages from a peer connection
 pub async fn handle_message(
@@ -310,6 +319,61 @@ pub async fn handle_message(
                 log::debug!("Sync message received: {:?}", message);
                 on_sync().await;
             }
+            NetworkMessageCode::HalfWaveBroadcast => {
+                if let MessageInfo::HalfWave { id, payload } = message.info {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+
+                    if state.has_already_received_half_wave(&id) {
+                        log::debug!("Already received HalfWave {}", id);
+                        return Ok(());
+                    }
+
+                    log::info!("Received HalfWave {}: {}", id, payload);
+                    state.mark_half_wave_received(&id);
+                    state.mark_half_wave_sent(&id);
+
+                    let local_addr = state.get_local_addr();
+                    let site_id = state.get_site_id().to_string();
+                    let clock = state.get_clock().clone();
+                    let peers = state.get_peers();
+
+                    drop(state);
+
+                    for peer in peers {
+                        if peer != addr {
+                            let _ = send_message(
+                                &peer.to_string(),
+                                MessageInfo::HalfWave {
+                                    id: id.clone(),
+                                    payload: payload.clone(),
+                                },
+                                None,
+                                NetworkMessageCode::HalfWaveBroadcast,
+                                &local_addr,
+                                &site_id,
+                                clock.clone(),
+                            ).await;
+                        }
+                    }
+
+                    let _ = send_message(
+                        &addr.to_string(),
+                        MessageInfo::HalfWaveAck { id: id.clone() },
+                        None,
+                        NetworkMessageCode::HalfWaveAck,
+                        &local_addr,
+                        &site_id,
+                        clock.clone(),
+                    ).await;
+                }
+            }
+
+            NetworkMessageCode::HalfWaveAck => {
+                if let MessageInfo::HalfWaveAck { id } = message.info {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.mark_half_wave_ack(&id, &addr);
+                }
+            }
         }
 
         let mut state = LOCAL_APP_STATE.lock().await;
@@ -318,6 +382,45 @@ pub async fn handle_message(
         state.update_vector(&message.clock.get_vector());
     }
 }
+
+pub async fn start_half_wave_broadcast() {
+    use crate::state::LOCAL_APP_STATE;
+
+    let mut state = LOCAL_APP_STATE.lock().await;
+
+    state.increment_lamport();
+    state.increment_vector_current();
+    let clock = state.get_clock().clone();
+    let site_id = state.get_site_id().to_string();
+    let local_addr = state.get_local_addr();
+    let peers = state.get_peers();
+
+    let msg_id = format!("{}-{}", site_id, clock.get_lamport());
+
+    state.mark_half_wave_sent(&msg_id);
+    state.mark_half_wave_received(&msg_id);
+
+    drop(state);
+
+    for peer in peers {
+        let _ = send_message(
+            &peer.to_string(),
+            MessageInfo::HalfWave {
+                id: msg_id.clone(),
+                payload: "Hello from wave!".into(),
+            },
+            None,
+            NetworkMessageCode::HalfWaveBroadcast,
+            &local_addr,
+            &site_id,
+            clock.clone(),
+        )
+        .await;
+    }
+
+    log::info!("Sent HalfWave {}", msg_id);
+}
+
 
 #[cfg(feature = "server")]
 pub async fn send_message(

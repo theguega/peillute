@@ -85,7 +85,7 @@ RUST_LOG=debug cargo run --features server -- --port 10003 --peers 127.0.0.1:100
 # terminal 1
 RUST_LOG=debug cargo run --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003
 # terminal 2
-RUST_LOG=debug cargo run --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002, 127.0.0.1:10004
+RUST_LOG=debug cargo run --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004
 # terminal 3
 RUST_LOG=debug cargo run --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003
 # terminal 4
@@ -93,7 +93,7 @@ RUST_LOG=debug cargo run --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002
 # terminal 5
 RUST_LOG=debug cargo run --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005
 # terminal 6
-RUST_LOG=debug cargo run --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006
+RUST_LOG=debug cargo run --port 10005 --peers 127.0.0.1:10004
 # terminal 7
 RUST_LOG=debug cargo run --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008
 # terminal 8
