@@ -60,7 +60,6 @@ impl NetworkMessageCode {
             NetworkMessageCode::SnapshotResponse => "snapshot_response",
             NetworkMessageCode::HalfWaveBroadcast => "half_wave_broadcast",
             NetworkMessageCode::HalfWaveAck => "half_wave_ack",
-
         }
     }
 

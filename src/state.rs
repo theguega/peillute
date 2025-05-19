@@ -168,14 +168,12 @@ impl AppState {
     }
 
     pub fn has_already_received_half_wave(&self, msg_id: &str) -> bool {
-    self.half_wave.received.contains(msg_id)
+        self.half_wave.received.contains(msg_id)
     }
 
     pub fn mark_half_wave_received(&mut self, msg_id: &str) {
         self.half_wave.received.insert(msg_id.to_string());
     }
-
-    
 }
 
 // Singleton

@@ -276,7 +276,6 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("Launching Half-Wave Broadcast...");
             crate::network::start_half_wave_broadcast().await;
         }
-        
 
         Command::Info => {
             let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
@@ -325,8 +324,8 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
 /// Handles commands received from the network
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    clock : crate::clock::Clock,
-    site : String,
+    clock: crate::clock::Clock,
+    site: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match msg {
         crate::message::MessageInfo::HalfWave { .. } => {
@@ -339,7 +338,6 @@ pub async fn handle_command_from_network(
             super::db::create_user(&create_user.name)?;
         }
         crate::message::MessageInfo::Deposit(deposit) => {
- 
             let lamport_time = clock.get_lamport();
             let vc_clock = clock.get_vector();
             super::db::deposit(

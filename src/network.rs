@@ -3,8 +3,6 @@
 //! This module handles all network-related functionality, including peer discovery,
 //! message sending/receiving, and connection management in the distributed system.
 
-use crate::message::{MessageInfo, NetworkMessageCode};
-
 #[cfg(feature = "server")]
 /// Represents a connection to a peer node
 pub struct PeerConnection {
@@ -199,7 +197,6 @@ pub struct HalfWave {
     pub origin: String,
 }
 
-
 #[cfg(feature = "server")]
 /// Handles incoming messages from a peer connection
 pub async fn handle_message(
@@ -354,7 +351,8 @@ pub async fn handle_message(
                                 &local_addr,
                                 &site_id,
                                 clock.clone(),
-                            ).await;
+                            )
+                            .await;
                         }
                     }
 
@@ -366,7 +364,8 @@ pub async fn handle_message(
                         &local_addr,
                         &site_id,
                         clock.clone(),
-                    ).await;
+                    )
+                    .await;
                 }
             }
 
@@ -386,6 +385,7 @@ pub async fn handle_message(
 }
 
 pub async fn start_half_wave_broadcast() {
+    use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
 
     let mut state = LOCAL_APP_STATE.lock().await;
@@ -422,7 +422,6 @@ pub async fn start_half_wave_broadcast() {
 
     log::info!("Sent HalfWave {}", msg_id);
 }
-
 
 #[cfg(feature = "server")]
 pub async fn send_message(
@@ -467,6 +466,7 @@ pub async fn send_message(
     };
 
     sender.send(buf).await?;
+
     log::debug!("Sent message {:?} to {}", &msg, address);
     Ok(())
 }
