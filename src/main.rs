@@ -35,7 +35,7 @@ struct Args {
     ip: String,
 
     /// ID for the batabase path
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 0)]
     db_id: u16,
 }
 

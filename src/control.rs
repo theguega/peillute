@@ -101,9 +101,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             super::db::create_user(&name)?;
 
             use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::CreateUser),
                 NetworkMessageCode::Transaction,
                 MessageInfo::CreateUser(CreateUser::new(name.clone())),
@@ -137,9 +137,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             )?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::Deposit),
                 NetworkMessageCode::Transaction,
                 MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
@@ -161,9 +161,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::Withdraw),
                 NetworkMessageCode::Transaction,
                 MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
@@ -189,9 +189,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::Transfer),
                 NetworkMessageCode::Transaction,
                 MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
@@ -213,9 +213,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::Pay),
                 NetworkMessageCode::Transaction,
                 MessageInfo::Pay(Pay::new(name.clone(), amount)),
@@ -238,9 +238,9 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             )?;
 
             use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            use crate::network::send_message_to_all;
+            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all(
+            let _ = send_message_to_all_peers(
                 Some(Command::Refund),
                 NetworkMessageCode::Transaction,
                 MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
@@ -324,9 +324,28 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
 /// Handles commands received from the network
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    clock: crate::clock::Clock,
+    received_clock: crate::clock::Clock,
     site: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
+    // at reception, if clock of the site id is greater than our receiver clock, we have to prodcast the message
+    // or if the vector clock for this site id is not present, we have to broadcast the message
+    // else, this message have already been received, we can ignore it
+    let local_clocks = {
+        let state = LOCAL_APP_STATE.lock().await;
+        state.get_clock().clone()
+    };
+    if let Some(local_version_of_received_clock) = local_clocks.get_vector().get(&site) {
+        log::debug! {"local version of received clock: {local_version_of_received_clock}"};
+        log::debug! {"received clock: {}", received_clock.get_lamport()};
+        if local_version_of_received_clock >= &received_clock.get_lamport() {
+            log::debug!("command already received, skipping");
+            return Ok(());
+        };
+    }
+
+    log::debug!("handle and broadcast to other nodes");
+
     match msg {
         crate::message::MessageInfo::HalfWave { .. } => {
             // Handle HalfWave message
@@ -336,10 +355,24 @@ pub async fn handle_command_from_network(
         }
         crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
+            use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::CreateUser),
+                NetworkMessageCode::Transaction,
+                MessageInfo::CreateUser(CreateUser::new(create_user.name.clone())),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::Deposit(deposit) => {
-            let lamport_time = clock.get_lamport();
-            let vc_clock = clock.get_vector();
+            use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
+            let lamport_time = received_clock.get_lamport();
+            let vc_clock = received_clock.get_vector();
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
@@ -347,10 +380,23 @@ pub async fn handle_command_from_network(
                 site.as_str(),
                 &vc_clock,
             )?;
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::Deposit),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Deposit(Deposit::new(deposit.name.clone(), deposit.amount)),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::Withdraw(withdraw) => {
-            let lamport_time = clock.get_lamport();
-            let vc_clock = clock.get_vector();
+            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
+            let lamport_time = received_clock.get_lamport();
+            let vc_clock = received_clock.get_vector();
 
             super::db::withdraw(
                 &withdraw.name,
@@ -359,10 +405,23 @@ pub async fn handle_command_from_network(
                 site.as_str(),
                 &vc_clock,
             )?;
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::Withdraw),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Withdraw(Withdraw::new(withdraw.name.clone(), withdraw.amount)),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::Transfer(transfer) => {
-            let lamport_time = clock.get_lamport();
-            let vc_clock = clock.get_vector();
+            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
+            let lamport_time = received_clock.get_lamport();
+            let vc_clock = received_clock.get_vector();
 
             super::db::create_transaction(
                 &transfer.name,
@@ -373,10 +432,27 @@ pub async fn handle_command_from_network(
                 "",
                 &vc_clock,
             )?;
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::Transfer),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Transfer(Transfer::new(
+                    transfer.name.clone(),
+                    transfer.beneficiary.clone(),
+                    transfer.amount,
+                )),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::Pay(pay) => {
-            let lamport_time = clock.get_lamport();
-            let vc_clock = clock.get_vector();
+            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
+            let lamport_time = received_clock.get_lamport();
+            let vc_clock = received_clock.get_vector();
 
             super::db::create_transaction(
                 &pay.name,
@@ -387,10 +463,23 @@ pub async fn handle_command_from_network(
                 "",
                 &vc_clock,
             )?;
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::Pay),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Pay(Pay::new(pay.name.clone(), pay.amount)),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::Refund(refund) => {
-            let lamport_time = clock.get_lamport();
-            let vc_clock = clock.get_vector();
+            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
+            let lamport_time = received_clock.get_lamport();
+            let vc_clock = received_clock.get_vector();
 
             super::db::refund_transaction(
                 refund.transac_time,
@@ -399,6 +488,22 @@ pub async fn handle_command_from_network(
                 site.as_str(),
                 &vc_clock,
             )?;
+
+            if let Err(e) = crate::network::broadcast_message_to_all_peers(
+                Some(Command::Refund),
+                NetworkMessageCode::Transaction,
+                MessageInfo::Refund(Refund::new(
+                    refund.name.clone(),
+                    refund.transac_time,
+                    refund.transac_node.clone(),
+                )),
+                received_clock.clone(),
+                site.clone(),
+            )
+            .await
+            {
+                log::error!("Failed to broadcast message to all peers: {e}");
+            }
         }
         crate::message::MessageInfo::SnapshotResponse(_) => {
             // Handle snapshot response

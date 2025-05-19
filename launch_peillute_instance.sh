@@ -71,28 +71,28 @@ run_demo() {
     # Open 10 terminals with different arguments
     if [ "$(uname)" == "Darwin" ]; then
         # macOS
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 10\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 0\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 1\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 2\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 3\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 5\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 7\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 8\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 9\""
     else
         # Linux
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 10; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 0; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 1; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 2; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 3; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 5; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 7; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 8; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 9; exec bash"
     fi
 }
 
@@ -103,33 +103,46 @@ run_demo_cli() {
     # Open 10 terminals with different arguments
     if [ "$(uname)" == "Darwin" ]; then
         # macOS
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9\""
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 10\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 0\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 1\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 2\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 3\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 5\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 7\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 8\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 9\""
     else
         # Linux
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9; exec bash"
-        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 10; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 0; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 1; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 2; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 3; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 5; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 7; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 8; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 9; exec bash"
     fi
+}
+
+# Function to clean db and snapshots
+clean_db_and_snapshots() {
+    echo "[*] Cleaning db and snapshots..."
+    rm -f peillute* 2>/dev/null
+    rm -f snapshot* 2>/dev/null
+    rm -f target/dx/peillute/release/web/peillute* 2>/dev/null
+    rm -f target/dx/peillute/release/web/snapshot* 2>/dev/null
 }
 
 # Check for -demo argument
 for arg in "$@"; do
+    if [ "$arg" == "-clean" ]; then
+        clean_db_and_snapshots
+        exit 0
+    fi
     if [ "$arg" == "-demo" ]; then
         run_demo
         exit 0

@@ -117,7 +117,7 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
     use crate::control::Command;
     use crate::db;
     use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-    use crate::network::send_message_to_all;
+    use crate::network::send_message_to_all_peers;
 
     if name == "" {
         return Err(ServerFnError::new("User name cannot be empty."));
@@ -125,7 +125,7 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
 
     db::create_user(&name)?;
 
-    if let Err(e) = send_message_to_all(
+    if let Err(e) = send_message_to_all_peers(
         Some(Command::CreateUser),
         NetworkMessageCode::Transaction,
         MessageInfo::CreateUser(CreateUser::new(name.clone())),
