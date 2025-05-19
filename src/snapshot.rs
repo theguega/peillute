@@ -139,7 +139,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         (
             st.get_site_id().to_string(),
             st.get_clock().clone(),
-            st.nb_sites_on_network + 1,
+            st.nb_neighbors + 1,
         )
     };
 

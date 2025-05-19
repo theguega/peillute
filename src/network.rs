@@ -189,7 +189,7 @@ pub async fn handle_message(
 
         log::debug!("Received {} bytes from {}", n, addr);
 
-        let message: &Message = match decode::from_slice(&buf[..n]) {
+        let message: Message = match decode::from_slice(&buf[..n]) {
             Ok(msg) => msg,
             Err(e) => {
                 log::error!("Error decoding message: {}", e);
@@ -225,7 +225,7 @@ pub async fn handle_message(
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
                 #[allow(unused)]
-                if let Some(cmd) = *message.command {
+                if message.command.is_some() {
 
                     let site_id = {
                         let mut state = LOCAL_APP_STATE.lock().await;
@@ -237,7 +237,7 @@ pub async fn handle_message(
 
                     use crate::control::handle_command_from_network;
                     if let Err(e) = handle_command_from_network(
-                        *message.info,
+                        message.info.clone(),
                         &site_id
                     )
                     .await{
@@ -250,26 +250,26 @@ pub async fn handle_message(
                             state.set_parent_address(message.sender_addr);
                             state.nb_of_attended_neighbors -= 1;
                             if state.nb_of_attended_neighbors > 0 {
-                                diffuse_message(message);
+                                diffuse_message(&message).await?;
                             }else{
                                 // Acquit message to parent
-                                send_message(state.get_parent_address().into(),
+                                send_message(&state.get_parent_address().to_string(),
                                              MessageInfo::None,
                                              None,
                                              NetworkMessageCode::TransactionAcknowledgement,
-                                             state.get_local_addr().into(),
-                                             state.get_site_id().into(),
+                                             &state.get_local_addr().to_string(),
+                                             &state.get_site_id().to_string(),
                                              state.get_clock().clone()
                                 ).await?;
                             }
                         }else{
                             // Acquit message to parent
-                            send_message(state.get_parent_address().into(),
+                            send_message(&state.get_parent_address().to_string(),
                                          MessageInfo::None,
                                          None,
                                          NetworkMessageCode::TransactionAcknowledgement,
-                                         state.get_local_addr().into(),
-                                         state.get_site_id().into(),
+                                         &state.get_local_addr().to_string(),
+                                         &state.get_site_id().to_string(),
                                          state.get_clock().clone()
                             ).await?;
                         }
@@ -289,12 +289,12 @@ pub async fn handle_message(
                     if state.parent_address == state.local_addr {
                         // diffusion terminée
                     }else{
-                        send_message(state.get_parent_address().into(),
+                        send_message(&state.get_parent_address().to_string(),
                                      MessageInfo::None,
                                      None,
                                      NetworkMessageCode::TransactionAcknowledgement,
-                                     state.get_local_addr().into(),
-                                     state.get_site_id().into(),
+                                     &state.get_local_addr().to_string(),
+                                     &state.get_site_id().to_string(),
                                      state.get_clock().clone()
                         ).await?;
                     }

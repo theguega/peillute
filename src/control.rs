@@ -119,13 +119,15 @@ pub async fn handle_command_from_cli(
             // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
-            let mut msg : Message;
-            msg.command = Option::from(Command::Deposit);
-            msg.info = MessageInfo::Deposit(Deposit::new(name.clone(), amount));
-            msg.code = NetworkMessageCode::Transaction;
-            msg.clock = local_clk;
-            msg.sender_addr = local_addr.parse().unwrap();
-            msg.sender_id = local_addr.parse().unwrap();
+
+            let msg = Message {
+                command: Some(Command::Deposit),
+                info: MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk.clone(),
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: local_addr.parse().unwrap(),
+            };
 
             diffuse_message(&msg).await?;
         }
@@ -153,13 +155,15 @@ pub async fn handle_command_from_cli(
             // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
-            let mut msg : Message;
-            msg.command = Option::from(Command::Withdraw);
-            msg.info = MessageInfo::Withdraw(Withdraw::new(name.clone(), amount));
-            msg.code = NetworkMessageCode::Transaction;
-            msg.clock = local_clk;
-            msg.sender_addr = local_addr.parse().unwrap();
-            msg.sender_id = local_addr.parse().unwrap();
+
+            let msg = Message {
+                command: Some(Command::Withdraw),
+                info: MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk,
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: local_addr.parse().unwrap(),
+            };
 
             diffuse_message(&msg).await?;
         }
@@ -196,13 +200,15 @@ pub async fn handle_command_from_cli(
             // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
-            let mut msg : Message;
-            msg.command = Option::from(Command::Transfer);
-            msg.info = MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount));
-            msg.code = NetworkMessageCode::Transaction;
-            msg.clock = local_clk;
-            msg.sender_addr = local_addr.parse().unwrap();
-            msg.sender_id = local_addr.parse().unwrap();
+
+            let msg = Message {
+                command: Some(Command::Transfer),
+                info: MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk,
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: local_addr.parse().unwrap(),
+            };
 
             diffuse_message(&msg).await?;
         }
@@ -235,13 +241,15 @@ pub async fn handle_command_from_cli(
             // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
-            let mut msg : Message;
-            msg.command = Option::from(Command::Pay);
-            msg.info = MessageInfo::Pay(Pay::new(name.clone(), amount));
-            msg.code = NetworkMessageCode::Transaction;
-            msg.clock = local_clk;
-            msg.sender_addr = local_addr.parse().unwrap();
-            msg.sender_id = local_addr.parse().unwrap();
+
+            let msg = Message {
+                command: Some(Command::Pay),
+                info: MessageInfo::Pay(Pay::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk,
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: local_addr.parse().unwrap(),
+            };
 
             diffuse_message(&msg).await?;
         }
@@ -268,17 +276,19 @@ pub async fn handle_command_from_cli(
             //     MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
             // )
             // .await?;
-
-            // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
-            let mut msg : Message;
-            msg.command = Option::from(Command::Pay);
-            msg.info = MessageInfo::Refund(Refund::new(name, transac_time, transac_node));
-            msg.code = NetworkMessageCode::Transaction;
-            msg.clock = local_clk;
-            msg.sender_addr = local_addr.parse().unwrap();
-            msg.sender_id = local_addr.parse().unwrap();
+
+            let msg = Message {
+                command: Some(Command::Refund),
+                info: MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk,
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: local_addr.parse().unwrap(),
+            };
+
+            diffuse_message(&msg).await?;
 
             diffuse_message(&msg).await?;
         }
@@ -310,7 +320,7 @@ pub async fn handle_command_from_cli(
                     state.get_site_id().to_string(),
                     state.get_peers(),
                     state.get_clock().clone(),
-                    state.nb_sites_on_network,
+                    state.nb_neighbors,
                 )
             };
 
