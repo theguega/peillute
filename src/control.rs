@@ -55,6 +55,8 @@ pub enum Command {
     Error(String),
     /// Start a system snapshot
     Snapshot,
+    /// Wave command
+    Wave,
 }
 
 #[cfg(feature = "server")]
@@ -73,6 +75,7 @@ fn parse_command(input: &str) -> Command {
         "/help" => Command::Help,
         "/info" => Command::Info,
         "/start_snapshot" => Command::Snapshot,
+        "/wave" => Command::Wave,
         other => Command::Unknown(other.to_string()),
     }
 }
@@ -259,6 +262,8 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("/refund           - Refund a transaction");
             println!("/info             - Show system information");
             println!("/start_snapshot   - Start a snapshot");
+            println!("/wave             - Launch a Half-Wave broadcast");
+            println!("/help             - Show this help message");
             println!("----------------------------------------");
         }
 
@@ -266,6 +271,12 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("📸 Starting snapshot...");
             super::snapshot::start_snapshot().await?;
         }
+
+        Command::Wave => {
+            println!("Launching Half-Wave Broadcast...");
+            crate::network::start_half_wave_broadcast().await;
+        }
+        
 
         Command::Info => {
             let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
@@ -318,6 +329,12 @@ pub async fn handle_command_from_network(
     site : String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match msg {
+        crate::message::MessageInfo::HalfWave { .. } => {
+            // Handle HalfWave message
+        }
+        crate::message::MessageInfo::HalfWaveAck { .. } => {
+            // Handle HalfWaveAck message
+        }
         crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
         }
