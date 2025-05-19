@@ -58,6 +58,8 @@ impl NetworkMessageCode {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Message {
     pub sender_id: String,
+    pub message_initiator_id: String,
+    pub message_initiator_addr: std::net::SocketAddr,
     pub sender_addr: std::net::SocketAddr,
     pub clock: crate::clock::Clock,
     pub command: Option<crate::control::Command>,
@@ -181,6 +183,8 @@ mod tests {
         let message = Message {
             sender_id: "A".to_string(),
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
+            message_initiator_id: "A".to_string(),
+            message_initiator_addr : "127.0.0.1:8080".parse().unwrap(),
             clock: clock,
             command: None,
             info: MessageInfo::None,

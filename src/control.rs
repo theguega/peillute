@@ -126,7 +126,9 @@ pub async fn handle_command_from_cli(
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk.clone(),
                 sender_addr: local_addr.parse().unwrap(),
-                sender_id: local_addr.parse().unwrap(),
+                sender_id: node.to_string(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
             };
 
             diffuse_message(&msg).await?;
@@ -162,7 +164,9 @@ pub async fn handle_command_from_cli(
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk,
                 sender_addr: local_addr.parse().unwrap(),
-                sender_id: local_addr.parse().unwrap(),
+                sender_id: node.to_string(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
             };
 
             diffuse_message(&msg).await?;
@@ -207,7 +211,9 @@ pub async fn handle_command_from_cli(
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk,
                 sender_addr: local_addr.parse().unwrap(),
-                sender_id: local_addr.parse().unwrap(),
+                sender_id: node.to_string(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
             };
 
             diffuse_message(&msg).await?;
@@ -248,7 +254,9 @@ pub async fn handle_command_from_cli(
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk,
                 sender_addr: local_addr.parse().unwrap(),
-                sender_id: local_addr.parse().unwrap(),
+                sender_id: node.parse().unwrap(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
             };
 
             diffuse_message(&msg).await?;
@@ -285,7 +293,9 @@ pub async fn handle_command_from_cli(
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk,
                 sender_addr: local_addr.parse().unwrap(),
-                sender_id: local_addr.parse().unwrap(),
+                sender_id: node.parse().unwrap(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
             };
 
             diffuse_message(&msg).await?;

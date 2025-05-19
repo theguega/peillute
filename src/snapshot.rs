@@ -45,12 +45,12 @@ impl GlobalSnapshot {
 }
 
 pub struct SnapshotManager {
-    pub expected: usize,
+    pub expected: i64,
     pub received: Vec<LocalSnapshot>,
 }
 
 impl SnapshotManager {
-    pub fn new(expected: usize) -> Self {
+    pub fn new(expected: i64) -> Self {
         Self {
             expected,
             received: Vec::new(),
@@ -64,7 +64,7 @@ impl SnapshotManager {
             tx_log: resp.tx_log.into_iter().collect(),
         });
 
-        if self.received.len() < self.expected {
+        if (self.received.len() as i64) < self.expected {
             return None;
         }
 
