@@ -383,7 +383,8 @@ pub async fn handle_message(
         state.update_vector(&message.clock.get_vector());
     }
 }
-
+#[cfg(feature = "server")]
+/// Starts a half-wave broadcast
 pub async fn start_half_wave_broadcast() {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -394,9 +395,6 @@ pub async fn start_half_wave_broadcast() {
     state.increment_vector_current();
     let clock = state.get_clock().clone();
     let site_id = state.get_site_id().to_string();
-    let local_addr = state.get_local_addr();
-    let peers = state.get_peers();
-
     let msg_id = format!("{}-{}", site_id, clock.get_lamport());
 
     state.mark_half_wave_sent(&msg_id);
@@ -404,21 +402,15 @@ pub async fn start_half_wave_broadcast() {
 
     drop(state);
 
-    for peer in peers {
-        let _ = send_message(
-            &peer.to_string(),
-            MessageInfo::HalfWave {
-                id: msg_id.clone(),
-                payload: "Hello from wave!".into(),
-            },
-            None,
-            NetworkMessageCode::HalfWaveBroadcast,
-            &local_addr,
-            &site_id,
-            clock.clone(),
-        )
-        .await;
-    }
+    let _ = send_message_to_all(
+        None,
+        NetworkMessageCode::HalfWaveBroadcast,
+        MessageInfo::HalfWave {
+            id: msg_id.clone(),
+            payload: "Hello from wave!".into(),
+        },
+    )
+    .await;
 
     log::info!("Sent HalfWave {}", msg_id);
 }
@@ -472,6 +464,7 @@ pub async fn send_message(
 }
 
 #[cfg(feature = "server")]
+/// Send a message to all peers
 pub async fn send_message_to_all(
     command: Option<crate::control::Command>,
     code: crate::message::NetworkMessageCode,

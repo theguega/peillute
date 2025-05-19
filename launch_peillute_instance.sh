@@ -128,8 +128,21 @@ run_demo_cli() {
     fi
 }
 
+# Function to clean db and snapshots
+clean_db_and_snapshots() {
+    echo "[*] Cleaning db and snapshots..."
+    rm peillute*
+    rm snapshot*
+    rm target/dx/peillute/release/web/peillute*
+    rm target/dx/peillute/release/web/snapshot*
+}
+
 # Check for -demo argument
 for arg in "$@"; do
+    if [ "$arg" == "-clean" ]; then
+        clean_db_and_snapshots
+        exit 0
+    fi
     if [ "$arg" == "-demo" ]; then
         run_demo
         exit 0

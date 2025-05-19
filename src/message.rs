@@ -82,7 +82,6 @@ impl NetworkMessageCode {
     }
 }
 
-// TODO : add message status (failed, success, etc.)
 #[cfg(feature = "server")]
 /// Represents a message exchanged between nodes in the network
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

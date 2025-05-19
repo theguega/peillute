@@ -68,15 +68,24 @@ async fn get_nb_sites() -> Result<i64, ServerFnError> {
     Ok(state.nb_sites_on_network as i64)
 }
 
+/// Ask for a snapshot
+#[server]
+async fn ask_for_snapshot() -> Result<(), ServerFnError> {
+    let _ = crate::snapshot::start_snapshot().await;
+    Ok(())
+}
+
 /// System information component
 ///
 /// Displays real-time information about the distributed system, including:
+/// - Database info
 /// - Local network address
 /// - Site ID
 /// - Lamport timestamp
 /// - Vector clock state
 /// - Number of connected sites
 /// - List of connected peers
+/// - Snapshot button
 #[component]
 pub fn Info() -> Element {
     let mut local_addr = use_signal(|| "".to_string());
@@ -169,6 +178,23 @@ pub fn Info() -> Element {
                             li { key: "{peer_address}", "{peer_address}" }
                         }
                     }
+                }
+            }
+
+            div {
+                class: "info-item",
+                style: "display: flex; justify-content: center;",
+                button {
+                    class: "snapshot",
+                    r#type: "submit",
+                    onclick: move |_| {
+                        async move {
+                            if let Err(e) = ask_for_snapshot().await {
+                                log::error!("Error taking snapshot: {e}");
+                            }
+                        }
+                    },
+                    "Take a snapshot"
                 }
             }
         }
