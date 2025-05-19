@@ -402,7 +402,7 @@ pub async fn start_half_wave_broadcast() {
 
     drop(state);
 
-    let _ = send_message_to_all(
+    let _ = send_message_to_all_peers(
         None,
         NetworkMessageCode::HalfWaveBroadcast,
         MessageInfo::HalfWave {
@@ -423,7 +423,7 @@ pub async fn send_message(
     code: crate::message::NetworkMessageCode,
     local_addr: &str,
     local_site: &str,
-    clock: crate::clock::Clock,
+    sender_clock: crate::clock::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::Message;
     use rmp_serde::encode;
@@ -439,7 +439,7 @@ pub async fn send_message(
     let msg = Message {
         sender_id: local_site.parse().unwrap(),
         sender_addr: local_addr.parse().unwrap(),
-        clock: clock.clone(),
+        clock: sender_clock.clone(),
         command,
         info,
         code,
@@ -452,8 +452,17 @@ pub async fn send_message(
     let sender = match manager.get_sender(&addr) {
         Some(s) => s,
         None => {
-            manager.create_connection(addr).await?;
-            manager.get_sender(&addr).unwrap()
+            if let Err(e) = manager.create_connection(addr).await {
+                return Err(format!("error with connection to {}: {}", address, e).into());
+            }
+            match manager.get_sender(&addr) {
+                Some(s) => s,
+                None => {
+                    let err_msg = format!("Sender not found after connecting to {}", address);
+                    log::error!("{}", err_msg);
+                    return Err(err_msg.into());
+                }
+            }
         }
     };
 
@@ -464,8 +473,41 @@ pub async fn send_message(
 }
 
 #[cfg(feature = "server")]
+/// Broadcast a message to all peers received from another node
+pub async fn broadcast_message_to_all_peers(
+    command: Option<crate::control::Command>,
+    code: crate::message::NetworkMessageCode,
+    info: crate::message::MessageInfo,
+    sender_clock: crate::clock::Clock,
+    sender_site_id: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_addr, peer_addrs) = {
+        let state = LOCAL_APP_STATE.lock().await;
+        (state.get_local_addr().to_string(), state.get_peers())
+    };
+
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        send_message(
+            &peer_addr_str,
+            info.clone(),
+            command.clone(),
+            code.clone(),
+            &local_addr,
+            &sender_site_id,
+            sender_clock.clone(),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "server")]
 /// Send a message to all peers
-pub async fn send_message_to_all(
+pub async fn send_message_to_all_peers(
     command: Option<crate::control::Command>,
     code: crate::message::NetworkMessageCode,
     info: crate::message::MessageInfo,

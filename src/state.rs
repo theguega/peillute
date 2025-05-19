@@ -17,7 +17,7 @@ pub struct AppState {
     pub local_addr: std::net::SocketAddr,
 
     /// Half-wave propagation state
-    pub half_wave: HalfWaveState,
+    pub current_message_half_wave: HalfWaveState,
 
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
@@ -41,7 +41,7 @@ impl AppState {
             local_addr,
             peer_addrs,
             clocks,
-            half_wave: HalfWaveState {
+            current_message_half_wave: HalfWaveState {
                 pending: std::collections::HashMap::new(),
                 received: std::collections::HashSet::new(),
             },
@@ -153,26 +153,30 @@ impl AppState {
         for peer in &self.peer_addrs {
             set.insert(*peer);
         }
-        self.half_wave.pending.insert(msg_id.to_string(), set);
+        self.current_message_half_wave
+            .pending
+            .insert(msg_id.to_string(), set);
     }
 
     /// Marks a half-wave message as acknowledged by a specific peer
     pub fn mark_half_wave_ack(&mut self, msg_id: &str, from: &std::net::SocketAddr) {
-        if let Some(pending) = self.half_wave.pending.get_mut(msg_id) {
+        if let Some(pending) = self.current_message_half_wave.pending.get_mut(msg_id) {
             pending.remove(from);
             if pending.is_empty() {
                 log::info!("Half-wave message {} fully acknowledged!", msg_id);
-                self.half_wave.pending.remove(msg_id);
+                self.current_message_half_wave.pending.remove(msg_id);
             }
         }
     }
 
     pub fn has_already_received_half_wave(&self, msg_id: &str) -> bool {
-        self.half_wave.received.contains(msg_id)
+        self.current_message_half_wave.received.contains(msg_id)
     }
 
     pub fn mark_half_wave_received(&mut self, msg_id: &str) {
-        self.half_wave.received.insert(msg_id.to_string());
+        self.current_message_half_wave
+            .received
+            .insert(msg_id.to_string());
     }
 }
 
@@ -188,6 +192,7 @@ lazy_static::lazy_static! {
         )));
 }
 
+#[cfg(feature = "server")]
 #[derive(Debug)]
 pub struct HalfWaveState {
     pub pending: std::collections::HashMap<String, std::collections::HashSet<std::net::SocketAddr>>,

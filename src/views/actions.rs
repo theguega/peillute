@@ -683,7 +683,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all(
+    if let Err(e) = crate::network::send_message_to_all_peers(
         Some(crate::control::Command::Deposit),
         crate::message::NetworkMessageCode::Transaction,
         crate::message::MessageInfo::Deposit(crate::message::Deposit::new(user.clone(), amount)),
@@ -724,7 +724,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all(
+    if let Err(e) = crate::network::send_message_to_all_peers(
         Some(crate::control::Command::Withdraw),
         crate::message::NetworkMessageCode::Transaction,
         crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(user.clone(), amount)),
@@ -767,7 +767,7 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all(
+    if let Err(e) = crate::network::send_message_to_all_peers(
         Some(crate::control::Command::Pay),
         crate::message::NetworkMessageCode::Transaction,
         crate::message::MessageInfo::Pay(crate::message::Pay::new(user.clone(), amount)),
@@ -815,7 +815,7 @@ async fn transfer_from_user_to_user_server(
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all(
+    if let Err(e) = crate::network::send_message_to_all_peers(
         Some(crate::control::Command::Transfer),
         crate::message::NetworkMessageCode::Transaction,
         crate::message::MessageInfo::Transfer(crate::message::Transfer::new(
@@ -870,7 +870,7 @@ async fn refund_transaction_server(
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all(
+    if let Err(e) = crate::network::send_message_to_all_peers(
         Some(crate::control::Command::Refund),
         crate::message::NetworkMessageCode::Transaction,
         crate::message::MessageInfo::Refund(crate::message::Refund::new(

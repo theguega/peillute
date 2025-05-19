@@ -214,7 +214,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    crate::network::send_message_to_all(
+    crate::network::send_message_to_all_peers(
         None,
         crate::message::NetworkMessageCode::SnapshotRequest,
         crate::message::MessageInfo::None,
