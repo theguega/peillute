@@ -83,7 +83,9 @@ cargo run
 
 The following commands will create a non-perfect network (schema below) with manual peers:
 
-<img src="assets/doc/peillute_network.png" alt="Network" width="49%">
+<p align="center">
+  <img src="assets/doc/peillute_network.png" alt="Network" width="80%">
+</p>
 
 ```sh
 # Create a non-perfect network with manual peers:
