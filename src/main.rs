@@ -156,7 +156,7 @@ async fn main_loop(
             line = lines.next_line() => {
                 let command = run_cli(line);
                 if let Err(e) = handle_command_from_cli(command).await{
-                    log::error!("Error handling command:\n{}", e);
+                    log::error!("Error handling a cli command:\n{}", e);
                 }
                 print!("> ");
                 std_io::stdout().flush().unwrap();

@@ -38,6 +38,10 @@ pub enum NetworkMessageCode {
     SnapshotRequest,
     /// Message containing a state snapshot
     SnapshotResponse,
+    /// Broadcast for half-wave propagation
+    HalfWaveBroadcast,
+    /// Acknowledgment for half-wave propagation
+    HalfWaveAck,
 }
 
 #[cfg(feature = "server")]
@@ -54,6 +58,8 @@ impl NetworkMessageCode {
             NetworkMessageCode::Sync => "sync",
             NetworkMessageCode::SnapshotRequest => "snapshot_request",
             NetworkMessageCode::SnapshotResponse => "snapshot_response",
+            NetworkMessageCode::HalfWaveBroadcast => "half_wave_broadcast",
+            NetworkMessageCode::HalfWaveAck => "half_wave_ack",
         }
     }
 
@@ -69,6 +75,8 @@ impl NetworkMessageCode {
             "sync" => Some(NetworkMessageCode::Sync),
             "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
             "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
+            "half_wave_broadcast" => Some(NetworkMessageCode::HalfWaveBroadcast),
+            "half_wave_ack" => Some(NetworkMessageCode::HalfWaveAck),
             _ => None,
         }
     }
@@ -111,6 +119,10 @@ pub enum MessageInfo {
     Refund(Refund),
     /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
+    /// Broadcast payload for half-wave
+    HalfWave { id: String, payload: String },
+    /// Acknowledgment for half-wave completion
+    HalfWaveAck { id: String },
     /// No payload
     None,
 }

@@ -191,6 +191,12 @@ pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::Sock
     });
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct HalfWave {
+    pub id: String,
+    pub origin: String,
+}
+
 #[cfg(feature = "server")]
 /// Handles incoming messages from a peer connection
 pub async fn handle_message(
@@ -247,10 +253,12 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
+                let clock = message.clock.clone();
+                let site = message.sender_id.clone();
                 if let Some(_) = message.command {
                     use crate::control::handle_command_from_network;
-                    if let Err(e) = handle_command_from_network(message.info).await {
-                        log::error!("Error handling command:\n{}", e);
+                    if let Err(e) = handle_command_from_network(message.info, clock, site).await {
+                        log::error!("Error handling transaction network command:\n{}", e);
                     }
                 } else {
                     log::error!("Command is None for Transaction message");
@@ -310,6 +318,63 @@ pub async fn handle_message(
                 log::debug!("Sync message received: {:?}", message);
                 on_sync().await;
             }
+            NetworkMessageCode::HalfWaveBroadcast => {
+                if let MessageInfo::HalfWave { id, payload } = message.info {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+
+                    if state.has_already_received_half_wave(&id) {
+                        log::debug!("Already received HalfWave {}", id);
+                        return Ok(());
+                    }
+
+                    log::info!("Received HalfWave {}: {}", id, payload);
+                    state.mark_half_wave_received(&id);
+                    state.mark_half_wave_sent(&id);
+
+                    let local_addr = state.get_local_addr();
+                    let site_id = state.get_site_id().to_string();
+                    let clock = state.get_clock().clone();
+                    let peers = state.get_peers();
+
+                    drop(state);
+
+                    for peer in peers {
+                        if peer != addr {
+                            let _ = send_message(
+                                &peer.to_string(),
+                                MessageInfo::HalfWave {
+                                    id: id.clone(),
+                                    payload: payload.clone(),
+                                },
+                                None,
+                                NetworkMessageCode::HalfWaveBroadcast,
+                                &local_addr,
+                                &site_id,
+                                clock.clone(),
+                            )
+                            .await;
+                        }
+                    }
+
+                    let _ = send_message(
+                        &addr.to_string(),
+                        MessageInfo::HalfWaveAck { id: id.clone() },
+                        None,
+                        NetworkMessageCode::HalfWaveAck,
+                        &local_addr,
+                        &site_id,
+                        clock.clone(),
+                    )
+                    .await;
+                }
+            }
+
+            NetworkMessageCode::HalfWaveAck => {
+                if let MessageInfo::HalfWaveAck { id } = message.info {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    state.mark_half_wave_ack(&id, &addr);
+                }
+            }
         }
 
         let mut state = LOCAL_APP_STATE.lock().await;
@@ -317,6 +382,45 @@ pub async fn handle_message(
         state.increment_vector_current();
         state.update_vector(&message.clock.get_vector());
     }
+}
+
+pub async fn start_half_wave_broadcast() {
+    use crate::message::{MessageInfo, NetworkMessageCode};
+    use crate::state::LOCAL_APP_STATE;
+
+    let mut state = LOCAL_APP_STATE.lock().await;
+
+    state.increment_lamport();
+    state.increment_vector_current();
+    let clock = state.get_clock().clone();
+    let site_id = state.get_site_id().to_string();
+    let local_addr = state.get_local_addr();
+    let peers = state.get_peers();
+
+    let msg_id = format!("{}-{}", site_id, clock.get_lamport());
+
+    state.mark_half_wave_sent(&msg_id);
+    state.mark_half_wave_received(&msg_id);
+
+    drop(state);
+
+    for peer in peers {
+        let _ = send_message(
+            &peer.to_string(),
+            MessageInfo::HalfWave {
+                id: msg_id.clone(),
+                payload: "Hello from wave!".into(),
+            },
+            None,
+            NetworkMessageCode::HalfWaveBroadcast,
+            &local_addr,
+            &site_id,
+            clock.clone(),
+        )
+        .await;
+    }
+
+    log::info!("Sent HalfWave {}", msg_id);
 }
 
 #[cfg(feature = "server")]
@@ -362,6 +466,7 @@ pub async fn send_message(
     };
 
     sender.send(buf).await?;
+
     log::debug!("Sent message {:?} to {}", &msg, address);
     Ok(())
 }

@@ -51,6 +51,15 @@ async fn get_vector_clock() -> Result<String, ServerFnError> {
     Ok(vector_clock_string)
 }
 
+/// Server function to retrieve the database path
+#[server]
+async fn get_db_path() -> Result<String, ServerFnError> {
+    let conn = crate::db::DB_CONN.lock().unwrap();
+    let path = conn.path().unwrap();
+    //keep only the name of the file (after the last "/")
+    Ok(path.to_string().split("/").last().unwrap().to_string())
+}
+
 /// Server function to retrieve the number of sites in the network
 #[server]
 async fn get_nb_sites() -> Result<i64, ServerFnError> {
@@ -76,6 +85,7 @@ pub fn Info() -> Element {
     let mut lamport = use_signal(|| 0i64);
     let mut vector_clock = use_signal(|| "".to_string());
     let mut nb_sites = use_signal(|| 0i64);
+    let mut db_path = use_signal(|| "".to_string());
 
     use_future(move || async move {
         // Fetch local address
@@ -112,11 +122,21 @@ pub fn Info() -> Element {
         if let Ok(data) = get_nb_sites().await {
             nb_sites.set(data);
         } // else: nb_sites remains 0 or handle error
+
+        // Fetch database path
+        if let Ok(data) = get_db_path().await {
+            db_path.set(data);
+        } // else: db_path remains "" or handle error
     });
 
     rsx! {
         div { class: "info-panel", // You can style this class with CSS
             h2 { "System Information" }
+
+            div { class: "info-item",
+                strong { "💾 Database : " }
+                span { "{db_path}" }
+            }
 
             div { class: "info-item",
                 strong { "🌐 Local Address: " }
