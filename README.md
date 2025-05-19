@@ -1,10 +1,25 @@
-# Distributed Application in Rust
+# Peillute - A Distributed Cross-Platform Payment App in Rust
 
-This project is a distributed application in Rust using TCP for communication between nodes. The goal is to manually implement mechanisms such as vector clocks, replica management, and snapshot taking.
+This project aims to recreate "Pay'UTC" as a distributed application in Rust using TCP for communication between nodes. The goal is to maintain a common database on each node using what we learned through the course "SR05" at Université de Technologie de Compiègne.
 
-## Project documentation
+Each node can be launched independently; they will automatically connect to other instances present in the network and start exchanging data. We use vector clocks to ensure that transactions are processed in the right order, and we also use a snapshot mechanism to ensure that the database is always consistent.
 
-All documentation can be found here : [peillute](https://guegathe.gitlab.utc.fr/peillute/doc/peillute/)
+Through this project, we also wanted to create a "production-like" application with all the learning from our internship. That's why we implemented automatic tests, documentation generation, and CI/CD pipelines.
+
+Peillute is available as a terminal application but can also be accessed as a web app using [Dioxus](https://dioxuslabs.com/).
+
+Dioxus allows us to create a web application with a single binary that contains both the server (database, networking, etc.) and the client (UI).
+
+[TOC]
+
+<p align="center">
+  <img src="assets/doc/peillute_pay_page.jpeg" alt="Pay page" width="49%">
+  <img src="assets/doc/peillute_system_info.jpeg" alt="System Info" width="49%">
+</p>
+
+## Project Documentation
+
+The project documentation is automatically generated using `cargo doc` and deployed using the CI/CD pipeline. You can find it here: [peillute](https://guegathe.gitlab.utc.fr/peillute/doc/peillute/)
 
 ## 🚀 Installation
 
@@ -61,51 +76,51 @@ Refer to the [Dioxus Getting Started Guide](https://dioxuslabs.com/learn/0.6/get
 ### 1. Compile and Run Without the UI
 
 ```sh
-cargo run --release
+cargo run
 ```
 
-### Use Arguments to Specify the Port and Peers
+### Demonstration of Imperfect Network
+
+The following commands will create a non-perfect network (schema below) with manual peers:
+
+<img src="assets/doc/peillute_network.png" alt="Network" width="49%">
 
 ```sh
-# create a non perfect network with manual peers :
-# terminal 1 :
-RUST_LOG=debug cargo run --features server -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10002
-# terminal 2 :
-RUST_LOG=debug cargo run --features server -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002
-# terminal 3 :
-RUST_LOG=debug cargo run --features server -- --port 10002 --peers 127.0.0.1:10000,127.0.0.1:10001
-# terminal 4 :
-RUST_LOG=debug cargo run --features server -- --port 10003 --peers 127.0.0.1:10001,127.0.0.1:10002
-```
-
-### Demonstration imperfect network
-
-```sh
-# create a non perfect network with manual peers :
-# terminal 1
+# Create a non-perfect network with manual peers:
+# Terminal 1
 RUST_LOG=debug cargo run --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003
-# terminal 2
-RUST_LOG=debug cargo run --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002, 127.0.0.1:10004
-# terminal 3
+# Terminal 2
+RUST_LOG=debug cargo run --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004
+# Terminal 3
 RUST_LOG=debug cargo run --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003
-# terminal 4
+# Terminal 4
 RUST_LOG=debug cargo run --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002
-# terminal 5
+# Terminal 5
 RUST_LOG=debug cargo run --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005
-# terminal 6
+# Terminal 6
 RUST_LOG=debug cargo run --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006
-# terminal 7
+# Terminal 7
 RUST_LOG=debug cargo run --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008
-# terminal 8
+# Terminal 8
 RUST_LOG=debug cargo run --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008
-# terminal 9
+# Terminal 9
 RUST_LOG=debug cargo run --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007
-# terminal 10
+# Terminal 10
 RUST_LOG=debug cargo run --port 10009 --peers 127.0.0.1:10005
 ```
 
-
 ### 2. Compile with Dioxus (Merges Client and Server)
+
+Dioxus is a full-stack cross-platform framework, so Peillute can be deployed on:
+
+- Linux (Desktop)
+- MacOS (Desktop)
+- Windows (Desktop)
+- Web (Browser)
+- Android (Mobile)
+- iOS (Mobile)
+
+To compile Peillute with Dioxus, run the following command:
 
 ```sh
 dx bundle --release --platform web
@@ -116,22 +131,24 @@ dx bundle --release --platform web
 Manually run the server:
 
 ```sh
-# one instance
+# One instance
 cd target/dx/peillute/release/web
 ./server
 
-# create a non perfect network with manual peers :
-# terminal 1 :
+# Create a non-perfect network with manual peers:
+# Terminal 1:
 RUST_LOG=debug ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10002
-# terminal 2 :
+# Terminal 2:
 RUST_LOG=debug ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002
-# terminal 3 :
+# Terminal 3:
 RUST_LOG=debug ./server --port 10002 --peers 127.0.0.1:10000,127.0.0.1:10001
-# terminal 4 :
+# Terminal 4:
 RUST_LOG=debug ./server --port 10003 --peers 127.0.0.1:10001,127.0.0.1:10002
 ```
 
 ## 🛠️ Development and Testing
+
+Unit tests are made to ensure the correctness of the code; they are automatically run using the CI/CD pipeline at each commit.
 
 ### Run Unit Tests
 
@@ -145,7 +162,7 @@ cargo test --all-features
 cargo fmt
 ```
 
-### Generate the documentation
+### Generate the Documentation
 
 ```sh
 cargo doc

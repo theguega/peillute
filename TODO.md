@@ -1,3 +1,0 @@
-- cach database error in front
-- modify database path to be the same all around the app depending on site id
-- replace NIULL in database with explicit value for REFUND, BANK etc..

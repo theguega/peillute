@@ -136,7 +136,6 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     }
 }
 
-#[allow(unused)]
 #[cfg(feature = "server")]
 /// Deletes a user from the database
 pub fn delete_user(name: &str) -> rusqlite::Result<()> {
@@ -373,8 +372,8 @@ pub fn withdraw(
     )
 }
 
-#[allow(unused)]
 #[cfg(feature = "server")]
+#[allow(unused)]
 pub fn create_user_with_solde(
     unique_name: &str,
     solde: f64,
@@ -741,25 +740,6 @@ pub fn get_transactions_for_user(name: &str) -> rusqlite::Result<Vec<Transaction
         }
         Ok(txs_vec)
     }
-}
-
-#[allow(unused)]
-#[cfg(feature = "server")]
-pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String, f64>> {
-    let mut state = std::collections::HashMap::new();
-    {
-        let conn = DB_CONN.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
-        let users = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-        })?;
-
-        for user in users {
-            let (name, solde) = user?;
-            state.insert(name, solde);
-        }
-    }
-    Ok(state)
 }
 
 #[cfg(feature = "server")]

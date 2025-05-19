@@ -62,8 +62,8 @@ impl NetworkManager {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
     }
 
-    /// Returns a list of all connected peer addresses
     #[allow(unused)]
+    /// Returns a list of all connected peer addresses
     pub fn get_all_connections(&self) -> Vec<std::net::SocketAddr> {
         self.connection_pool.keys().cloned().collect()
     }

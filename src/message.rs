@@ -42,8 +42,8 @@ pub enum NetworkMessageCode {
 
 #[cfg(feature = "server")]
 impl NetworkMessageCode {
-    /// Returns the string representation of the message code
     #[allow(unused)]
+    /// Returns the string representation of the message code
     pub fn code(&self) -> &'static str {
         match self {
             NetworkMessageCode::Discovery => "discovery",
@@ -57,8 +57,8 @@ impl NetworkMessageCode {
         }
     }
 
-    /// Converts a string code to a NetworkMessageCode variant
     #[allow(unused)]
+    /// Converts a string code to a NetworkMessageCode variant
     pub fn from_code(code: &str) -> Option<Self> {
         match code {
             "discovery" => Some(NetworkMessageCode::Discovery),
@@ -235,8 +235,6 @@ pub struct Refund {
 #[cfg(feature = "server")]
 impl Refund {
     /// Creates a new Refund request
-    #[allow(unused)]
-    #[allow(dead_code)]
     pub fn new(name: String, transac_time: i64, transac_node: String) -> Self {
         Self {
             name,
