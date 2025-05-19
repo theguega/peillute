@@ -265,7 +265,6 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
         Command::Snapshot => {
             println!("📸 Starting snapshot...");
             super::snapshot::start_snapshot().await?;
-            println!("📸 Snapshot completed successfully!");
         }
 
         Command::Info => {
@@ -280,8 +279,16 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
                 )
             };
 
+            let db_path = {
+                let conn = crate::db::DB_CONN.lock().unwrap();
+                let path = conn.path().unwrap();
+                // keep only the name of the file (after the last "/")
+                path.to_string().split("/").last().unwrap().to_string()
+            };
+
             println!("📊 System Information:");
             println!("----------------------------------------");
+            println!("Database : {}", db_path);
             println!("Local Address: {}", local_addr);
             println!("Site ID: {}", site_id);
             println!("Number of Sites: {}", nb_sites);

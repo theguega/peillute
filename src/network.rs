@@ -250,7 +250,7 @@ pub async fn handle_message(
                 if let Some(_) = message.command {
                     use crate::control::handle_command_from_network;
                     if let Err(e) = handle_command_from_network(message.info).await {
-                        log::error!("Error handling command:\n{}", e);
+                        log::error!("Error handling transaction network command:\n{}", e);
                     }
                 } else {
                     log::error!("Command is None for Transaction message");

@@ -96,6 +96,7 @@ impl SnapshotManager {
     /// attempt to find a consistent subset by backtracking to the minimum
     /// vector clock values.
     pub fn push(&mut self, resp: crate::message::SnapshotResponse) -> Option<GlobalSnapshot> {
+        log::debug!("Received snapshot from site {}.", resp.site_id);
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
             vector_clock: resp.clock.get_vector().clone(),
@@ -103,8 +104,11 @@ impl SnapshotManager {
         });
 
         if self.received.len() < self.expected {
+            log::debug!("{}/{} sites received.", self.received.len(), self.expected);
             return None;
         }
+
+        log::debug!("All local snapshots received, processing snapshot.");
 
         if GlobalSnapshot::is_consistent(&self.received) {
             return Some(self.build_snapshot(&self.received));
@@ -189,15 +193,20 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         )
     };
 
+    log::debug!("Expected {} sites for snapshot.", expected);
+
     {
         let mut mgr = LOCAL_SNAPSHOT_MANAGER.lock().await;
         mgr.expected = expected;
         mgr.received.clear();
-        mgr.push(crate::message::SnapshotResponse {
+        if let Some(gs) = mgr.push(crate::message::SnapshotResponse {
             site_id: site_id.clone(),
             clock: clock.clone(),
             tx_log: summaries.clone(),
-        });
+        }) {
+            log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
+            crate::snapshot::persist(&gs).await.unwrap();
+        }
     }
 
     crate::network::send_message_to_all(
@@ -228,7 +237,7 @@ pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     let mut file = std::fs::File::create(&filename)?;
     let json = serde_json::to_string_pretty(snapshot).unwrap();
     file.write_all(json.as_bytes())?;
-    log::info!("Snapshot saved in {}", filename);
+    println!("📸 Snapshot completed successfully at {}", filename);
     Ok(())
 }
 

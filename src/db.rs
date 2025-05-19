@@ -27,7 +27,7 @@ pub struct Transaction {
 use clap::Parser;
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {
-    static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
+    pub static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
         std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().db_id)).unwrap());
 }
 
