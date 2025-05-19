@@ -613,6 +613,7 @@ const RANDOM_MESSAGE: &[&str] = &[
     "Epilation des zones intimes",
     "Pour m'avoir gratouillé le dos",
     "La reine Babeth vous offre cet argent",
+    "Nan t'inquiete",
 ];
 
 #[cfg(feature = "server")]
