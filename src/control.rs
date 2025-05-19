@@ -427,6 +427,7 @@ pub async fn handle_command_from_network(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 /// Prompts the user for input with a label
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
@@ -437,6 +438,7 @@ fn prompt(label: &str) -> String {
     input.trim().to_string()
 }
 
+#[cfg(feature = "server")]
 /// Prompts the user for input and parses it to a specific type
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where

@@ -41,8 +41,8 @@ impl AppState {
         }
     }
 
-    /// Updates the site ID and adjusts the logical clock accordingly
     #[allow(unused)]
+    /// Updates the site ID and adjusts the logical clock accordingly
     pub fn change_site_id(&mut self, site_id: &str) {
         self.clocks.change_current_site_id(&self.site_id, site_id);
         self.site_id = site_id.to_string();
@@ -97,9 +97,8 @@ impl AppState {
         self.clocks.increment_lamport()
     }
 
-    /// Increments the vector clock for a specific site
     #[allow(unused)]
-    #[allow(dead_code)]
+    /// Increments the vector clock for a specific site
     pub fn increment_vector(&mut self, site_id: &str) -> i64 {
         self.clocks.increment_vector(site_id)
     }
@@ -115,8 +114,6 @@ impl AppState {
     }
 
     /// Returns the current vector clock state
-    #[allow(unused)]
-    #[allow(dead_code)]
     pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
         self.clocks.get_vector()
     }
@@ -126,9 +123,8 @@ impl AppState {
         self.clocks.update_vector(received_vc);
     }
 
-    /// Returns the current vector clock as a list
     #[allow(unused)]
-    #[allow(dead_code)]
+    /// Returns the current vector clock as a list
     pub fn get_vector_clock(&self) -> Vec<i64> {
         self.clocks.get_vector_clock()
     }
@@ -138,9 +134,8 @@ impl AppState {
         &self.clocks
     }
 
-    /// Updates the Lamport clock with a received value
     #[allow(unused)]
-    #[allow(dead_code)]
+    /// Updates the Lamport clock with a received value
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.clocks.update_lamport(received_lamport);
     }

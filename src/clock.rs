@@ -80,6 +80,7 @@ impl Clock {
         }
     }
 
+    #[allow(unused)]
     /// Updates the site ID in the vector clock while preserving its clock value
     pub fn change_current_site_id(&mut self, old_site_id: &str, new_site_id: &str) {
         if let Some(value) = self.vector_clock.remove(old_site_id) {
@@ -87,6 +88,7 @@ impl Clock {
         }
     }
 
+    #[allow(unused)]
     /// Updates the Lamport clock with a received value, taking the maximum
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.lamport_clock = self.lamport_clock.max(received_lamport);
