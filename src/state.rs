@@ -109,9 +109,11 @@ impl AppState {
     pub fn update_lamport(&mut self, received_lamport: i64) {
         self.clocks.update_lamport(received_lamport);
     }
+    #[allow(unused)]
     pub fn get_number_of_attended_neighbors(&self) -> usize {
         self.nb_of_attended_neighbors
     }
+    #[allow(unused)]
     pub fn set_number_of_attended_neighbors(&mut self, n: usize) {
         self.nb_of_attended_neighbors = n;
     }
