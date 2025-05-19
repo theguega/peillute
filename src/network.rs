@@ -247,9 +247,11 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Transaction => {
                 log::debug!("Transaction message received: {:?}", message);
+                let clock = message.clock.clone();
+                let site = message.sender_id.clone();
                 if let Some(_) = message.command {
                     use crate::control::handle_command_from_network;
-                    if let Err(e) = handle_command_from_network(message.info).await {
+                    if let Err(e) = handle_command_from_network(message.info, clock, site).await {
                         log::error!("Error handling transaction network command:\n{}", e);
                     }
                 } else {

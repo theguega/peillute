@@ -158,6 +158,7 @@ impl SnapshotManager {
     fn build_snapshot(&self, snaps: &[LocalSnapshot]) -> GlobalSnapshot {
         let mut union: std::collections::HashSet<TxSummary> = std::collections::HashSet::new();
         for s in snaps {
+            log::info!("Adding transactions from site {}, transaction : {:?}", s.site_id, s.tx_log);
             union.extend(s.tx_log.iter().cloned());
         }
 

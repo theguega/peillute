@@ -314,113 +314,75 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
 /// Handles commands received from the network
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
+    clock : crate::clock::Clock,
+    site : String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match msg {
         crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
         }
         crate::message::MessageInfo::Deposit(deposit) => {
-            let (local_lamport_time, node, local_vc_clock) = {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_vector_current();
-                state.increment_lamport();
-                (
-                    state.get_lamport(),
-                    state.get_site_id().to_string(),
-                    state.get_vector().clone(),
-                )
-            };
-
+ 
+            let lamport_time = clock.get_lamport();
+            let vc_clock = clock.get_vector();
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                &lamport_time,
+                site.as_str(),
+                &vc_clock,
             )?;
         }
         crate::message::MessageInfo::Withdraw(withdraw) => {
-            let (local_lamport_time, node, local_vc_clock) = {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_vector_current();
-                state.increment_lamport();
-                (
-                    state.get_lamport(),
-                    state.get_site_id().to_string(),
-                    state.get_vector().clone(),
-                )
-            };
+            let lamport_time = clock.get_lamport();
+            let vc_clock = clock.get_vector();
 
             super::db::withdraw(
                 &withdraw.name,
                 withdraw.amount,
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                &lamport_time,
+                site.as_str(),
+                &vc_clock,
             )?;
         }
         crate::message::MessageInfo::Transfer(transfer) => {
-            let (local_lamport_time, node, local_vc_clock) = {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_vector_current();
-                state.increment_lamport();
-                (
-                    state.get_lamport(),
-                    state.get_site_id().to_string(),
-                    state.get_vector().clone(),
-                )
-            };
+            let lamport_time = clock.get_lamport();
+            let vc_clock = clock.get_vector();
 
             super::db::create_transaction(
                 &transfer.name,
                 &transfer.beneficiary,
                 transfer.amount,
-                &local_lamport_time,
-                node.as_str(),
+                &lamport_time,
+                site.as_str(),
                 "",
-                &local_vc_clock,
+                &vc_clock,
             )?;
         }
         crate::message::MessageInfo::Pay(pay) => {
-            let (local_lamport_time, node, local_vc_clock) = {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_vector_current();
-                state.increment_lamport();
-                (
-                    state.get_lamport(),
-                    state.get_site_id().to_string(),
-                    state.get_vector().clone(),
-                )
-            };
+            let lamport_time = clock.get_lamport();
+            let vc_clock = clock.get_vector();
 
             super::db::create_transaction(
                 &pay.name,
                 "NULL",
                 pay.amount,
-                &local_lamport_time,
-                node.as_str(),
+                &lamport_time,
+                site.as_str(),
                 "",
-                &local_vc_clock,
+                &vc_clock,
             )?;
         }
         crate::message::MessageInfo::Refund(refund) => {
-            let (local_lamport_time, node, local_vc_clock) = {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_vector_current();
-                state.increment_lamport();
-                (
-                    state.get_lamport(),
-                    state.get_site_id().to_string(),
-                    state.get_vector().clone(),
-                )
-            };
+            let lamport_time = clock.get_lamport();
+            let vc_clock = clock.get_vector();
 
             super::db::refund_transaction(
                 refund.transac_time,
                 &refund.transac_node.as_str(),
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                &lamport_time,
+                site.as_str(),
+                &vc_clock,
             )?;
         }
         crate::message::MessageInfo::SnapshotResponse(_) => {
