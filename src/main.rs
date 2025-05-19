@@ -21,6 +21,8 @@ struct Args {
     peers: Vec<String>,
     #[arg(long, default_value_t = String::from("127.0.0.1"))]
     ip: String,
+    #[arg(long, default_value_t = 1)]
+    db_id: u16,
 }
 
 #[tokio::main]
@@ -66,8 +68,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         for peer in args.peers {
             let peer_addr = peer.parse::<SocketAddr>()?;
             peers_addrs.push(peer_addr);
+            state.nb_sites_on_network+=1;
         }
         state.peer_addrs = peers_addrs;
+
 
     }
 
@@ -148,43 +152,39 @@ async fn disconnect() {
     use log::{error, info};
 
     let (local_addr, site_id, peer_addrs,clock) = {
-        let state = LOCAL_APP_STATE.lock().await;
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_lamport();
+        state.increment_vector_current();
         (
-            state.get_local_addr().to_string(),
+            state.get_local_addr(),
             state.get_site_id().to_string(),
             state.get_peers(),
             state.get_clock().clone(),
         )
-    };
 
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_lamport();
-        state.increment_vector_current();
-    }
+    };
 
     info!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
-        let peer_addr_str = peer_addr.to_string();
         {
             let mut state = LOCAL_APP_STATE.lock().await;
             state.increment_lamport();
             state.increment_vector_current();
         }
         if let Err(e) = crate::network::send_message(
-            &peer_addr_str,
+            peer_addr,
             MessageInfo::None,
             None,
             NetworkMessageCode::Disconnect,
-            &local_addr,
+            local_addr.parse().unwrap(),
             &site_id,
             &site_id,
-            &local_addr,
+            local_addr.parse().unwrap(),
             clock.clone(),
         )
         .await
         {
-            error!("Error sending message to {}: {}", peer_addr_str, e);
+            error!("Error sending message to {}: {}", peer_addr, e);
         }
     }
 }

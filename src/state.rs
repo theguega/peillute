@@ -129,7 +129,7 @@ impl AppState {
         self.nb_of_attended_neighbors.insert(initiator_id, n);
     }
     pub fn get_parent_addr(&self, initiator_id : String) -> std::net::SocketAddr {
-        self.parent_addr.get(&initiator_id).copied().unwrap_or("0.0.0.0".parse().unwrap())
+        self.parent_addr.get(&initiator_id).copied().unwrap_or("0.0.0.0:0".parse().unwrap())
     }
 
     pub fn set_parent_addr(&mut self, initiator_id : String, peer_adr : std::net::SocketAddr) {
