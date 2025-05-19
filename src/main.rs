@@ -33,6 +33,10 @@ struct Args {
     /// IP address to bind to
     #[arg(long, default_value_t = String::from("127.0.0.1"))]
     ip: String,
+
+    /// ID for the batabase path
+    #[arg(long, default_value_t = 1)]
+    db_id: u16,
 }
 
 #[cfg(feature = "server")]

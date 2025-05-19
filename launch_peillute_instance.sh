@@ -63,6 +63,83 @@ if [[ "$SHOULD_REBUNDLE" == true ]]; then
     current_source_hash > "$SOURCE_HASH_FILE"
 fi
 
+# Function to run demo
+run_demo() {
+    echo "[*] Running the Peillute demo..."
+    cd target/dx/peillute/release/web
+
+    # Open 10 terminals with different arguments
+    if [ "$(uname)" == "Darwin" ]; then
+        # macOS
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 10\""
+    else
+        # Linux
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --port 10009 --peers 127.0.0.1:10005 --db-id 10; exec bash"
+    fi
+}
+
+# Function to run demo_cli
+run_demo_cli() {
+    echo "[*] Running the Peillute demo_cli..."
+
+    # Open 10 terminals with different arguments
+    if [ "$(uname)" == "Darwin" ]; then
+        # macOS
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9\""
+        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 10\""
+    else
+        # Linux
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 1; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 2; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 3; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 4; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 5; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 6; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 7; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 8; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 9; exec bash"
+        gnome-terminal -- bash -c "cd $(pwd) && RUST_LOG=$LOG_LEVEL cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 10; exec bash"
+    fi
+}
+
+# Check for -demo argument
+for arg in "$@"; do
+    if [ "$arg" == "-demo" ]; then
+        run_demo
+        exit 0
+    fi
+    if [ "$arg" == "-demo_cli" ]; then
+        run_demo_cli
+        exit 0
+    fi
+done
+
 echo "[*] Running the Peillute instance..."
 cd target/dx/peillute/release/web
 RUST_LOG=$LOG_LEVEL ./server
