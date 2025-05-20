@@ -110,14 +110,9 @@ pub fn Withdraw(name: String) -> Element {
                         let amount = *withdraw_amount.read();
                         async move {
                             if amount >= 0.0 {
-                                match withdraw_for_user_server(name.to_string(), amount).await {
-                                    Ok(_) => {
-                                        withdraw_amount.set(0.0);
-                                        error_signal.set(None);
-                                    }
-                                    Err(e) => {
-                                        error_signal.set(Some(format!("Withdraw failed: {e}")));
-                                    }
+                                if let Ok(_) = withdraw_for_user_server(name.to_string(), amount).await {
+                                    withdraw_amount.set(0.0);
+                                    error_signal.set(None);
                                 }
                             } else {
                                 error_signal
@@ -177,16 +172,10 @@ pub fn Pay(name: String) -> Element {
 
         spawn(async move {
             if total_amount > 0.0 {
-                match pay_for_user_server(name_clone.to_string(), total_amount).await {
-                    Ok(_) => {
-                        log::info!("Payment successful.");
-                        product_quantities.set(vec![0u32; PRODUCTS.len()]);
-                        error_signal.set(None);
-                    }
-                    Err(e) => {
-                        log::error!("Payment failed: {}", e);
-                        error_signal.set(Some(format!("Payment failed: {e}")));
-                    }
+                if let Ok(_) = pay_for_user_server(name_clone.to_string(), total_amount).await {
+                    log::info!("Payment successful.");
+                    product_quantities.set(vec![0u32; PRODUCTS.len()]);
+                    error_signal.set(None);
                 }
             } else {
                 log::warn!("Attempted to pay with a total of 0.0. No action taken.");
@@ -334,15 +323,14 @@ pub fn Refund(name: String) -> Element {
                                                         let name_for_future = name_for_refund.clone();
                                                         let transaction_for_future = transaction_for_refund.clone();
                                                         async move {
-                                                            match refund_transaction_server(
+                                                            if let Ok(_) = refund_transaction_server(
                                                                     name_for_future.to_string(),
                                                                     transaction_for_future.lamport_time,
                                                                     transaction_for_future.source_node,
                                                                 )
                                                                 .await
                                                             {
-                                                                Ok(_) => {
-                                                                    if let Ok(_) = get_transactions_for_user_server(
+                                                                if let Ok(_) = get_transactions_for_user_server(
                                                                             name_for_future.to_string(),
                                                                         )
                                                                         .await
@@ -350,10 +338,6 @@ pub fn Refund(name: String) -> Element {
                                                                         error_signal.set(None);
                                                                         resource_to_refresh.restart();
                                                                     }
-                                                                }
-                                                                Err(e) => {
-                                                                    error_signal.set(Some(e.to_string()));
-                                                                }
                                                             }
                                                         }
                                                     },
@@ -476,7 +460,7 @@ pub fn Transfer(name: String) -> Element {
                                 let from_user = name.clone();
                                 async move {
                                     if !to_user.is_empty() && amount > 0.0 {
-                                        match transfer_from_user_to_user_server(
+                                        if let Ok(_) = transfer_from_user_to_user_server(
                                                 from_user.to_string(),
                                                 to_user,
                                                 amount,
@@ -484,15 +468,10 @@ pub fn Transfer(name: String) -> Element {
                                             )
                                             .await
                                         {
-                                            Ok(_) => {
-                                                transfer_amount.set(0.0);
-                                                transfer_message.set(String::new());
-                                                selected_user.set(String::new());
-                                                error_signal.set(None);
-                                            }
-                                            Err(e) => {
-                                                error_signal.set(Some(format!("Transfer failed: {e}")));
-                                            }
+                                            transfer_amount.set(0.0);
+                                            transfer_message.set(String::new());
+                                            selected_user.set(String::new());
+                                            error_signal.set(None);
                                         }
                                     } else {
                                         error_signal
@@ -554,14 +533,9 @@ pub fn Deposit(name: String) -> Element {
                         let amount = *deposit_amount.read();
                         async move {
                             if amount >= 0.0 {
-                                match deposit_for_user_server(name.to_string(), amount).await {
-                                    Ok(_) => {
-                                        deposit_amount.set(0.0);
-                                        error_signal.set(None);
-                                    }
-                                    Err(e) => {
-                                        error_signal.set(Some(format!("Deposit failed: {e}")));
-                                    }
+                                if let Ok(_) = deposit_for_user_server(name.to_string(), amount).await {
+                                    deposit_amount.set(0.0);
+                                    error_signal.set(None);
                                 }
                             } else {
                                 error_signal
@@ -673,14 +647,14 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         (local_vc_clock, local_lamport_time, node)
     };
 
-    if let Err(e) = crate::db::deposit(
+    if let Err(_e) = crate::db::deposit(
         &user,
         amount,
         &local_lamport_time,
         node.as_str(),
         &local_vc_clock,
     ) {
-        return Err(ServerFnError::new(e.to_string()));
+        return Err(ServerFnError::new("Error with database"));
     }
 
     if let Err(e) = crate::network::send_message_to_all_peers(
@@ -691,7 +665,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
     .await
     {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to send message to all nodes : {e}"
         )));
     };
 
