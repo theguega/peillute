@@ -320,6 +320,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
         assert!(mgr.push(r1).is_none());
@@ -347,10 +350,16 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 10,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t2 = TxSummary {
             lamport_time: 11,
             source_node: "B".into(),
+            from_user: "user3".into(),
+            to_user: "user4".into(),
+            amount_in_cent: 200,
         };
 
         let r1 = resp("A", &[("A", 1)], &[t1.clone()]);
@@ -389,14 +398,23 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t3 = TxSummary {
             lamport_time: 3,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 300,
         };
         let t5 = TxSummary {
             lamport_time: 5,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 500,
         };
 
         let r_a = resp(
@@ -420,6 +438,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 7,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 700,
         };
 
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
