@@ -30,6 +30,13 @@ Make sure you have the following installed on your system:
 - Cargo
 - Dioxus
 
+#### Chromium
+
+Dioxus seems to have some problems running on Firefox, please use a Chromium based browser.
+Safari seems to work fine as well.
+
+e.g. Google Chrome
+
 ### 1. Clone the Repository
 
 ```sh
@@ -39,7 +46,8 @@ git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 ### 2. Automatically Install Dependencies and Run Peillute Instance
 
 ```sh
-./launch_peillute_instance.sh
+# the install flag is only necessary on Linux to install some apt packages needed for Dioxus
+./launch_peillute_instance.sh -install
 
 # To be more verbose:
 ./launch_peillute_instance.sh -debug
