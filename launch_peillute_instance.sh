@@ -14,6 +14,25 @@ for arg in "$@"; do
     fi
 done
 
+# Check for -install argument
+for arg in "$@"; do
+    if [ "$arg" == "-install" ]; then
+        # If we are on Linux, we need to install some dependencies
+        if [ "$(uname)" == "Linux" ]; then
+            sudo apt update
+            sudo apt install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+        fi
+    fi
+done
+
 # Check if Rust is installed
 if ! command -v cargo &> /dev/null; then
     echo "[*] Installing Rust..."
