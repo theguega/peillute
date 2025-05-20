@@ -12,6 +12,12 @@ pub struct TxSummary {
     pub lamport_time: i64,
     /// ID of the node that created the transaction
     pub source_node: String,
+    /// Source user of the transaction
+    pub from_user: String,
+    /// Destination user of the transaction
+    pub to_user: String,
+    /// Transaction amount
+    pub amount_in_cent: i64,
 }
 
 #[cfg(feature = "server")]
@@ -20,6 +26,9 @@ impl From<&crate::db::Transaction> for TxSummary {
         Self {
             lamport_time: tx.lamport_time,
             source_node: tx.source_node.clone(),
+            from_user: tx.from_user.clone(),
+            to_user: tx.to_user.clone(),
+            amount_in_cent: (tx.amount * 100.0) as i64,
         }
     }
 }
@@ -311,6 +320,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
         assert!(mgr.push(r1).is_none());
@@ -338,10 +350,16 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 10,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t2 = TxSummary {
             lamport_time: 11,
             source_node: "B".into(),
+            from_user: "user3".into(),
+            to_user: "user4".into(),
+            amount_in_cent: 200,
         };
 
         let r1 = resp("A", &[("A", 1)], &[t1.clone()]);
@@ -380,14 +398,23 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t3 = TxSummary {
             lamport_time: 3,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 300,
         };
         let t5 = TxSummary {
             lamport_time: 5,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 500,
         };
 
         let r_a = resp(
@@ -411,6 +438,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 7,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 700,
         };
 
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
