@@ -12,6 +12,12 @@ pub struct TxSummary {
     pub lamport_time: i64,
     /// ID of the node that created the transaction
     pub source_node: String,
+    /// Source user of the transaction
+    pub from_user: String,
+    /// Destination user of the transaction
+    pub to_user: String,
+    /// Transaction amount
+    pub amount_in_cent: i64,
 }
 
 #[cfg(feature = "server")]
@@ -20,6 +26,9 @@ impl From<&crate::db::Transaction> for TxSummary {
         Self {
             lamport_time: tx.lamport_time,
             source_node: tx.source_node.clone(),
+            from_user: tx.from_user.clone(),
+            to_user: tx.to_user.clone(),
+            amount_in_cent: (tx.amount * 100.0) as i64,
         }
     }
 }
