@@ -12,6 +12,8 @@ impl Clock {
         }
     }
 
+
+    #[allow(unused)]
     pub fn add_peer(&mut self, site_id: &str) {
         if !self.vector_clock.contains_key(site_id) {
             self.vector_clock.insert(site_id.to_string(), 0);

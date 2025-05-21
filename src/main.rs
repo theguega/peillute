@@ -58,9 +58,11 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = args.site_id;
+        state.site_id = args.site_id.clone();
         state.local_addr = peer_interaction_addr;
-        state.nb_neighbors = args.peers.len() as i64;
+        state.parent_addr.insert(args.site_id.clone(), peer_interaction_addr);
+
+
         let site_id = state.site_id.clone();
         state.clocks.set_site_id(&site_id);
 
@@ -68,7 +70,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         for peer in args.peers {
             let peer_addr = peer.parse::<SocketAddr>()?;
             peers_addrs.push(peer_addr);
-            state.nb_sites_on_network+=1;
+
         }
         state.peer_addrs = peers_addrs;
 

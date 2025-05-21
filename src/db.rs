@@ -11,6 +11,8 @@ pub struct Transaction {
 }
 
 use clap::Parser;
+use rusqlite::params;
+
 lazy_static::lazy_static! {
     static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
         std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().db_id)).unwrap());
@@ -81,6 +83,20 @@ pub fn is_database_initialized() -> rusqlite::Result<bool> {
         Ok(exists)
     }
 }
+
+#[allow(unused)]
+pub fn transaction_exists(lamport_time: i64, source_node: &str) -> rusqlite::Result<bool> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2)",
+        )?;
+        let exists: bool = stmt.query_row(params![lamport_time, source_node], |row| row.get(0))?;
+        Ok(exists)
+    }
+}
+
 
 #[allow(unused)]
 pub fn drop_tables() -> rusqlite::Result<()> {

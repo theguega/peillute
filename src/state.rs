@@ -2,9 +2,9 @@
 pub struct AppState {
     // --- Site Info ---
     pub site_id: String,
-    pub nb_sites_on_network : i64,
     pub nb_neighbors: i64,
     pub peer_addrs: Vec<std::net::SocketAddr>,
+    pub in_use_neighbors : Vec<std::net::SocketAddr>,
     pub local_addr: std::net::SocketAddr,
 
     // --- Message Diffusion Info ---
@@ -23,22 +23,22 @@ impl AppState {
     pub fn new(
         site_id: String,
         nb_neighbors: i64,
-        nb_sites_on_network: i64,
         peer_addrs: Vec<std::net::SocketAddr>,
         local_addr: std::net::SocketAddr,
     ) -> Self {
         let clocks = crate::clock::Clock::new();
         let parent_addr = std::collections::HashMap::new();
         let nb_of_attended_neighbors = std::collections::HashMap::new();
+        let in_use_neighbors = Vec::new();
 
         Self {
             site_id,
-            nb_sites_on_network,
             nb_neighbors,
             peer_addrs,
             local_addr,
             parent_addr,
             nb_of_attended_neighbors,
+            in_use_neighbors,
             clocks
         }
     }
@@ -48,10 +48,10 @@ impl AppState {
         self.site_id = site_id.to_string();
     }
 
+    #[allow(unused)]
     pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
-            self.nb_sites_on_network+=1;
             self.clocks.add_peer(site_id);
             self.nb_of_attended_neighbors.insert(site_id.to_string(), self.peer_addrs.len() as i64);
             self.parent_addr.insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
@@ -136,6 +136,7 @@ impl AppState {
         self.parent_addr.insert(initiator_id,peer_adr);
     }
 
+    #[allow(unused)]
     pub fn get_nb_sites_on_network(&self) -> i64 {
         self.nb_neighbors
     }
@@ -146,7 +147,6 @@ lazy_static::lazy_static! {
     pub static ref LOCAL_APP_STATE: std::sync::Arc<tokio::sync::Mutex<AppState>> =
         std::sync::Arc::new(tokio::sync::Mutex::new(AppState::new(
             "".to_string(), // empty site id at start
-            0,
             0,
             Vec::new(),
             "0.0.0.0:0".parse().unwrap(),

@@ -70,7 +70,9 @@ pub async fn handle_command_from_cli(
         (local_vc_clock, local_lamport_time,local_clk, local_addr)
     };
 
+
     match cmd {
+
         Command::CreateUser => {
             let name = prompt("Username");
             super::db::create_user(&name)?;
@@ -130,6 +132,7 @@ pub async fn handle_command_from_cli(
                 message_initiator_id: node.to_string(),
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
+            // To Do initialisation
 
             diffuse_message(&msg).await?;
         }
@@ -323,7 +326,7 @@ pub async fn handle_command_from_cli(
         }
 
         Command::Info => {
-            let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
+            let (local_addr, site_id, peer_addrs, clock, nb_neighbours) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
                     state.get_local_addr().to_string(),
@@ -343,7 +346,7 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Local address: {}", local_addr);
             log::info!("ℹ️  Site ID: {}", site_id);
             log::info!("ℹ️  Peers: {:?}", peer_addrs);
-            log::info!("ℹ️  Number of sites on network: {}", nb_sites);
+            log::info!("ℹ️  Number of neighbours: {}", nb_neighbours);
             log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
             log::info!("ℹ️  Vector clock: {:?}", clock.get_vector());
         }
@@ -361,20 +364,19 @@ pub async fn handle_command_from_cli(
 
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    node: &str,
+    clock: crate::clock::Clock,
+    site_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::MessageInfo;
     use log;
-    use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock,local_lamport_time)={
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        (local_vc_clock, local_lamport_time)
-    };
+    let message_lamport_time = clock.get_lamport().clone();
+    let message_vc_clock = clock.get_vector().clone();
+
+    if crate::db::transaction_exists(message_lamport_time,site_id)?{
+        log::info!("Transaction allready exists, skipping");
+        return Ok(());
+    }
 
     match msg {
         MessageInfo::CreateUser(create_user) => {
@@ -385,9 +387,9 @@ pub async fn handle_command_from_network(
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
-                &local_lamport_time,
-                node,
-                &local_vc_clock,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
         }
 
@@ -395,9 +397,9 @@ pub async fn handle_command_from_network(
             super::db::withdraw(
                 &withdraw.name,
                 withdraw.amount,
-                &local_lamport_time,
-                node,
-                &local_vc_clock,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
         }
 
@@ -406,10 +408,10 @@ pub async fn handle_command_from_network(
                 &transfer.name,
                 &transfer.beneficiary,
                 transfer.amount,
-                &local_lamport_time,
-                node,
+                &message_lamport_time,
+                site_id,
                 "",
-                &local_vc_clock,
+                &message_vc_clock,
             )?;
         }
 
@@ -418,10 +420,10 @@ pub async fn handle_command_from_network(
                 &pay.name,
                 "NULL",
                 pay.amount,
-                &local_lamport_time,
-                node,
+                &message_lamport_time,
+                site_id,
                 "",
-                &local_vc_clock,
+                &message_vc_clock,
             )?;
         }
 
@@ -429,9 +431,9 @@ pub async fn handle_command_from_network(
             super::db::refund_transaction(
                 refund.transac_time,
                 &refund.transac_node,
-                &local_lamport_time,
-                node,
-                &local_vc_clock,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
         }
 
