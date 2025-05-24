@@ -14,21 +14,49 @@ for arg in "$@"; do
     fi
 done
 
-# Check for -install argument
 for arg in "$@"; do
     if [ "$arg" == "-install" ]; then
-        # If we are on Linux, we need to install some dependencies
         if [ "$(uname)" == "Linux" ]; then
-            sudo apt update
-            sudo apt install -y libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
+            # Détection de la distribution via /etc/os-release
+            if [ -f /etc/os-release ]; then
+                . /etc/os-release
+                distro=$ID
+            else
+                echo "Impossible de détecter la distribution Linux."
+                exit 1
+            fi
+
+            case "$distro" in
+                debian|ubuntu)
+                    echo "Distribution détectée : $distro"
+                    sudo apt update
+                    sudo apt install -y libwebkit2gtk-4.1-dev \
+                        build-essential \
+                        curl \
+                        wget \
+                        file \
+                        libxdo-dev \
+                        libssl-dev \
+                        libayatana-appindicator3-dev \
+                        librsvg2-dev
+                    ;;
+                fedora)
+                    echo "Distribution détectée : Fedora"
+                    sudo dnf install -y webkit2gtk4.1-devel \
+                        gcc-c++ \
+                        curl \
+                        wget \
+                        file \
+                        libxdo-devel \
+                        openssl-devel \
+                        libappindicator-gtk3 \
+                        librsvg2-devel
+                    ;;
+                *)
+                    echo "Distribution $distro non supportée par ce script."
+                    exit 1
+                    ;;
+            esac
         fi
     fi
 done
