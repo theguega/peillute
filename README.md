@@ -46,7 +46,7 @@ git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
 ### 2. Automatically Install Dependencies and Run Peillute Instance
 
 ```sh
-# the install flag is only necessary on Linux to install some apt packages needed for Dioxus
+# the install flag is only necessary on Linux (debian or fedora based) to install some apt packages needed for Dioxus
 ./launch_peillute_instance.sh -install
 
 # To be more verbose:
