@@ -132,7 +132,12 @@ pub async fn handle_command_from_cli(
                 message_initiator_id: node.to_string(),
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
-            // To Do initialisation
+            {// initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
 
             diffuse_message(&msg).await?;
         }

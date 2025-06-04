@@ -297,6 +297,7 @@ pub async fn handle_message(
                              state.get_clock().clone())
                         };
                         // Acquit message to parent
+                        log::debug!("Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}", message.sender_addr.to_string().as_str());
                         send_message(message.sender_addr,
                                      MessageInfo::None,
                                      None,
@@ -329,76 +330,47 @@ pub async fn handle_message(
                     log::error!("Command is None for Transaction message");
                 }
             }
-
             NetworkMessageCode::TransactionAcknowledgement => {
-                use crate::message::MessageInfo;
-
-                // ── 1. Accès exclusif à l'état ─────────────────────────────────────
+                // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                let initiator_id = message.message_initiator_id.clone();
+                let nb_neighbours = state.nb_neighbors;
+                let current_value = state.nb_of_attended_neighbors.get(&message.message_initiator_id).copied().unwrap_or(nb_neighbours);
+                state.nb_of_attended_neighbors.insert(message.message_initiator_id.clone(), current_value - 1);
 
-                // a) décrémente le compteur restant
-                let remaining = state
-                    .nb_of_attended_neighbors
-                    .get(&initiator_id)
-                    .copied()
-                    .unwrap_or(state.nb_neighbors)
-                    .saturating_sub(1);
+                if state.nb_of_attended_neighbors.get(&message.message_initiator_id.clone()).copied().unwrap_or(-1) == 0 {
 
-                state
-                    .nb_of_attended_neighbors
-                    .insert(initiator_id.clone(), remaining);
+                    if state.parent_addr.get(&message.message_initiator_id.clone()).copied().unwrap_or("99.99.99.99:0".parse().unwrap()) == state.local_addr {
+                        // on est chez le parent
+                        // diffusion terminée
+                        // Réinitialisation
 
-                // b) récupère le parent AVANT un éventuel reset
-                let parent_addr = state
-                    .parent_addr
-                    .get(&initiator_id)
-                    .copied()
-                    .unwrap_or(state.local_addr);
+                        log::error!("Diffusion terminée et réussie !")
 
-                // c) Dois-je remettre mon état à zéro ?
-                if remaining == 0 {
-                    let nb_tot = state.nb_neighbors;                   // <- capture avant l'insert
-                    state.nb_of_attended_neighbors
-                        .insert(initiator_id.clone(), nb_tot);
-                    state.parent_addr.insert(
-                        initiator_id.clone(),
-                        "0.0.0.0:0".parse().unwrap(),
+                    }else{
+                        log::debug!("On a reçu un rouge de tous nos fils: on acquite au parent {}", message.sender_addr.to_string().as_str());
+                        send_message(state.get_parent_addr(message.message_initiator_id.clone()),
+                                     MessageInfo::None,
+                                     None,
+                                     NetworkMessageCode::TransactionAcknowledgement,
+                                     state.get_local_addr().parse().unwrap(),
+                                     &state.get_site_id().to_string(),
+                                     &message.message_initiator_id,
+                                     message.message_initiator_addr,
+                                     state.get_clock().clone()
+                        ).await?;
+                    }
+
+                    let peer_count = state.in_use_neighbors.len();
+                    state.nb_of_attended_neighbors.insert(
+                        message.message_initiator_id.clone(),
+                        peer_count as i64,
                     );
-                    log::debug!(
-                    "Nœud {} : réinitialisation terminée pour la vague {}",
-                    state.site_id,
-                    initiator_id
-                );
+                    state.parent_addr.insert(
+                        message.message_initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap()
+                    );
                 }
-
-                // d) données nécessaires à l'envoi, à sortir du verrou
-                let (local_addr, site_id, clock) =
-                    (state.local_addr, state.site_id.clone(), state.clocks.clone());
-
-                let is_root = parent_addr == local_addr || parent_addr.port() == 0;
-
-                drop(state); // ── 2. Libère le mutex AVANT l'I/O réseau ─────────────
-
-                // ── 3. Relais de l’ACK vers le parent si je ne suis pas la racine ──
-                if !is_root {
-                    send_message(
-                        parent_addr,
-                        MessageInfo::None,
-                        None,
-                        NetworkMessageCode::TransactionAcknowledgement,
-                        local_addr,
-                        &site_id,
-                        &initiator_id,
-                        message.message_initiator_addr,
-                        clock,
-                    )
-                        .await?;
-                }else{
-                    log::debug!("Diffusion terminée ! ")
-                }
-
             }
 
             NetworkMessageCode::Error => {
@@ -593,7 +565,8 @@ pub async fn diffuse_message(
         let peer_addr_str = peer_addr.to_string();
         if peer_addr != parent_address {
             log::debug!("Sending message to: {}", peer_addr_str);
-            send_message(
+
+            if let Err(e) = send_message(
                 peer_addr,
                 message.info.clone(),
                 message.command.clone(),
@@ -603,8 +576,9 @@ pub async fn diffuse_message(
                 &message.message_initiator_id,
                 message.message_initiator_addr,
                 message.clock.clone(),
-            )
-                .await?;
+            ).await {
+                log::error!("❌ Impossible d’envoyer à {} : {}", peer_addr_str, e);
+            }
         }
 
     }
