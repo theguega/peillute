@@ -345,10 +345,10 @@ pub async fn handle_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        log::error!("Diffusion terminée et réussie !")
+                        log::error!("Diffusion terminée et réussie !");
 
                     }else{
-                        log::debug!("On a reçu un rouge de tous nos fils: on acquite au parent {}", message.sender_addr.to_string().as_str());
+                        log::debug!("On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}", state.local_addr.clone().to_string().as_str(),state.get_parent_addr(message.message_initiator_id.clone()).to_string().as_str());
                         send_message(state.get_parent_addr(message.message_initiator_id.clone()),
                                      MessageInfo::None,
                                      None,

@@ -77,15 +77,28 @@ pub async fn handle_command_from_cli(
             let name = prompt("Username");
             super::db::create_user(&name)?;
 
-            use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-            use crate::network::send_message_to_all;
+            use crate::message::{Message,CreateUser, MessageInfo, NetworkMessageCode};
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all(
-                Some(Command::CreateUser),
-                NetworkMessageCode::Transaction,
-                MessageInfo::CreateUser(CreateUser::new(name.clone())),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::CreateUser),
+                info: MessageInfo::CreateUser(CreateUser::new(name.clone())),
+                code: NetworkMessageCode::Transaction,
+                clock: local_clk.clone(),
+                sender_addr: local_addr.parse().unwrap(),
+                sender_id: node.to_string(),
+                message_initiator_id: node.to_string(),
+                message_initiator_addr: local_addr.parse().unwrap(),
+            };
+
+            {// initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::UserAccounts => {
