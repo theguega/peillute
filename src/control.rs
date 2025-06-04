@@ -172,6 +172,13 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
+            {// initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
+
             diffuse_message(&msg).await?;
         }
 
@@ -219,6 +226,13 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
+            { // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
+
             diffuse_message(&msg).await?;
         }
 
@@ -262,6 +276,13 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
+            {// initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
+
             diffuse_message(&msg).await?;
         }
 
@@ -301,7 +322,12 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            diffuse_message(&msg).await?;
+            {// initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_neighbors;
+                state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+            }
 
             diffuse_message(&msg).await?;
         }
@@ -326,7 +352,7 @@ pub async fn handle_command_from_cli(
         }
 
         Command::Info => {
-            let (local_addr, site_id, peer_addrs, clock, nb_neighbours) = {
+            let (local_addr, site_id, peer_addrs, clock, nb_neighbours, in_use_neighbours,parent_addr,nb_of_in_use_neig) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
                     state.get_local_addr().to_string(),
@@ -334,6 +360,9 @@ pub async fn handle_command_from_cli(
                     state.get_peers(),
                     state.get_clock().clone(),
                     state.nb_neighbors,
+                    state.in_use_neighbors.clone(),
+                    state.parent_addr.clone(),
+                    state.nb_of_attended_neighbors.clone(),
                 )
             };
 
@@ -346,7 +375,39 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Local address: {}", local_addr);
             log::info!("ℹ️  Site ID: {}", site_id);
             log::info!("ℹ️  Peers: {:?}", peer_addrs);
-            log::info!("ℹ️  Number of neighbours: {}", nb_neighbours);
+            log::info!("ℹ️  Number of in use neighbours: {}", nb_neighbours);
+
+            let mut msg: String = " ".to_string();
+            for neig in in_use_neighbours{
+                msg+=neig.to_string().as_str();
+                msg+= "  ";
+            }
+            log::info!("ℹ️  In use neighbours: {}", msg);
+
+            log::info!("ℹ️  Wave diffusion parameters\n");
+
+            log::info!("ℹ️  Parent addresses\n");
+            let mut msg_parent: String = " ".to_string();
+            for (key, addr) in parent_addr {
+                msg_parent+=key.as_str();
+                msg_parent+=" ";
+                msg_parent+=addr.to_string().as_str();
+                msg_parent+=" \n";
+            }
+
+            log::info!("{}", msg_parent);
+
+            log::info!("ℹ️  Nb_of_attended_neighbours\n");
+            let mut msg_nb_a_i: String = " ".to_string();
+            for (init_id, nb) in nb_of_in_use_neig {
+                msg_nb_a_i+=init_id.as_str();
+                msg_nb_a_i+=" ";
+                msg_nb_a_i+=nb.to_string().as_str();
+                msg_nb_a_i+=" \n";
+            }
+
+            log::info!("{}", msg_nb_a_i);
+
             log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
             log::info!("ℹ️  Vector clock: {:?}", clock.get_vector());
         }

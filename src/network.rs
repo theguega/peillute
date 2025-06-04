@@ -291,13 +291,13 @@ pub async fn handle_message(
                     }else{
                         let (parent_addr, local_addr, site_id,clock) = {
                             let state = LOCAL_APP_STATE.lock().await;
-                            (&state.get_parent_addr(message.message_initiator_id.clone()),
+                            (state.get_parent_addr(message.message_initiator_id.clone()),
                              &state.get_local_addr(),
                              &state.get_site_id().to_string(),
                              state.get_clock().clone())
                         };
                         // Acquit message to parent
-                        send_message(*parent_addr,
+                        send_message(message.sender_addr,
                                      MessageInfo::None,
                                      None,
                                      NetworkMessageCode::TransactionAcknowledgement,
@@ -307,6 +307,21 @@ pub async fn handle_message(
                                      message.message_initiator_addr,
                                      message.clock.clone(),
                         ).await?;
+
+                        if message.sender_addr == parent_addr {
+                            // réinitialisation s'il s'agit de la remontée après réception des rouges de tous les fils
+                            let mut state = LOCAL_APP_STATE.lock().await;
+                            let peer_count = state.in_use_neighbors.len();
+                            state.nb_of_attended_neighbors.insert(
+                                message.message_initiator_id.clone(),
+                                peer_count as i64,
+                            );
+                            state.parent_addr.insert(
+                                message.message_initiator_id.clone(),
+                                "0.0.0.0:0".parse().unwrap()
+                            );
+                        }
+
                     }
 
 
@@ -314,43 +329,76 @@ pub async fn handle_message(
                     log::error!("Command is None for Transaction message");
                 }
             }
+
             NetworkMessageCode::TransactionAcknowledgement => {
-                // Message rouge
+                use crate::message::MessageInfo;
+
+                // ── 1. Accès exclusif à l'état ─────────────────────────────────────
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                let nb_neighbours = state.nb_neighbors;
-                let current_value = state.nb_of_attended_neighbors.get(&message.message_initiator_id).copied().unwrap_or(nb_neighbours);
-                state.nb_of_attended_neighbors.insert(message.message_initiator_id.clone(), current_value - 1);
+                let initiator_id = message.message_initiator_id.clone();
 
-                if state.nb_of_attended_neighbors.get(&message.message_initiator_id.clone()).copied().unwrap_or(-1) == 0 {
-                    // site initateur
-                    if state.parent_addr.get(&message.message_initiator_id.clone()).copied().unwrap_or("99.99.99.99:0".parse().unwrap()) == state.local_addr {
-                        // diffusion terminée
-                        // Réinitialisation
-                        let peer_count = state.in_use_neighbors.len();
-                        state.nb_of_attended_neighbors.insert(
-                            message.message_initiator_id.clone(),
-                            peer_count as i64,
-                        );
-                        state.parent_addr.insert(
-                            message.message_initiator_id.clone(),
-                            "0.0.0.0:0".parse().unwrap()
-                        );
-                        log::error!("Diffusion terminée et réussie !")
+                // a) décrémente le compteur restant
+                let remaining = state
+                    .nb_of_attended_neighbors
+                    .get(&initiator_id)
+                    .copied()
+                    .unwrap_or(state.nb_neighbors)
+                    .saturating_sub(1);
 
-                    }else{
-                        send_message(state.get_parent_addr(message.message_initiator_id.clone()),
-                                     MessageInfo::None,
-                                     None,
-                                     NetworkMessageCode::TransactionAcknowledgement,
-                                     state.get_local_addr().parse().unwrap(),
-                                     &state.get_site_id().to_string(),
-                                     &message.message_initiator_id,
-                                     message.message_initiator_addr,
-                                     state.get_clock().clone()
-                        ).await?;
-                    }
+                state
+                    .nb_of_attended_neighbors
+                    .insert(initiator_id.clone(), remaining);
+
+                // b) récupère le parent AVANT un éventuel reset
+                let parent_addr = state
+                    .parent_addr
+                    .get(&initiator_id)
+                    .copied()
+                    .unwrap_or(state.local_addr);
+
+                // c) Dois-je remettre mon état à zéro ?
+                if remaining == 0 {
+                    let nb_tot = state.nb_neighbors;                   // <- capture avant l'insert
+                    state.nb_of_attended_neighbors
+                        .insert(initiator_id.clone(), nb_tot);
+                    state.parent_addr.insert(
+                        initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap(),
+                    );
+                    log::debug!(
+                    "Nœud {} : réinitialisation terminée pour la vague {}",
+                    state.site_id,
+                    initiator_id
+                );
                 }
+
+                // d) données nécessaires à l'envoi, à sortir du verrou
+                let (local_addr, site_id, clock) =
+                    (state.local_addr, state.site_id.clone(), state.clocks.clone());
+
+                let is_root = parent_addr == local_addr || parent_addr.port() == 0;
+
+                drop(state); // ── 2. Libère le mutex AVANT l'I/O réseau ─────────────
+
+                // ── 3. Relais de l’ACK vers le parent si je ne suis pas la racine ──
+                if !is_root {
+                    send_message(
+                        parent_addr,
+                        MessageInfo::None,
+                        None,
+                        NetworkMessageCode::TransactionAcknowledgement,
+                        local_addr,
+                        &site_id,
+                        &initiator_id,
+                        message.message_initiator_addr,
+                        clock,
+                    )
+                        .await?;
+                }else{
+                    log::debug!("Diffusion terminée ! ")
+                }
+
             }
 
             NetworkMessageCode::Error => {
@@ -445,10 +493,14 @@ pub async fn send_message(
         message_initiator_addr: initiator_addr,
     };
 
+    if address.ip().is_unspecified() || address.port() == 0 {
+        log::warn!("Skipping invalid peer address {}", address);
+        return Ok(());
+    }
+
     let buf = encode::to_vec(&msg)?;
 
     let mut manager = NETWORK_MANAGER.lock().await;
-    log::debug!("Sending message to {}", &address);
 
     let sender = match manager.get_sender(&address) {
         Some(s) => s,
@@ -468,7 +520,14 @@ pub async fn send_message(
     };
 
 
-    sender.send(buf).await?;
+    match sender.send(buf).await{
+        Ok(s) => s,
+        Err(e) => {
+            let err_msg = format!("Impossible to send msg to {} due to error : {}", address,e);
+            log::error!("{}", err_msg);
+            return Err(err_msg.into());
+        }
+    };
     log::debug!("Sent message {:?} to {}", &msg, address);
     Ok(())
 }
