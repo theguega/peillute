@@ -88,10 +88,75 @@ pub fn init_db() -> rusqlite::Result<()> {
             );",
             [],
         )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS LocalState (
+            site_id TEXT PRIMARY KEY,
+            lamport_time INTEGER NOT NULL,
+            vector_clock_id INTEGER NOT NULL,
+            FOREIGN KEY(vector_clock_id) REFERENCES VectorClock(id)
+        );",
+            [],
+        )?;
     }
 
     log::debug!("Database initialized successfully.");
     Ok(())
+}
+
+pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite::Result<()> {
+    use rusqlite::params;
+
+    let lamport_time = clock.get_lamport();
+    let vc_clock = clock.get_vector_clock_map();
+
+    let conn = DB_CONN.lock().unwrap();
+    conn.execute("INSERT INTO VectorClock DEFAULT VALUES", [])?;
+    let vector_clock_id = conn.last_insert_rowid();
+
+    let mut stmt = conn.prepare(
+        "INSERT INTO VectorClockEntry (vector_clock_id, site_id, value) VALUES (?1, ?2, ?3)",
+    )?;
+    for (site, value) in vc_clock.iter() {
+        stmt.execute(params![vector_clock_id, site, value])?;
+    }
+    conn.execute(
+        "INSERT OR REPLACE INTO LocalState (site_id, lamport_time, vector_clock_id)
+        VALUES (?1, ?2, ?3)",
+        params![site_id, lamport_time, vector_clock_id],
+    )?;
+    Ok(())
+}
+
+pub fn get_local_state() -> rusqlite::Result<(String, crate::clock::Clock)> {
+    use rusqlite::params;
+    let conn = DB_CONN.lock().unwrap();
+    let mut stmt =
+        conn.prepare("SELECT site_id, lamport_time, vector_clock_id FROM LocalState LIMIT 1")?;
+
+    let row = stmt.query_row([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)));
+
+    let (site_id, lamport_time, vector_clock_id): (String, i64, i64) = match row {
+        Ok(data) => data,
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Err(e) => return Err(e),
+    };
+
+    let mut clock_map = std::collections::HashMap::new();
+    let mut vc_stmt =
+        conn.prepare("SELECT site_id, value FROM VectorClockEntry WHERE vector_clock_id = ?1")?;
+    let mut rows = vc_stmt.query(params![vector_clock_id])?;
+    while let Some(vc_row) = rows.next()? {
+        let site: String = vc_row.get(0)?;
+        let value: i64 = vc_row.get(1)?;
+        clock_map.insert(site, value);
+    }
+
+    let c = crate::clock::Clock::from_parts(lamport_time, clock_map);
+
+    Ok((site_id, c))
 }
 
 #[cfg(feature = "server")]

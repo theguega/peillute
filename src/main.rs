@@ -13,13 +13,14 @@ mod message;
 mod network;
 mod snapshot;
 mod state;
+mod utils;
 
 /// Command-line arguments for configuring the Peillute application
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Unique identifier for this site in the network
-    #[arg(long, default_value_t = std::process::id().to_string())]
+    #[arg(long, default_value_t = String::new())]
     site_id: String,
 
     /// Port number for peer-to-peer communication
@@ -53,50 +54,63 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     const HIGH_PORT: u16 = 11000;
     const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
+    if !db::is_database_initialized()? {
+        let _ = db::init_db();
+    }
+
     // Init the logger
     env_logger::init();
 
-    // If no port for local adress is specified, try to find a free one
     let args = Args::parse();
-    let port_range = LOW_PORT..=HIGH_PORT;
-    let mut selected_port = args.port;
-    if selected_port == 0 {
-        for port in port_range {
-            if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
-                selected_port = port;
-                drop(listener);
-                break;
-            }
-        }
-    }
-    let site_ip: &str = &args.ip;
-    let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
-    //Adress for the client-server interaction (for the web app)
+    let port_range = LOW_PORT..=HIGH_PORT;
+    let selected_port = if args.port == 0 {
+        port_range
+            .into_iter()
+            .find(|port| std::net::TcpListener::bind(("127.0.0.1", *port)).is_ok())
+            .unwrap_or(LOW_PORT)
+    } else {
+        args.port
+    };
+
+    let site_ip = &args.ip;
+    let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
     let client_server_interaction_addr: SocketAddr =
         format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
 
-    // Initialize the app state
+    let peers_addrs: Vec<SocketAddr> = args
+        .peers
+        .into_iter()
+        .filter_map(|peer| peer.parse::<SocketAddr>().ok())
+        .collect();
+
+    let (site_id, clock, needs_sync) = match utils::reload_existing_site().await {
+        Ok((site_id, clock)) => (site_id, clock, true),
+        Err(_) => {
+            let generated_site_id = if args.site_id.is_empty() {
+                utils::get_mac_address().unwrap_or_default() + "_" + &std::process::id().to_string()
+            } else {
+                args.site_id.clone()
+            };
+            (generated_site_id, crate::clock::Clock::new(), false)
+        }
+    };
+
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = args.site_id.clone();
+        state.site_id = site_id.clone();
         state.site_addr = peer_interaction_addr;
         state
             .parent_addr_for_transaction_wave
-            .insert(args.site_id.clone(), peer_interaction_addr);
-
-        let site_id = state.site_id.clone();
-        state.clocks.update_clock(&site_id, None);
-        let mut peers_addrs = Vec::new();
-        for peer in args.peers {
-            let peer_addr = peer.parse::<SocketAddr>()?;
-            peers_addrs.push(peer_addr);
-        }
+            .insert(site_id.clone(), peer_interaction_addr);
+        state.clocks = clock;
         state.peer_addrs = peers_addrs;
+        state.update_clock(None).await;
+    }
 
-        if !db::is_database_initialized()? {
-            let _ = db::init_db();
-        }
+    if needs_sync {
+        log::info!("Sync request, node connexion reinitiated ");
+        network::on_sync().await;
     }
 
     // Create the network listener
@@ -201,7 +215,7 @@ async fn disconnect() {
         // increment the clock for every deconnection
         let clock = {
             let mut state = LOCAL_APP_STATE.lock().await;
-            state.clocks.update_clock(&site_id, None);
+            state.update_clock(None).await;
             state.get_clock().clone()
         };
 
