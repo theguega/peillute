@@ -499,8 +499,8 @@ pub async fn handle_network_message(
         let mut state = LOCAL_APP_STATE.lock().await;
         let site_id = state.get_site_id().to_string();
         state
-            .clocks
-            .update_clock(site_id.as_str(), Some(&message.clock));
+            .update_clock(site_id.as_str(), Some(&message.clock))
+            .await;
     }
 }
 

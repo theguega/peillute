@@ -643,7 +643,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        state.clocks.update_clock(&node, None);
+        state.update_clock(&node, None).await;
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };
@@ -703,7 +703,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        state.clocks.update_clock(&node, None);
+        state.update_clock(&node, None).await;
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };
@@ -762,7 +762,7 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        state.clocks.update_clock(&node, None);
+        state.update_clock(&node, None).await;
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };
@@ -828,7 +828,7 @@ async fn transfer_from_user_to_user_server(
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        state.clocks.update_clock(&node, None);
+        state.update_clock(&node, None).await;
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };
@@ -900,7 +900,7 @@ async fn refund_transaction_server(
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        state.clocks.update_clock(&node, None);
+        state.update_clock(&node, None).await;
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };

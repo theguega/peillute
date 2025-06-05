@@ -28,6 +28,16 @@ impl Clock {
         }
     }
 
+    pub fn from_parts(
+        lamport_clock: i64,
+        vector_clock: std::collections::HashMap<String, i64>,
+    ) -> Self {
+        Clock {
+            lamport_clock,
+            vector_clock,
+        }
+    }
+
     ///Creates a new Clock instance with initialized clocks, used for testing
     #[cfg(test)]
     pub fn new_with_values(lamport: i64, vector: std::collections::HashMap<String, i64>) -> Self {

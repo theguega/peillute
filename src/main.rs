@@ -13,13 +13,14 @@ mod message;
 mod network;
 mod snapshot;
 mod state;
+mod utils;
 
 /// Command-line arguments for configuring the Peillute application
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Unique identifier for this site in the network
-    #[arg(long, default_value_t = std::process::id().to_string())]
+    #[arg(long, default_value_t = String::new())]
     site_id: String,
 
     /// Port number for peer-to-peer communication
@@ -53,6 +54,10 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     const HIGH_PORT: u16 = 11000;
     const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
+    if !db::is_database_initialized()? {
+        let _ = db::init_db();
+    }
+
     // Init the logger
     env_logger::init();
 
@@ -72,31 +77,41 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let site_ip: &str = &args.ip;
     let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
+    let new_site_id =
+        utils::get_mac_address().unwrap_or_default() + "_" + &std::process::id().to_string();
+
+    let site_id = if args.site_id.is_empty() {
+        new_site_id
+    } else {
+        args.site_id.clone()
+    };
+
     //Adress for the client-server interaction (for the web app)
     let client_server_interaction_addr: SocketAddr =
         format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
 
-    // Initialize the app state
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = args.site_id.clone();
-        state.site_addr = peer_interaction_addr;
-        state
-            .parent_addr_for_transaction_wave
-            .insert(args.site_id.clone(), peer_interaction_addr);
+    let mut peers_addrs = Vec::new();
+    for peer in args.peers {
+        let peer_addr = peer.parse::<SocketAddr>()?;
+        peers_addrs.push(peer_addr);
+    }
 
-        let site_id = state.site_id.clone();
-        state.clocks.update_clock(&site_id, None);
-        let mut peers_addrs = Vec::new();
-        for peer in args.peers {
-            let peer_addr = peer.parse::<SocketAddr>()?;
-            peers_addrs.push(peer_addr);
+    if !utils::reload_existing_site(peer_interaction_addr, peers_addrs.clone()).await {
+        // Initialize the app state
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.site_id = site_id.clone();
+            state.site_addr = peer_interaction_addr;
+            state
+                .parent_addr_for_transaction_wave
+                .insert(site_id.clone(), peer_interaction_addr);
+            state.update_clock(&site_id.clone(), None).await;
+            state.peer_addrs = peers_addrs;
         }
-        state.peer_addrs = peers_addrs;
-
-        if !db::is_database_initialized()? {
-            let _ = db::init_db();
-        }
+        // Save the initial state to the database
+    } else {
+        // this is not used for now but needs to be here
+        network::on_sync().await;
     }
 
     // Create the network listener
@@ -201,7 +216,7 @@ async fn disconnect() {
         // increment the clock for every deconnection
         let clock = {
             let mut state = LOCAL_APP_STATE.lock().await;
-            state.clocks.update_clock(&site_id, None);
+            state.update_clock(&site_id, None).await;
             state.get_clock().clone()
         };
 

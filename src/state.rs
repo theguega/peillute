@@ -4,6 +4,9 @@
 //! peer management, and logical clock synchronization.
 
 #[cfg(feature = "server")]
+use crate::clock::Clock;
+
+#[cfg(feature = "server")]
 /// Represents the global state of a Peillute node
 pub struct AppState {
     // --- Site Info ---
@@ -138,6 +141,19 @@ impl AppState {
     #[allow(unused)]
     pub fn get_nb_connected_neighbours(&self) -> i64 {
         self.nb_connected_neighbours
+    }
+
+    pub async fn update_clock(&mut self, site_id: &str, received_vc: Option<&Clock>) {
+        // this wrapper is needed to ensure that the clock is saved
+        // each time it is updated
+        // please DO NOT call the `update_clock` method directly from the clock
+        self.clocks.update_clock(site_id, received_vc);
+        self.save_local_state().await;
+    }
+
+    pub async fn save_local_state(&self) {
+        // this is likely to be called whenever the clocks are updated
+        let _ = crate::db::update_local_state(&self.site_id.clone(), self.clocks.clone());
     }
 }
 

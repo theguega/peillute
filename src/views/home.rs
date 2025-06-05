@@ -129,7 +129,7 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        let _ = state.clocks.update_clock(&node, None);
+        let _ = state.update_clock(&node, None);
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };
