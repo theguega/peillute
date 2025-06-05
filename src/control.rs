@@ -1,3 +1,10 @@
+//! Command handling and CLI interface
+//!
+//! This module provides the command-line interface and command handling functionality
+//! for the Peillute application, including both local and network command processing.
+
+#[cfg(feature = "server")]
+/// Processes a line of input from the CLI and converts it to a Command
 pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
@@ -6,7 +13,7 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
             command
         }
         Ok(None) => {
-            log::info!("Aucun input");
+            println!("Aucun input");
             Command::Unknown("Aucun input".to_string())
         }
         Err(e) => {
@@ -16,24 +23,42 @@ pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
     }
 }
 
+#[cfg(feature = "server")]
+/// Available commands in the system
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub enum Command {
+    /// Create a new user account
     CreateUser,
+    /// List all user accounts
     UserAccounts,
+    /// Display transactions for a specific user
     PrintUserTransactions,
+    /// Display all system transactions
     PrintTransactions,
+    /// Deposit money into an account
     Deposit,
+    /// Withdraw money from an account
     Withdraw,
+    /// Transfer money between accounts
     Transfer,
+    /// Make a payment
     Pay,
+    /// Process a refund
     Refund,
+    /// Display help information
     Help,
+    /// Display system information
     Info,
+    /// Unknown command
     Unknown(String),
+    /// Error command
     Error(String),
+    /// Start a system snapshot
     Snapshot,
 }
 
+#[cfg(feature = "server")]
+/// Parses a command string into a Command enum variant
 fn parse_command(input: &str) -> Command {
     match input.trim() {
         "/create_user" => Command::CreateUser,
@@ -52,32 +77,35 @@ fn parse_command(input: &str) -> Command {
     }
 }
 
-pub async fn handle_command_from_cli(
-    cmd: Command,
-    node: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+#[cfg(feature = "server")]
+/// Handles commands received from the CLI
+pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
-    use log;
 
-    let (local_vc_clock,local_lamport_time,local_clk,local_addr )={
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
         let local_clk = state.get_clock().clone();
-        let local_addr = state.get_local_addr().clone();
-        (local_vc_clock, local_lamport_time,local_clk, local_addr)
+        let local_addr = state.get_site_addr().clone();
+        let node = state.get_site_id().to_string();
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
-
     match cmd {
-
         Command::CreateUser => {
             let name = prompt("Username");
             super::db::create_user(&name)?;
 
-            use crate::message::{Message,CreateUser, MessageInfo, NetworkMessageCode};
+            use crate::message::{CreateUser, Message, MessageInfo, NetworkMessageCode};
             use crate::network::diffuse_message;
 
             let msg = Message {
@@ -91,9 +119,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            {// initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -118,20 +147,16 @@ pub async fn handle_command_from_cli(
             let name = prompt("Username");
 
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
+            super::db::deposit(
+                &name,
+                amount,
+                &local_lamport_time,
+                node.as_str(),
+                &local_vc_clock,
+            )?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
 
-            // perfect network
-            // use crate::network::send_message_to_all;
-            // let _ = send_message_to_all(
-            //     Some(Command::Deposit),
-            //     NetworkMessageCode::Transaction,
-            //     MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
-            // )
-            // .await?;
-
-            // Non-perfect network
             use crate::message::Message;
             use crate::network::diffuse_message;
 
@@ -145,9 +170,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_id: node.to_string(),
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
-            {// initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -159,24 +185,17 @@ pub async fn handle_command_from_cli(
             let name = prompt("Username");
 
             let amount = prompt_parse::<f64>("Withdraw amount");
-            if amount < 0.0 {
+            if amount < 0.0 {}
+            super::db::withdraw(
+                &name,
+                amount,
+                &local_lamport_time,
+                node.as_str(),
+                &local_vc_clock,
+            )?;
 
-            }
-            super::db::withdraw(&name, amount, &local_lamport_time, node, &local_vc_clock)?;
-
-            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-
-            // Perfect network
-            // use crate::network::send_message_to_all;
-            // let _ = send_message_to_all(
-            //     Some(Command::Withdraw),
-            //     NetworkMessageCode::Transaction,
-            //     MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
-            // )
-            // .await?;
-
-            // Non-perfect network
             use crate::message::Message;
+            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
             use crate::network::diffuse_message;
 
             let msg = Message {
@@ -190,9 +209,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            {// initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -207,35 +227,27 @@ pub async fn handle_command_from_cli(
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
 
-
             super::db::create_transaction(
                 &name,
                 &beneficiary,
                 amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
 
-            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-
-            // Perfect network
-            // use crate::network::send_message_to_all;
-            // let _ = send_message_to_all(
-            //     Some(Command::Transfer),
-            //     NetworkMessageCode::Transaction,
-            //     MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
-            // )
-            // .await?;
-
-            // Non-perfect network
             use crate::message::Message;
+            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
             use crate::network::diffuse_message;
 
             let msg = Message {
                 command: Some(Command::Transfer),
-                info: MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
+                info: MessageInfo::Transfer(Transfer::new(
+                    name.clone(),
+                    beneficiary.clone(),
+                    amount,
+                )),
                 code: NetworkMessageCode::Transaction,
                 clock: local_clk,
                 sender_addr: local_addr.parse().unwrap(),
@@ -244,9 +256,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            { // initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -262,25 +275,13 @@ pub async fn handle_command_from_cli(
                 "NULL",
                 amount,
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 "",
                 &local_vc_clock,
             )?;
 
-            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-
-
-            // Perfect networks
-            // use crate::network::send_message_to_all;
-            // let _ = send_message_to_all(
-            //     Some(Command::Pay),
-            //     NetworkMessageCode::Transaction,
-            //     MessageInfo::Pay(Pay::new(name.clone(), amount)),
-            // )
-            // .await?;
-
-            // Non-perfect network
             use crate::message::Message;
+            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
             use crate::network::diffuse_message;
 
             let msg = Message {
@@ -294,9 +295,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            {// initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -312,21 +314,14 @@ pub async fn handle_command_from_cli(
             let transac_node = prompt("Node");
             super::db::refund_transaction(
                 transac_time,
-                &transac_node,
+                &transac_node.as_str(),
                 &local_lamport_time,
-                node,
+                node.as_str(),
                 &local_vc_clock,
             )?;
 
-            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            // use crate::network::send_message_to_all;
-            // let _ = send_message_to_all(
-            //     Some(Command::Refund),
-            //     NetworkMessageCode::Transaction,
-            //     MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
-            // )
-            // .await?;
             use crate::message::Message;
+            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
             use crate::network::diffuse_message;
 
             let msg = Message {
@@ -340,9 +335,10 @@ pub async fn handle_command_from_cli(
                 message_initiator_addr: local_addr.parse().unwrap(),
             };
 
-            {// initialisation des paramètres avant la diffusion d'un message
+            {
+                // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_neighbors;
+                let nb_neigh = state.nb_connected_neighbours;
                 state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
                 state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
             }
@@ -351,39 +347,69 @@ pub async fn handle_command_from_cli(
         }
 
         Command::Help => {
-            log::info!("📜 Command list:");
-            log::info!("/create_user      - Create a personal account");
-            log::info!("/user_accounts    - List all users");
-            log::info!("/print_user_tsx   - Show a user’s transactions");
-            log::info!("/print_tsx        - Show all system transactions");
-            log::info!("/deposit          - Deposit money to an account");
-            log::info!("/withdraw         - Withdraw money from an account");
-            log::info!("/transfer         - Transfer money to another user");
-            log::info!("/pay              - Make a payment (to NULL)");
-            log::info!("/refund           - Refund a transaction");
-            log::info!("/info             - Show system information");
-            log::info!("/start_snapshot    - Start a snapshot");
+            println!("📜 Command list:");
+            println!("----------------------------------------");
+            println!("/create_user      - Create a personal account");
+            println!("/user_accounts    - List all users");
+            println!("/print_user_tsx   - Show a user's transactions");
+            println!("/print_tsx        - Show all system transactions");
+            println!("/deposit          - Deposit money to an account");
+            println!("/withdraw         - Withdraw money from an account");
+            println!("/transfer         - Transfer money to another user");
+            println!("/pay              - Make a payment (to NULL)");
+            println!("/refund           - Refund a transaction");
+            println!("/info             - Show system information");
+            println!("/start_snapshot   - Start a snapshot");
+            println!("/help             - Show this help message");
+            println!("----------------------------------------");
         }
 
         Command::Snapshot => {
+            println!("📸 Starting snapshot...");
             super::snapshot::start_snapshot().await?;
         }
 
         Command::Info => {
-            let (local_addr, site_id, peer_addrs, clock, nb_neighbours, in_use_neighbours,parent_addr,nb_of_in_use_neig) = {
+            let (
+                local_addr,
+                site_id,
+                peer_addrs,
+                clock,
+                nb_neighbours,
+                in_use_neighbours,
+                parent_addr,
+                nb_of_in_use_neig,
+            ) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
-                    state.get_local_addr().to_string(),
+                    state.get_site_addr(),
                     state.get_site_id().to_string(),
-                    state.get_peers(),
+                    state.get_peers_addrs_string(),
                     state.get_clock().clone(),
-                    state.nb_neighbors,
-                    state.in_use_neighbors.clone(),
-                    state.parent_addr.clone(),
-                    state.nb_of_attended_neighbors.clone(),
+                    state.nb_connected_neighbours,
+                    state.connected_neighbours_addrs.clone(),
+                    state.parent_addr_for_transaction_wave.clone(),
+                    state.attended_neighbours_nb_for_transaction_wave.clone(),
                 )
             };
 
+            let db_path = {
+                let conn = crate::db::DB_CONN.lock().unwrap();
+                let path = conn.path().unwrap();
+                // keep only the name of the file (after the last "/")
+                path.to_string().split("/").last().unwrap().to_string()
+            };
+
+            println!("📊 System Information:");
+            println!("----------------------------------------");
+            println!("Database : {}", db_path);
+            println!("Local Address: {}", local_addr);
+            println!("Site ID: {}", site_id);
+            println!("Number of connected neighbors: {}", nb_neighbours);
+            println!("Peers: {:?}", peer_addrs);
+            println!("Vector Clock: {:?}", clock.get_vector());
+            println!("Lamport Clock: {}", clock.get_lamport());
+            println!("----------------------------------------");
             log::info!("ℹ️  Info: This is a distributed banking system.");
             log::info!("ℹ️  Version: 0.0.1");
             log::info!(
@@ -396,9 +422,9 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Number of in use neighbours: {}", nb_neighbours);
 
             let mut msg: String = " ".to_string();
-            for neig in in_use_neighbours{
-                msg+=neig.to_string().as_str();
-                msg+= "  ";
+            for neig in in_use_neighbours {
+                msg += neig.to_string().as_str();
+                msg += "  ";
             }
             log::info!("ℹ️  In use neighbours: {}", msg);
 
@@ -407,10 +433,10 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Parent addresses\n");
             let mut msg_parent: String = " ".to_string();
             for (key, addr) in parent_addr {
-                msg_parent+=key.as_str();
-                msg_parent+=" ";
-                msg_parent+=addr.to_string().as_str();
-                msg_parent+=" \n";
+                msg_parent += key.as_str();
+                msg_parent += " ";
+                msg_parent += addr.to_string().as_str();
+                msg_parent += " \n";
             }
 
             log::info!("{}", msg_parent);
@@ -418,10 +444,10 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Nb_of_attended_neighbours\n");
             let mut msg_nb_a_i: String = " ".to_string();
             for (init_id, nb) in nb_of_in_use_neig {
-                msg_nb_a_i+=init_id.as_str();
-                msg_nb_a_i+=" ";
-                msg_nb_a_i+=nb.to_string().as_str();
-                msg_nb_a_i+=" \n";
+                msg_nb_a_i += init_id.as_str();
+                msg_nb_a_i += " ";
+                msg_nb_a_i += nb.to_string().as_str();
+                msg_nb_a_i += " \n";
             }
 
             log::info!("{}", msg_nb_a_i);
@@ -430,39 +456,61 @@ pub async fn handle_command_from_cli(
             log::info!("ℹ️  Vector clock: {:?}", clock.get_vector());
         }
 
-        Command::Unknown(cmd) => {
-            log::info!("❓ Unknown command: {}", cmd);
+        Command::Unknown(msg) => {
+            println!("❌ Unknown command: {}", msg);
         }
 
-        Command::Error(err) => {
-            log::error!("❌ Error: {}", err);
+        Command::Error(msg) => {
+            println!("❌ Error: {}", msg);
         }
     }
+
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Handles commands received from the network
 pub async fn handle_command_from_network(
     msg: crate::message::MessageInfo,
-    clock: crate::clock::Clock,
+    received_clock: crate::clock::Clock,
     site_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
+    // at reception, if clock of the site id is greater than our receiver clock, we have to prodcast the message
+    // or if the vector clock for this site id is not present, we have to broadcast the message
+    // else, this message have already been received, we can ignore it
+    let local_clocks = {
+        let state = LOCAL_APP_STATE.lock().await;
+        state.get_clock().clone()
+    };
+    if let Some(local_version_of_received_clock) =
+        local_clocks.get_vector().get(&site_id.to_string())
+    {
+        log::debug! {"local version of received clock: {local_version_of_received_clock}"};
+        log::debug! {"received clock: {}", received_clock.get_lamport()};
+        if local_version_of_received_clock >= &received_clock.get_lamport() {
+            log::debug!("command already received, skipping");
+            return Ok(());
+        };
+    }
+
+    log::debug!("handle and broadcast to other nodes");
     use crate::message::MessageInfo;
     use log;
 
-    let message_lamport_time = clock.get_lamport().clone();
-    let message_vc_clock = clock.get_vector().clone();
+    let message_lamport_time = received_clock.get_lamport().clone();
+    let message_vc_clock = received_clock.get_vector().clone();
 
-    if crate::db::transaction_exists(message_lamport_time,site_id)?{
+    if crate::db::transaction_exists(message_lamport_time, site_id)? {
         log::info!("Transaction allready exists, skipping");
         return Ok(());
     }
 
     match msg {
-        MessageInfo::CreateUser(create_user) => {
+        crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
         }
-
-        MessageInfo::Deposit(deposit) => {
+        crate::message::MessageInfo::Deposit(deposit) => {
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
@@ -515,37 +563,43 @@ pub async fn handle_command_from_network(
                 &message_vc_clock,
             )?;
         }
-
-        MessageInfo::SnapshotResponse(data) => {
-            //do nothing
-            log::info!("Snapshot response: {:?}", data);
+        crate::message::MessageInfo::SnapshotResponse(_) => {
+            // Handle snapshot response
         }
-
-        MessageInfo::None => {
-            log::info!("❓ Received None message");
+        crate::message::MessageInfo::None => {
+            // No action needed
         }
     }
+
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Prompts the user for input with a label
 fn prompt(label: &str) -> String {
     use std::io::{self, Write};
-    let mut input = String::new();
-    print!("{label} > ");
+    print!("{}: ", label);
     io::stdout().flush().unwrap();
+    let mut input = String::new();
     io::stdin().read_line(&mut input).unwrap();
     input.trim().to_string()
 }
 
+#[cfg(feature = "server")]
+/// Prompts the user for input and parses it to a specific type
 fn prompt_parse<T: std::str::FromStr>(label: &str) -> T
 where
     T::Err: std::fmt::Debug,
 {
+    use std::io::{self, Write};
     loop {
-        let input = prompt(label);
-        match input.parse::<T>() {
-            Ok(value) => break value,
-            Err(_) => println!("Invalid input. Try again."),
+        print!("{}: ", label);
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        match input.trim().parse() {
+            Ok(value) => return value,
+            Err(e) => println!("Invalid input: {:?}", e),
         }
     }
 }

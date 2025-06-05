@@ -12,8 +12,7 @@ test:
   before_script:
     - apt-get update && apt-get install -y libsqlite3-dev
   script:
-    - cargo clean
-    - cargo test
+    - cargo test --all-features
   rules:
     - when: always
 
@@ -40,7 +39,7 @@ pages:
     - apt-get update && apt-get install -y coreutils bash
   script:
     - mkdir -p public
-    - mv target/doc public/doc
+    - mv target/doc/ public/doc/
   artifacts:
     paths:
       - public

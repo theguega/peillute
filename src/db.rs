@@ -1,29 +1,46 @@
-#[allow(unused)]
-#[derive(Debug)]
+//! Database management for the Peillute application
+//!
+//! This module handles all database operations, including user management,
+//! transaction processing, and state synchronization. It uses SQLite as the
+//! underlying database engine.
+
+/// Represents a transaction in the system
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Transaction {
+    /// Source user of the transaction
     pub from_user: String,
+    /// Destination user of the transaction
     pub to_user: String,
+    /// Transaction amount
     pub amount: f64,
+    /// Lamport timestamp of the transaction
     pub lamport_time: i64,
+    /// ID of the node that created the transaction
     pub source_node: String,
+    /// Optional message associated with the transaction
     pub optional_msg: Option<String>,
+    /// Vector clock state at the time of the transaction
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
 use clap::Parser;
-use rusqlite::params;
-
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
-    static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
+    pub static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
         std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().db_id)).unwrap());
 }
 
+#[cfg(feature = "server")]
+/// Special value representing a null user
 const NULL: &str = "NULL";
 
+#[cfg(feature = "server")]
+/// Initializes the database schema
 pub fn init_db() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
 
+        // Create VectorClock table for storing vector clock states
         conn.execute(
             "CREATE TABLE IF NOT EXISTS VectorClock (
             id INTEGER PRIMARY KEY AUTOINCREMENT
@@ -31,6 +48,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create VectorClockEntry table for storing individual vector clock entries
         conn.execute(
             "CREATE TABLE IF NOT EXISTS VectorClockEntry (
                 vector_clock_id INTEGER,
@@ -43,6 +61,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create User table for storing user accounts
         conn.execute(
             "CREATE TABLE IF NOT EXISTS User (
             unique_name TEXT PRIMARY KEY,
@@ -51,6 +70,7 @@ pub fn init_db() -> rusqlite::Result<()> {
             [],
         )?;
 
+        // Create Transactions table for storing transaction history
         conn.execute(
             "CREATE TABLE IF NOT EXISTS Transactions (
                 from_user TEXT,
@@ -62,7 +82,7 @@ pub fn init_db() -> rusqlite::Result<()> {
                 optional_msg TEXT,
                 FOREIGN KEY(from_user) REFERENCES User(unique_name),
                 FOREIGN KEY(to_user) REFERENCES User(unique_name),
-                FOREIGN KEY(vector_clock_id) REFERENCES VectorClock(id), 
+                FOREIGN KEY(vector_clock_id) REFERENCES VectorClock(id),
                 PRIMARY KEY(lamport_time, source_node)
             );",
             [],
@@ -73,6 +93,8 @@ pub fn init_db() -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Checks if the database has been initialized
 pub fn is_database_initialized() -> rusqlite::Result<bool> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -84,7 +106,8 @@ pub fn is_database_initialized() -> rusqlite::Result<bool> {
     }
 }
 
-#[allow(unused)]
+#[cfg(feature = "server")]
+/// Check if a transaction exists in the database
 pub fn transaction_exists(lamport_time: i64, source_node: &str) -> rusqlite::Result<bool> {
     use rusqlite::params;
     {
@@ -97,18 +120,8 @@ pub fn transaction_exists(lamport_time: i64, source_node: &str) -> rusqlite::Res
     }
 }
 
-
-#[allow(unused)]
-pub fn drop_tables() -> rusqlite::Result<()> {
-    {
-        let conn = DB_CONN.lock().unwrap();
-        conn.execute("DROP TABLE IF EXISTS Transactions;", [])?;
-        conn.execute("DROP TABLE IF EXISTS User;", [])?;
-    }
-    log::debug!("Tables dropped successfully.");
-    Ok(())
-}
-
+#[cfg(feature = "server")]
+/// Checks if a user exists in the database
 pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     {
         use rusqlite::params;
@@ -119,6 +132,8 @@ pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     }
 }
 
+#[cfg(feature = "server")]
+/// Creates a new user with zero balance
 pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     if user_exists(unique_name)? {
@@ -136,6 +151,28 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     }
 }
 
+#[cfg(feature = "server")]
+/// Deletes a user from the database
+pub fn delete_user(name: &str) -> rusqlite::Result<()> {
+    use rusqlite::params;
+    if !user_exists(name)? {
+        let err = rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
+            Some(format!("User '{}' does not exist.", name).into()),
+        );
+
+        log::error!("User '{}' does not exist.", name);
+        return Err(err);
+    }
+    {
+        let conn = DB_CONN.lock().unwrap();
+        conn.execute("DELETE FROM User WHERE unique_name = ?1", params![name])?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "server")]
+/// Calculates the current balance for a user
 pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     {
         use rusqlite::params;
@@ -150,13 +187,15 @@ pub fn calculate_solde(name: &str) -> rusqlite::Result<f64> {
     }
 }
 
+#[cfg(feature = "server")]
+/// Updates the stored balance for a user
 pub fn update_solde(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
 
     if !user_exists(name)? {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("User '{}' does not exist.", name).into())
+            Some(format!("User '{}' does not exist.", name).into()),
         );
 
         return Err(err);
@@ -168,10 +207,13 @@ pub fn update_solde(name: &str) -> rusqlite::Result<()> {
             "UPDATE User SET solde = ?1 WHERE unique_name = ?2",
             params![solde, name],
         )?;
+        log::debug!("Updated solde for {} to {}", name, solde);
         Ok(())
     }
 }
 
+#[cfg(feature = "server")]
+/// Ensures a user exists, creating it if necessary
 pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     if name != NULL && !user_exists(name)? {
         create_user(name)?;
@@ -179,6 +221,8 @@ pub fn ensure_user(name: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Creates a new transaction between users
 pub fn create_transaction(
     from_user: &str,
     to_user: &str,
@@ -192,15 +236,32 @@ pub fn create_transaction(
     if from_user != NULL && calculate_solde(from_user)? < amount {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("Insufficient funds: '{}' has less than {}.",
-                         from_user, amount).into())
+            Some(
+                format!(
+                    "Insufficient funds: '{}' has less than {}.",
+                    from_user, amount
+                )
+                .into(),
+            ),
         );
 
+        log::error!(
+            "Insufficient funds: '{}' has less than {}.",
+            from_user,
+            amount
+        );
         return Err(err);
     }
 
     ensure_user(from_user)?;
     ensure_user(to_user)?;
+
+    log::debug!(
+        "Creating transaction from {} to {} with amount {}",
+        from_user,
+        to_user,
+        amount
+    );
 
     {
         let conn = DB_CONN.lock().unwrap();
@@ -239,6 +300,7 @@ pub fn create_transaction(
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn deposit(
     user: &str,
     amount: f64,
@@ -249,20 +311,24 @@ pub fn deposit(
     if !user_exists(user)? {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("Unknown User: {}", user).into())
+            Some(format!("Unknown User: {}", user).into()),
         );
 
+        log::error!("Unknown User: {}", user);
         return Err(err);
     }
 
     if amount < 0.0 {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("Negative deposit amount: {}", amount).into())
+            Some(format!("Negative deposit amount: {}", amount).into()),
         );
 
+        log::error!("Negative deposit amount: {}", amount);
         return Err(err);
     }
+
+    log::debug!("Depositing {} to {}", amount, user);
 
     create_transaction(
         NULL,
@@ -275,6 +341,7 @@ pub fn deposit(
     )
 }
 
+#[cfg(feature = "server")]
 pub fn withdraw(
     user: &str,
     amount: f64,
@@ -285,27 +352,30 @@ pub fn withdraw(
     if amount < 0.0 {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("Negative withdrawal amount: {}", amount).into())
+            Some(format!("Negative withdrawal amount: {}", amount).into()),
         );
-
+        log::error!("Negative withdrawal amount: {}", amount);
         return Err(err);
     }
     if !user_exists(user)? {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("Unknown user: {}", user).into())
+            Some(format!("Unknown user: {}", user).into()),
         );
-
+        log::error!("Unknown user: {}", user);
         return Err(err);
     }
     if calculate_solde(user)? < amount {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("User {} not enough money", user).into())
+            Some(format!("User {} not enough money", user).into()),
         );
-
+        log::error!("User {} not enough money", user);
         return Err(err);
     }
+
+    log::debug!("Withdrawing {} from {}", amount, user);
+
     create_transaction(
         user,
         NULL,
@@ -317,6 +387,7 @@ pub fn withdraw(
     )
 }
 
+#[cfg(feature = "server")]
 #[allow(unused)]
 pub fn create_user_with_solde(
     unique_name: &str,
@@ -337,24 +408,22 @@ pub fn create_user_with_solde(
     )
 }
 
-pub fn has_been_refunded(
-    transac_time: i64,
-    node: &str,
-) -> rusqlite::Result<bool> {
+#[cfg(feature = "server")]
+pub fn has_been_refunded(transac_time: i64, node: &str) -> rusqlite::Result<bool> {
     use rusqlite::params;
     {
         let conn = DB_CONN.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT EXISTS(SELECT 1 FROM Transactions WHERE optional_msg = ?1)",
-        )?;
-    
+        let mut stmt =
+            conn.prepare("SELECT EXISTS(SELECT 1 FROM Transactions WHERE optional_msg = ?1)")?;
+
         let optional_msg = format!("Refund transaction {}-{}", node, transac_time);
         let exists: bool = stmt.query_row(params![optional_msg], |row| row.get(0))?;
-    
+
         Ok(exists)
     }
 }
 
+#[cfg(feature = "server")]
 pub fn refund_transaction(
     transac_time: i64,
     node: &str,
@@ -366,15 +435,27 @@ pub fn refund_transaction(
         if calculate_solde(&tx.to_user)? < tx.amount {
             let err = rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-                Some(format!("User {} has not enough money to give back", &tx.to_user).into())
+                Some(format!("User {} has not enough money to give back", &tx.to_user).into()),
             );
+            log::error!("User {} has not enough money to give back", &tx.to_user);
             return Err(err);
         }
 
         if tx.optional_msg.is_some() && tx.optional_msg.unwrap().starts_with("Refund transaction") {
             let err = rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-                Some(format!("Transaction {}-{} is a refund transaction", node, transac_time).into())
+                Some(
+                    format!(
+                        "Transaction {}-{} is a refund transaction",
+                        node, transac_time
+                    )
+                    .into(),
+                ),
+            );
+            log::error!(
+                "Transaction {}-{} is a refund transaction",
+                node,
+                transac_time
             );
             return Err(err);
         }
@@ -382,8 +463,9 @@ pub fn refund_transaction(
         if has_been_refunded(transac_time, node)? {
             let err = rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-                Some(format!("Transaction {}-{} already refunded", node, transac_time).into())
+                Some(format!("Transaction {}-{} already refunded", node, transac_time).into()),
             );
+            log::error!("Transaction {}-{} already refunded", node, transac_time);
             return Err(err);
         }
 
@@ -399,16 +481,26 @@ pub fn refund_transaction(
     } else {
         let err = rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(rusqlite::ffi::ErrorCode::Unknown as i32),
-            Some(format!("No transaction found at time {} from node {}",
-                         transac_time,
-                         node).into())
+            Some(
+                format!(
+                    "No transaction found at time {} from node {}",
+                    transac_time, node
+                )
+                .into(),
+            ),
         );
 
+        log::error!(
+            "No transaction found at time {} from node {}",
+            transac_time,
+            node
+        );
         return Err(err);
     }
     Ok(())
 }
 
+#[cfg(feature = "server")]
 pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option<Transaction>> {
     use rusqlite::params;
     {
@@ -455,6 +547,7 @@ pub fn get_transaction(transac_time: i64, node: &str) -> rusqlite::Result<Option
     }
 }
 
+#[cfg(feature = "server")]
 pub fn print_users() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -463,15 +556,30 @@ pub fn print_users() -> rusqlite::Result<()> {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
         })?;
 
-        log::info!("-- Users --");
+        println!("-- Users --");
         for user in users {
             let (name, solde) = user?;
-            log::info!("{}: {:.2}", name, solde);
+            println!("{}: {:.2}", name, solde);
         }
         Ok(())
     }
 }
 
+#[cfg(feature = "server")]
+pub fn get_users() -> rusqlite::Result<Vec<String>> {
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT unique_name FROM User")?;
+        let users = stmt.query_map([], |row| Ok(row.get::<_, String>(0)?))?;
+        let mut users_vec = Vec::new();
+        for user in users {
+            users_vec.push(user?);
+        }
+        Ok(users_vec)
+    }
+}
+
+#[cfg(feature = "server")]
 pub fn print_transactions() -> rusqlite::Result<()> {
     {
         let conn = DB_CONN.lock().unwrap();
@@ -490,7 +598,18 @@ pub fn print_transactions() -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions --");
+        println!("📜 -- Transactions --");
+        println!(
+            "┌─────────────────┬─────────────────┬────────────┬────────────┬─────────────────┬──────────────────────┬──────────────────────┐"
+        );
+        println!(
+            "│ {:<15} │ {:<15} │ {:<10} │ {:<10} │ {:<15} │ {:<20} │ {:<20} │",
+            "From", "To", "Amount", "Time", "Node", "Message", "Vector Clock"
+        );
+        println!(
+            "├─────────────────┼─────────────────┼────────────┼────────────┼─────────────────┼──────────────────────┼──────────────────────┤"
+        );
+
         for tx in txs {
             let (from, to, amount, time, node, msg, vector_clock_id) = tx?;
             let mut clock_map = std::collections::HashMap::new();
@@ -504,28 +623,33 @@ pub fn print_transactions() -> rusqlite::Result<()> {
                 clock_map.insert(site_id, value);
             }
 
-            log::info!(
-                "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?} | vector_clock: {:?}",
+            println!(
+                "│ {:<15} │ {:<15} │ {:<10.2} │ {:<10} │ {:<15} │ {:<20} │ {:<20?} │",
                 from,
                 to,
                 amount,
                 time,
                 node,
-                msg,
+                msg.unwrap_or_default(),
                 clock_map
             );
         }
+
+        println!(
+            "└─────────────────┴─────────────────┴────────────┴────────────┴─────────────────┴──────────────────────┴──────────────────────┘"
+        );
         Ok(())
     }
 }
 
+#[cfg(feature = "server")]
 pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
     use rusqlite::params;
     {
         let conn = DB_CONN.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg, vector_clock_id
-        FROM Transactions WHERE from_user = ?1",
+        FROM Transactions WHERE from_user = ?1 OR to_user = ?1",
         )?;
 
         let txs = stmt.query_map(params![name], |row| {
@@ -540,7 +664,18 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
             ))
         })?;
 
-        log::info!("-- Transactions for user {} --", name);
+        println!("📜 -- Transactions for user {} --", name);
+        println!(
+            "┌─────────────────┬─────────────────┬────────────┬────────────┬─────────────────┬──────────────────────┬──────────────────────┐"
+        );
+        println!(
+            "│ {:<15} │ {:<15} │ {:<10} │ {:<10} │ {:<15} │ {:<20} │ {:<20} │",
+            "From", "To", "Amount", "Time", "Node", "Message", "Vector Clock"
+        );
+        println!(
+            "├─────────────────┼─────────────────┼────────────┼────────────┼─────────────────┼──────────────────────┼──────────────────────┤"
+        );
+
         for tx in txs {
             let (from, to, amount, time, node, msg, vector_clock_id) = tx?;
             let mut clock_map = std::collections::HashMap::new();
@@ -553,45 +688,81 @@ pub fn print_transaction_for_user(name: &str) -> rusqlite::Result<()> {
                 let value: i64 = vc_row.get(1)?;
                 clock_map.insert(site_id, value);
             }
-            log::info!(
-                "{} -> {} | {:.2} | time: {} | node: {} | msg: {:?} | vector_clock: {:?}",
+            println!(
+                "│ {:<15} │ {:<15} │ {:<10.2} │ {:<10} │ {:<15} │ {:<20} │ {:<20?} │",
                 from,
                 to,
                 amount,
                 time,
                 node,
-                msg,
+                msg.unwrap_or_default(),
                 clock_map
             );
         }
+
+        println!(
+            "└─────────────────┴─────────────────┴────────────┴────────────┴─────────────────┴──────────────────────┴──────────────────────┘"
+        );
         Ok(())
     }
 }
 
-#[allow(dead_code)]
-#[allow(unused)]
-pub fn get_local_db_state() -> rusqlite::Result<std::collections::HashMap<String, f64>> {
-    let mut state = std::collections::HashMap::new();
+#[cfg(feature = "server")]
+pub fn get_transactions_for_user(name: &str) -> rusqlite::Result<Vec<Transaction>> {
+    use rusqlite::params;
     {
         let conn = DB_CONN.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT unique_name, solde FROM User")?;
-        let users = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        let mut stmt = conn.prepare(
+            "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg, vector_clock_id
+        FROM Transactions WHERE from_user = ?1 OR to_user = ?1",
+        )?;
+
+        let txs = stmt.query_map(params![name], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
         })?;
 
-        for user in users {
-            let (name, solde) = user?;
-            state.insert(name, solde);
+        let mut txs_vec = Vec::new();
+        for tx in txs {
+            let (from, to, amount, time, node, msg, vector_clock_id) = tx?;
+            let mut clock_map = std::collections::HashMap::new();
+            let mut vc_stmt = conn.prepare(
+                "SELECT site_id, value FROM VectorClockEntry WHERE vector_clock_id = ?1",
+            )?;
+            let mut rows = vc_stmt.query(rusqlite::params![vector_clock_id])?;
+            while let Some(vc_row) = rows.next()? {
+                let site_id: String = vc_row.get(0)?;
+                let value: i64 = vc_row.get(1)?;
+                clock_map.insert(site_id, value);
+            }
+
+            txs_vec.push(Transaction {
+                from_user: from,
+                to_user: to,
+                amount: amount,
+                lamport_time: time,
+                source_node: node,
+                optional_msg: msg,
+                vector_clock: clock_map,
+            });
         }
+        Ok(txs_vec)
     }
-    Ok(state)
 }
 
+#[cfg(feature = "server")]
 pub fn get_local_transaction_log() -> rusqlite::Result<Vec<Transaction>> {
     let conn = DB_CONN.lock().unwrap();
     let mut stmt = conn.prepare(
-        "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg, vector_clock_id
-         FROM Transactions")?;
+    "SELECT from_user, to_user, amount, lamport_time, source_node, optional_msg, vector_clock_id
+        FROM Transactions")?;
     let rows = stmt.query_map([], |row| {
         Ok(Transaction {
             from_user: row.get(0)?,

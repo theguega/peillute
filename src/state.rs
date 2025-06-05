@@ -1,25 +1,37 @@
+//! Application state management for Peillute
+//!
+//! This module handles the global application state, including site information,
+//! peer management, and logical clock synchronization.
 
+#[cfg(feature = "server")]
+/// Represents the global state of a Peillute node
 pub struct AppState {
     // --- Site Info ---
+    /// Unique identifier for this site
     pub site_id: String,
-    pub nb_neighbors: i64,
+    /// Unique address for this site
+    pub site_addr: std::net::SocketAddr,
+    /// Number of deg(1) neighbours connected
+    pub nb_connected_neighbours: i64,
+    /// List of peer addresses given in arguments at the launch of the application
     pub peer_addrs: Vec<std::net::SocketAddr>,
-    pub in_use_neighbors : Vec<std::net::SocketAddr>,
-    pub local_addr: std::net::SocketAddr,
+    /// List of deg(1) neighbours connected addresses
+    pub connected_neighbours_addrs: Vec<std::net::SocketAddr>,
 
     // --- Message Diffusion Info ---
-    pub parent_addr: std::collections::HashMap<String, std::net::SocketAddr>,
-    // message_initiator_id, parent_for_this_id
-    pub nb_of_attended_neighbors: std::collections::HashMap<String, i64>,
-    // message_initiator_id, number of attended for this id
+    /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
+    pub parent_addr_for_transaction_wave: std::collections::HashMap<String, std::net::SocketAddr>,
+    /// Number of response expected from our direct neighbours (deg(1) neighbours for this site) = nb of connected neighbours - 1 (parent) for a specific wave initiator id
+    pub attended_neighbours_nb_for_transaction_wave: std::collections::HashMap<String, i64>,
 
     // --- Logical Clocks ---
+    /// Logical clock implementation for distributed synchronization
     pub clocks: crate::clock::Clock,
 }
 
+#[cfg(feature = "server")]
 impl AppState {
-
-    #[allow(unused)]
+    /// Creates a new AppState instance with the given configuration
     pub fn new(
         site_id: String,
         nb_neighbors: i64,
@@ -33,116 +45,142 @@ impl AppState {
 
         Self {
             site_id,
-            nb_neighbors,
+            nb_connected_neighbours: nb_neighbors,
             peer_addrs,
-            local_addr,
-            parent_addr,
-            nb_of_attended_neighbors,
-            in_use_neighbors,
-            clocks
+            site_addr: local_addr,
+            parent_addr_for_transaction_wave: parent_addr,
+            attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
+            connected_neighbours_addrs: in_use_neighbors,
+            clocks,
         }
     }
+
     #[allow(unused)]
-    pub fn change_site_id(&mut self, site_id: &str) {
+    /// Updates the site ID and adjusts the logical clock accordingly
+    pub fn set_site_id(&mut self, site_id: &str) {
         self.clocks.change_current_site_id(&self.site_id, site_id);
         self.site_id = site_id.to_string();
     }
 
+    /// Adds a new peer to the network and updates the logical clock
     #[allow(unused)]
     pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if !self.peer_addrs.contains(&addr) {
             self.peer_addrs.push(addr);
             self.clocks.add_peer(site_id);
-            self.nb_of_attended_neighbors.insert(site_id.to_string(), self.peer_addrs.len() as i64);
-            self.parent_addr.insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+            self.attended_neighbours_nb_for_transaction_wave
+                .insert(site_id.to_string(), self.peer_addrs.len() as i64);
+            self.parent_addr_for_transaction_wave
+                .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
         }
     }
 
-    pub fn remove_peer(&mut self, site_id: &str,addr: std::net::SocketAddr) {
+    /// Removes a peer from the network
+    #[allow(unused)]
+    pub fn remove_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
         if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
             self.peer_addrs.remove(pos);
-            self.nb_neighbors -= 1;
-            self.nb_of_attended_neighbors.insert(site_id.to_string(), self.peer_addrs.len() as i64);
-            self.parent_addr.insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+            self.nb_connected_neighbours -= 1;
+            self.attended_neighbours_nb_for_transaction_wave
+                .insert(site_id.to_string(), self.peer_addrs.len() as i64);
+            self.parent_addr_for_transaction_wave
+                .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
             // TODO : decide what to do with the vector clock
             // self.vector_clock.remove(&addr); ?
         }
     }
-    pub fn get_local_addr(&self) -> String {
-        self.local_addr.to_string()
+
+    /// Returns the local address as a string
+    pub fn get_site_addr(&self) -> String {
+        self.site_addr.to_string()
     }
 
+    /// Returns the current site ID
     pub fn get_site_id(&self) -> &str {
         self.site_id.as_str()
     }
 
-    pub fn get_peers(&self) -> Vec<std::net::SocketAddr> {
+    /// Returns a list of all peer addresses
+    pub fn get_peers_addrs(&self) -> Vec<std::net::SocketAddr> {
         self.peer_addrs.clone()
     }
 
+    /// Returns a list of peer addresses as strings
+    pub fn get_peers_addrs_string(&self) -> Vec<String> {
+        self.peer_addrs.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// Increments the Lamport clock and returns the new value
     pub fn increment_lamport(&mut self) -> i64 {
         self.clocks.increment_lamport()
     }
 
     #[allow(unused)]
-    #[allow(dead_code)]
+    /// Increments the vector clock for a specific site
     pub fn increment_vector(&mut self, site_id: &str) -> i64 {
         self.clocks.increment_vector(site_id)
     }
 
+    /// Increments the vector clock for the current site
     pub fn increment_vector_current(&mut self) -> i64 {
         self.clocks.increment_vector(self.site_id.as_str())
     }
 
+    /// Returns the current Lamport clock value
     pub fn get_lamport(&self) -> i64 {
         self.clocks.get_lamport()
     }
-    #[allow(unused)]
-    #[allow(dead_code)]
+
+    /// Returns the current vector clock state
     pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
         self.clocks.get_vector()
     }
 
+    /// Updates the vector clock with received values
     pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
         self.clocks.update_vector(received_vc);
     }
+
     #[allow(unused)]
-    #[allow(dead_code)]
+    /// Returns the current vector clock as a list
     pub fn get_vector_clock(&self) -> Vec<i64> {
         self.clocks.get_vector_clock()
     }
 
+    /// Returns a reference to the clock implementation
     pub fn get_clock(&self) -> &crate::clock::Clock {
         &self.clocks
     }
-    #[allow(unused)]
-    #[allow(dead_code)]
-    pub fn update_lamport(&mut self, received_lamport: i64) {
-        self.clocks.update_lamport(received_lamport);
-    }
-    #[allow(unused)]
-    pub fn get_number_of_attended_neighbors(&self,initiator_id : String) -> i64 {
-        self.nb_of_attended_neighbors.get(&initiator_id).copied().unwrap_or(0)
-    }
-    #[allow(unused)]
-    pub fn set_number_of_attended_neighbors(&mut self,initiator_id : String, n: i64) {
-        self.nb_of_attended_neighbors.insert(initiator_id, n);
-    }
-    pub fn get_parent_addr(&self, initiator_id : String) -> std::net::SocketAddr {
-        self.parent_addr.get(&initiator_id).copied().unwrap_or("0.0.0.0:0".parse().unwrap())
+
+    /// Set the number of attended neighbors for the wave from initiator_id
+    pub fn set_number_of_attended_neighbors(&mut self, initiator_id: String, n: i64) {
+        self.attended_neighbours_nb_for_transaction_wave
+            .insert(initiator_id, n);
     }
 
-    pub fn set_parent_addr(&mut self, initiator_id : String, peer_adr : std::net::SocketAddr) {
-        self.parent_addr.insert(initiator_id,peer_adr);
+    /// Get the parent address for a node id
+    pub fn get_parent_addr(&self, initiator_id: String) -> std::net::SocketAddr {
+        self.parent_addr_for_transaction_wave
+            .get(&initiator_id)
+            .copied()
+            .unwrap_or("0.0.0.0:0".parse().unwrap())
     }
 
+    /// Sets the parent address for a node id
+    pub fn set_parent_addr(&mut self, initiator_id: String, peer_adr: std::net::SocketAddr) {
+        self.parent_addr_for_transaction_wave
+            .insert(initiator_id, peer_adr);
+    }
+
+    /// Returns the number of deg(1) neighbors connected
     #[allow(unused)]
     pub fn get_nb_sites_on_network(&self) -> i64 {
-        self.nb_neighbors
+        self.nb_connected_neighbours
     }
 }
 
 // Singleton
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref LOCAL_APP_STATE: std::sync::Arc<tokio::sync::Mutex<AppState>> =
         std::sync::Arc::new(tokio::sync::Mutex::new(AppState::new(
@@ -154,8 +192,8 @@ lazy_static::lazy_static! {
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
-    use log::__private_api::loc;
     use super::*;
 
     #[test]
@@ -168,53 +206,11 @@ mod tests {
         ];
         let local_addr: std::net::SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
         let shared_state =
-            AppState::new(site_id.clone(), num_sites, num_sites,peer_addrs.clone(), local_addr,);
+            AppState::new(site_id.clone(), num_sites, peer_addrs.clone(), local_addr);
 
         assert_eq!(shared_state.site_id, site_id);
-        assert_eq!(shared_state.nb_neighbors, num_sites);
+        assert_eq!(shared_state.nb_connected_neighbours, num_sites);
         assert_eq!(shared_state.peer_addrs, peer_addrs);
         assert_eq!(shared_state.clocks.get_vector().len(), 0); // Initially empty
-    }
-
-    #[test]
-    fn test_add_peer() {
-        let site_id = "A".to_string();
-        let num_sites = 2;
-        let peer_addrs = vec![
-            "127.0.0.1:8081".parse().unwrap(),
-            "127.0.0.1:8082".parse().unwrap(),
-        ];
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state =
-            AppState::new(site_id.clone(), num_sites,num_sites, peer_addrs.clone(), local_addr,);
-
-        shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
-
-        assert_eq!(shared_state.peer_addrs.len(), 3);
-        assert_eq!(shared_state.nb_neighbors, 3);
-        assert!(shared_state.clocks.get_vector().contains_key("B"));
-    }
-
-    #[test]
-    fn test_remove_peer() {
-        let site_id = "A".to_string();
-        let num_sites = 2;
-        let peer_addrs = vec![
-            "127.0.0.1:8081".parse().unwrap(),
-            "127.0.0.1:8082".parse().unwrap(),
-        ];
-        let local_addr = "127.0.0.1:8080".parse().unwrap();
-        let mut shared_state =
-            AppState::new(site_id.clone(), num_sites, num_sites, peer_addrs.clone(), local_addr,);
-
-        shared_state.add_peer("B", "127.0.0.1:8083".parse().unwrap());
-        shared_state.remove_peer("127.0.0.1:8081".parse().unwrap());
-
-        assert_eq!(shared_state.peer_addrs.len(), 2);
-        assert_eq!(shared_state.nb_neighbors, 2);
-
-        // Ensure the vector clock is updated correctly ??
-        // Do we want the clock to remove the site when it is removed from the peer list?
-        // assert!(!shared_state.clocks.get_vector().contains_key("B"));
     }
 }

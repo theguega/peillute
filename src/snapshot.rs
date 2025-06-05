@@ -1,32 +1,67 @@
+//! Snapshot management for distributed state consistency
+//!
+//! This module implements a distributed snapshot algorithm for ensuring
+//! consistency across nodes in the distributed system. It handles snapshot
+//! creation, consistency checking, and persistence.
+
+#[cfg(feature = "server")]
+/// Summary of a transaction for snapshot purposes
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Hash)]
 pub struct TxSummary {
+    /// Lamport timestamp of the transaction
     pub lamport_time: i64,
+    /// ID of the node that created the transaction
     pub source_node: String,
+    /// Source user of the transaction
+    pub from_user: String,
+    /// Destination user of the transaction
+    pub to_user: String,
+    /// Transaction amount
+    pub amount_in_cent: i64,
 }
 
+#[cfg(feature = "server")]
 impl From<&crate::db::Transaction> for TxSummary {
     fn from(tx: &crate::db::Transaction) -> Self {
         Self {
             lamport_time: tx.lamport_time,
             source_node: tx.source_node.clone(),
+            from_user: tx.from_user.clone(),
+            to_user: tx.to_user.clone(),
+            amount_in_cent: (tx.amount * 100.0) as i64,
         }
     }
 }
 
+#[cfg(feature = "server")]
+/// Local snapshot of a node's state
 #[derive(Clone)]
 pub struct LocalSnapshot {
+    /// ID of the node taking the snapshot
     pub site_id: String,
+    /// Vector clock state at the time of the snapshot
     pub vector_clock: std::collections::HashMap<String, i64>,
+    /// Set of transactions known to this node
     pub tx_log: std::collections::HashSet<TxSummary>,
 }
 
+#[cfg(feature = "server")]
+/// Global snapshot combining all local snapshots
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct GlobalSnapshot {
+    /// Union of all transactions across nodes
     pub all_transactions: std::collections::HashSet<TxSummary>,
+    /// Map of missing transactions per node
     pub missing: std::collections::HashMap<String, std::collections::HashSet<TxSummary>>,
 }
 
+#[cfg(feature = "server")]
 impl GlobalSnapshot {
+    /// Checks if a set of local snapshots is consistent
+    ///
+    /// A set of snapshots is consistent if for any pair of nodes i and j,
+    /// the vector clock value of j in i's snapshot is not greater than
+    /// the vector clock value of j in j's own snapshot.
     pub fn is_consistent(snaps: &[LocalSnapshot]) -> bool {
         for si in snaps {
             for sj in snaps {
@@ -44,12 +79,18 @@ impl GlobalSnapshot {
     }
 }
 
+#[cfg(feature = "server")]
+/// Manages the snapshot collection process
 pub struct SnapshotManager {
+    /// Number of snapshots expected to be collected
     pub expected: i64,
+    /// Vector of received local snapshots
     pub received: Vec<LocalSnapshot>,
 }
 
+#[cfg(feature = "server")]
 impl SnapshotManager {
+    /// Creates a new snapshot manager expecting the given number of snapshots
     pub fn new(expected: i64) -> Self {
         Self {
             expected,
@@ -57,7 +98,14 @@ impl SnapshotManager {
         }
     }
 
+    /// Adds a snapshot response to the collection
+    ///
+    /// Returns a global snapshot if all expected snapshots have been received
+    /// and they are consistent. If the snapshots are inconsistent, it will
+    /// attempt to find a consistent subset by backtracking to the minimum
+    /// vector clock values.
     pub fn push(&mut self, resp: crate::message::SnapshotResponse) -> Option<GlobalSnapshot> {
+        log::debug!("Received snapshot from site {}.", resp.site_id);
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
             vector_clock: resp.clock.get_vector().clone(),
@@ -65,8 +113,11 @@ impl SnapshotManager {
         });
 
         if (self.received.len() as i64) < self.expected {
+            log::debug!("{}/{} sites received.", self.received.len(), self.expected);
             return None;
         }
+
+        log::debug!("All local snapshots received, processing snapshot.");
 
         if GlobalSnapshot::is_consistent(&self.received) {
             return Some(self.build_snapshot(&self.received));
@@ -109,9 +160,18 @@ impl SnapshotManager {
         Some(self.build_snapshot(&trimmed))
     }
 
+    /// Builds a global snapshot from a set of local snapshots
+    ///
+    /// Computes the union of all transactions and identifies missing
+    /// transactions for each node.
     fn build_snapshot(&self, snaps: &[LocalSnapshot]) -> GlobalSnapshot {
         let mut union: std::collections::HashSet<TxSummary> = std::collections::HashSet::new();
         for s in snaps {
+            log::info!(
+                "Adding transactions from site {}, transaction : {:?}",
+                s.site_id,
+                s.tx_log
+            );
             union.extend(s.tx_log.iter().cloned());
         }
 
@@ -130,6 +190,10 @@ impl SnapshotManager {
     }
 }
 
+#[cfg(feature = "server")]
+/// Initiates a new snapshot process
+///
+/// Collects the local transaction log and sends snapshot requests to all peers.
 pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
@@ -139,22 +203,27 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         (
             st.get_site_id().to_string(),
             st.get_clock().clone(),
-            st.nb_neighbors + 1,
+            st.nb_connected_neighbours + 1,
         )
     };
+
+    log::debug!("Expected {} sites for snapshot.", expected);
 
     {
         let mut mgr = LOCAL_SNAPSHOT_MANAGER.lock().await;
         mgr.expected = expected;
         mgr.received.clear();
-        mgr.push(crate::message::SnapshotResponse {
+        if let Some(gs) = mgr.push(crate::message::SnapshotResponse {
             site_id: site_id.clone(),
             clock: clock.clone(),
             tx_log: summaries.clone(),
-        });
+        }) {
+            log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
+            crate::snapshot::persist(&gs).await.unwrap();
+        }
     }
 
-    crate::network::send_message_to_all(
+    crate::network::send_message_to_all_peers(
         None,
         crate::message::NetworkMessageCode::SnapshotRequest,
         crate::message::MessageInfo::None,
@@ -164,6 +233,10 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Persists a global snapshot to disk
+///
+/// Saves the snapshot as a JSON file with a timestamp in the filename.
 pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     use std::io::Write;
 
@@ -178,16 +251,18 @@ pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     let mut file = std::fs::File::create(&filename)?;
     let json = serde_json::to_string_pretty(snapshot).unwrap();
     file.write_all(json.as_bytes())?;
-    log::info!("Snapshot saved in {}", filename);
+    println!("📸 Snapshot completed successfully at {}", filename);
     Ok(())
 }
 
+#[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref LOCAL_SNAPSHOT_MANAGER: tokio::sync::Mutex<SnapshotManager> =
         tokio::sync::Mutex::new(SnapshotManager::new(0));
 }
 
 #[cfg(test)]
+#[cfg(feature = "server")]
 mod tests {
     use super::*;
 
@@ -245,6 +320,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
         assert!(mgr.push(r1).is_none());
@@ -272,10 +350,16 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 10,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t2 = TxSummary {
             lamport_time: 11,
             source_node: "B".into(),
+            from_user: "user3".into(),
+            to_user: "user4".into(),
+            amount_in_cent: 200,
         };
 
         let r1 = resp("A", &[("A", 1)], &[t1.clone()]);
@@ -314,14 +398,23 @@ mod tests {
         let t1 = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 100,
         };
         let t3 = TxSummary {
             lamport_time: 3,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 300,
         };
         let t5 = TxSummary {
             lamport_time: 5,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 500,
         };
 
         let r_a = resp(
@@ -345,6 +438,9 @@ mod tests {
         let tx = TxSummary {
             lamport_time: 7,
             source_node: "A".into(),
+            from_user: "user1".into(),
+            to_user: "user2".into(),
+            amount_in_cent: 700,
         };
 
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);

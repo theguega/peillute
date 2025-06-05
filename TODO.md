@@ -1,6 +1,0 @@
-- is singleton really needed ?
-- add tests for database interactions
-- use vector clock in database as well as lamport clock
-- auto setup node name based in peers
-- review database initialization in main
-- implement network command
