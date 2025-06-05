@@ -639,30 +639,21 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
 
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (
-            local_vc_clock,
-            local_lamport_time,
-            local_clk,
-            local_addr,
-            node,
-        )
+        state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     if let Err(_e) = crate::db::deposit(
         &user,
         amount,
-        &local_lamport_time,
-        node.as_str(),
-        &local_vc_clock,
+        clock.get_lamport(),
+        site_id.as_str(),
+        clock.get_vector_clock_map(),
     ) {
         return Err(ServerFnError::new("Error with database"));
     }
@@ -677,18 +668,18 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         command: Some(Command::Deposit),
         info: MessageInfo::Deposit(Deposit::new(user.clone(), amount)),
         code: NetworkMessageCode::Transaction,
-        clock: local_clk.clone(),
-        sender_addr: local_addr.parse().unwrap(),
-        sender_id: node.to_string(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr.parse().unwrap(),
+        clock: clock.clone(),
+        sender_addr: site_addr.parse().unwrap(),
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr.parse().unwrap(),
     };
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -708,30 +699,21 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
 
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (
-            local_vc_clock,
-            local_lamport_time,
-            local_clk,
-            local_addr,
-            node,
-        )
+        state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     if let Err(e) = crate::db::withdraw(
         &user,
         amount,
-        &local_lamport_time,
-        node.as_str(),
-        &local_vc_clock,
+        clock.get_lamport(),
+        site_id.as_str(),
+        clock.get_vector_clock_map(),
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
@@ -744,19 +726,19 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         command: Some(Command::Withdraw),
         info: MessageInfo::Withdraw(Withdraw::new(user.clone(), amount)),
         code: NetworkMessageCode::Transaction,
-        clock: local_clk,
-        sender_addr: local_addr.parse().unwrap(),
-        sender_id: node.to_string(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr.parse().unwrap(),
+        clock: clock.clone(),
+        sender_addr: site_addr.parse().unwrap(),
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr.parse().unwrap(),
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -776,32 +758,23 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
 
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (
-            local_vc_clock,
-            local_lamport_time,
-            local_clk,
-            local_addr,
-            node,
-        )
+        state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     if let Err(e) = crate::db::create_transaction(
         &user,
         "NULL",
         amount,
-        &local_lamport_time,
-        node.as_str(),
+        clock.get_lamport(),
+        site_id.as_str(),
         "",
-        &local_vc_clock,
+        clock.get_vector_clock_map(),
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
@@ -814,19 +787,19 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         command: Some(Command::Pay),
         info: MessageInfo::Pay(Pay::new(user.clone(), amount)),
         code: NetworkMessageCode::Transaction,
-        clock: local_clk,
-        sender_addr: local_addr.parse().unwrap(),
-        sender_id: node.parse().unwrap(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr.parse().unwrap(),
+        clock: clock.clone(),
+        sender_addr: site_addr.parse().unwrap(),
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr.parse().unwrap(),
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -851,32 +824,23 @@ async fn transfer_from_user_to_user_server(
 
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (
-            local_vc_clock,
-            local_lamport_time,
-            local_clk,
-            local_addr,
-            node,
-        )
+        state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     if let Err(e) = crate::db::create_transaction(
         &from_user,
         &to_user,
         amount,
-        &local_lamport_time,
-        node.as_str(),
+        clock.get_lamport(),
+        site_id.as_str(),
         optional_message.as_str(),
-        &local_vc_clock,
+        clock.get_vector_clock_map(),
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
@@ -889,19 +853,19 @@ async fn transfer_from_user_to_user_server(
         command: Some(Command::Transfer),
         info: MessageInfo::Transfer(Transfer::new(from_user.clone(), to_user.clone(), amount)),
         code: NetworkMessageCode::Transaction,
-        clock: local_clk,
-        sender_addr: local_addr.parse().unwrap(),
-        sender_id: node.to_string(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr.parse().unwrap(),
+        clock: clock.clone(),
+        sender_addr: site_addr.parse().unwrap(),
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr.parse().unwrap(),
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -932,30 +896,21 @@ async fn refund_transaction_server(
 ) -> Result<(), ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (
-            local_vc_clock,
-            local_lamport_time,
-            local_clk,
-            local_addr,
-            node,
-        )
+        state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     if let Err(e) = crate::db::refund_transaction(
         lamport_time,
         transac_node.as_str(),
-        &local_lamport_time,
-        node.as_str(),
-        &local_vc_clock,
+        clock.get_lamport(),
+        site_id.as_str(),
+        clock.get_vector_clock_map(),
     ) {
         return Err(ServerFnError::new(e.to_string()));
     }
@@ -968,19 +923,19 @@ async fn refund_transaction_server(
         command: Some(Command::Refund),
         info: MessageInfo::Refund(Refund::new(name, lamport_time, transac_node)),
         code: NetworkMessageCode::Transaction,
-        clock: local_clk,
-        sender_addr: local_addr.parse().unwrap(),
-        sender_id: node.parse().unwrap(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr.parse().unwrap(),
+        clock: clock.clone(),
+        sender_addr: site_addr.parse().unwrap(),
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr.parse().unwrap(),
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {

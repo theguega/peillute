@@ -127,12 +127,11 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
 
     let (local_clk, local_addr, node) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_clk = state.get_clock().clone();
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_clk, local_addr, node)
+        let _ = state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     db::create_user(&name)?;

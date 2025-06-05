@@ -53,10 +53,11 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     const HIGH_PORT: u16 = 11000;
     const PORT_OFFSET: u16 = HIGH_PORT - LOW_PORT + 1;
 
+    // Init the logger
     env_logger::init();
 
+    // If no port for local adress is specified, try to find a free one
     let args = Args::parse();
-
     let port_range = LOW_PORT..=HIGH_PORT;
     let mut selected_port = args.port;
     if selected_port == 0 {
@@ -68,13 +69,14 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
     let site_ip: &str = &args.ip;
     let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
 
+    //Adress for the client-server interaction (for the web app)
     let client_server_interaction_addr: SocketAddr =
         format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
 
+    // Initialize the app state
     {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.site_id = args.site_id.clone();
@@ -84,34 +86,37 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
             .insert(args.site_id.clone(), peer_interaction_addr);
 
         let site_id = state.site_id.clone();
-        state.clocks.set_site_id(&site_id);
-
+        state.clocks.update_clock(&site_id, None);
         let mut peers_addrs = Vec::new();
         for peer in args.peers {
             let peer_addr = peer.parse::<SocketAddr>()?;
             peers_addrs.push(peer_addr);
         }
         state.peer_addrs = peers_addrs;
+
+        if !db::is_database_initialized()? {
+            let _ = db::init_db();
+        }
     }
 
+    // Create the network listener
     let network_listener_local_addr = peer_interaction_addr.clone();
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
+    // Create the web app listener
     let router = axum::Router::new().serve_dioxus_application(ServeConfigBuilder::default(), App);
     let router = router.into_make_service();
     let backend_listener = tokio::net::TcpListener::bind(client_server_interaction_addr)
         .await
         .unwrap();
 
-    if !db::is_database_initialized()? {
-        let _ = db::init_db();
-    }
-
+    // Create the stdin listener for the CLI
     let stdin: tokio_io::Stdin = tokio_io::stdin();
     let reader: BufReader<tokio_io::Stdin> = BufReader::new(stdin);
     let mut lines: tokio_io::Lines<_> = reader.lines();
 
+    // Announce our presence to the network
     network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
 
     println!(
@@ -150,15 +155,15 @@ async fn main_loop(
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::io::Stdin>>,
     listener: tokio::net::TcpListener,
 ) {
-    use crate::control::{handle_command_from_cli, run_cli};
+    use crate::control::{parse_command, process_cli_command};
     use std::io::{self as std_io, Write};
     use tokio::select;
 
     loop {
         select! {
             line = lines.next_line() => {
-                let command = run_cli(line);
-                if let Err(e) = handle_command_from_cli(command).await{
+                let command = parse_command(line);
+                if let Err(e) = process_cli_command(command).await{
                     log::error!("Error handling a cli command:\n{}", e);
                 }
                 print!("> ");
@@ -182,25 +187,24 @@ async fn disconnect() {
     use crate::state::LOCAL_APP_STATE;
     use log::{error, info};
 
-    let (local_addr, site_id, peer_addrs, clock) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_lamport();
-        state.increment_vector_current();
+    let (local_addr, site_id, peer_addrs) = {
+        let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_site_addr(),
             state.get_site_id().to_string(),
             state.get_peers_addrs(),
-            state.get_clock().clone(),
         )
     };
 
     info!("Shutting down site {}.", site_id);
     for peer_addr in peer_addrs {
-        {
+        // increment the clock for every deconnection
+        let clock = {
             let mut state = LOCAL_APP_STATE.lock().await;
-            state.increment_lamport();
-            state.increment_vector_current();
-        }
+            state.clocks.update_clock(&site_id, None);
+            state.get_clock().clone()
+        };
+
         if let Err(e) = crate::network::send_message(
             peer_addr,
             MessageInfo::None,

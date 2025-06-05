@@ -55,47 +55,38 @@ impl AppState {
         }
     }
 
-    #[allow(unused)]
-    /// Updates the site ID and adjusts the logical clock accordingly
-    pub fn set_site_id(&mut self, site_id: &str) {
-        self.clocks.change_current_site_id(&self.site_id, site_id);
-        self.site_id = site_id.to_string();
-    }
+    // /// Adds a new peer to the network and updates the logical clock
+    // #[allow(unused)]
+    // pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
+    //     if !self.peer_addrs.contains(&addr) {
+    //         self.peer_addrs.push(addr);
+    //         self.clocks.add_peer(site_id);
+    //         self.attended_neighbours_nb_for_transaction_wave
+    //             .insert(site_id.to_string(), self.peer_addrs.len() as i64);
+    //         self.parent_addr_for_transaction_wave
+    //             .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+    //     }
+    // }
 
-    /// Adds a new peer to the network and updates the logical clock
-    #[allow(unused)]
-    pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
-        if !self.peer_addrs.contains(&addr) {
-            self.peer_addrs.push(addr);
-            self.clocks.add_peer(site_id);
-            self.attended_neighbours_nb_for_transaction_wave
-                .insert(site_id.to_string(), self.peer_addrs.len() as i64);
-            self.parent_addr_for_transaction_wave
-                .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
-        }
-    }
-
-    /// Removes a peer from the network
-    #[allow(unused)]
-    pub fn remove_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
-        if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
-            self.peer_addrs.remove(pos);
-            self.nb_connected_neighbours -= 1;
-            self.attended_neighbours_nb_for_transaction_wave
-                .insert(site_id.to_string(), self.peer_addrs.len() as i64);
-            self.parent_addr_for_transaction_wave
-                .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
-            // TODO : decide what to do with the vector clock
-            // self.vector_clock.remove(&addr); ?
-        }
-    }
+    // /// Removes a peer from the network
+    // #[allow(unused)]
+    // pub fn remove_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
+    //     if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
+    //         self.peer_addrs.remove(pos);
+    //         self.nb_connected_neighbours -= 1;
+    //         self.attended_neighbours_nb_for_transaction_wave
+    //             .insert(site_id.to_string(), self.peer_addrs.len() as i64);
+    //         self.parent_addr_for_transaction_wave
+    //             .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+    //     }
+    // }
 
     /// Returns the local address as a string
     pub fn get_site_addr(&self) -> String {
         self.site_addr.to_string()
     }
 
-    /// Returns the current site ID
+    /// Returns the current site ID as &str
     pub fn get_site_id(&self) -> &str {
         self.site_id.as_str()
     }
@@ -111,51 +102,14 @@ impl AppState {
     }
 
     /// Returns a list of conncted neibhours as strings
-    pub fn get_connected_neighbours_string(&self) -> Vec<String> {
+    pub fn get_connected_neighbours_addrs_string(&self) -> Vec<String> {
         self.connected_neighbours_addrs
             .iter()
             .map(|x| x.to_string())
             .collect()
     }
 
-    /// Increments the Lamport clock and returns the new value
-    pub fn increment_lamport(&mut self) -> i64 {
-        self.clocks.increment_lamport()
-    }
-
-    #[allow(unused)]
-    /// Increments the vector clock for a specific site
-    pub fn increment_vector(&mut self, site_id: &str) -> i64 {
-        self.clocks.increment_vector(site_id)
-    }
-
-    /// Increments the vector clock for the current site
-    pub fn increment_vector_current(&mut self) -> i64 {
-        self.clocks.increment_vector(self.site_id.as_str())
-    }
-
-    /// Returns the current Lamport clock value
-    pub fn get_lamport(&self) -> i64 {
-        self.clocks.get_lamport()
-    }
-
-    /// Returns the current vector clock state
-    pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
-        self.clocks.get_vector()
-    }
-
-    /// Updates the vector clock with received values
-    pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
-        self.clocks.update_vector(received_vc);
-    }
-
-    #[allow(unused)]
-    /// Returns the current vector clock as a list
-    pub fn get_vector_clock(&self) -> Vec<i64> {
-        self.clocks.get_vector_clock()
-    }
-
-    /// Returns a reference to the clock implementation
+    /// Returns a reference to the clock of the site
     pub fn get_clock(&self) -> &crate::clock::Clock {
         &self.clocks
     }
@@ -166,7 +120,7 @@ impl AppState {
             .insert(initiator_id, n);
     }
 
-    /// Get the parent address for a node id
+    /// Get the parent (neighbour deg(1)) address for the wave from initiator_id
     pub fn get_parent_addr(&self, initiator_id: String) -> std::net::SocketAddr {
         self.parent_addr_for_transaction_wave
             .get(&initiator_id)
@@ -174,7 +128,7 @@ impl AppState {
             .unwrap_or("0.0.0.0:0".parse().unwrap())
     }
 
-    /// Sets the parent address for a node id
+    /// Set the parent (neighbour deg(1)) address for the wave from initiator_id
     pub fn set_parent_addr(&mut self, initiator_id: String, peer_adr: std::net::SocketAddr) {
         self.parent_addr_for_transaction_wave
             .insert(initiator_id, peer_adr);
@@ -182,7 +136,7 @@ impl AppState {
 
     /// Returns the number of deg(1) neighbors connected
     #[allow(unused)]
-    pub fn get_nb_neighbours(&self) -> i64 {
+    pub fn get_nb_connected_neighbours(&self) -> i64 {
         self.nb_connected_neighbours
     }
 }
@@ -219,6 +173,6 @@ mod tests {
         assert_eq!(shared_state.site_id, site_id);
         assert_eq!(shared_state.nb_connected_neighbours, num_sites);
         assert_eq!(shared_state.peer_addrs, peer_addrs);
-        assert_eq!(shared_state.clocks.get_vector().len(), 0); // Initially empty
+        assert_eq!(shared_state.clocks.get_vector_clock_map().len(), 0); // Initially empty
     }
 }

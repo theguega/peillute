@@ -34,7 +34,7 @@ async fn get_peers() -> Result<Vec<String>, ServerFnError> {
 async fn get_lamport() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_clock().get_lamport())
+    Ok(*state.get_clock().get_lamport())
 }
 
 /// Server function to retrieve the current vector clock state
@@ -42,7 +42,7 @@ async fn get_lamport() -> Result<i64, ServerFnError> {
 async fn get_vector_clock() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    let vector_clock = state.get_clock().get_vector_clock();
+    let vector_clock = state.get_clock().get_vector_clock_values();
     let vector_clock_string = vector_clock
         .iter()
         .map(|x| x.to_string())
@@ -73,7 +73,7 @@ async fn get_nb_sites() -> Result<i64, ServerFnError> {
 async fn get_connected_neighbours() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_connected_neighbours_string())
+    Ok(state.get_connected_neighbours_addrs_string())
 }
 
 /// Server function to retrieve the list of peer addresses

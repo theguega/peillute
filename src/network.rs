@@ -30,7 +30,7 @@ impl NetworkManager {
     }
 
     /// Adds a new peer connection to the connection pool
-    pub fn add_connection(
+    fn add_connection(
         &mut self,
         addr: std::net::SocketAddr,
         sender: tokio::sync::mpsc::Sender<Vec<u8>>,
@@ -60,12 +60,6 @@ impl NetworkManager {
         addr: &std::net::SocketAddr,
     ) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
-    }
-
-    #[allow(unused)]
-    /// Returns a list of all connected peer addresses
-    pub fn get_all_connections(&self) -> Vec<std::net::SocketAddr> {
-        self.connection_pool.keys().cloned().collect()
     }
 }
 
@@ -97,7 +91,8 @@ pub async fn spawn_writer_task(
 
 #[cfg(feature = "server")]
 /// Announces this node's presence to potential peers in the network
-/// If the user gave specific peers, we will only connect to those peers and not scan all the port range
+/// If the user gave peers in args, we will only connect to those peers
+/// If not, we will scan the port range and try connecting to all sockets
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -122,10 +117,6 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
             let clocks = clocks.clone();
 
             let handle = tokio::spawn(async move {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_lamport();
-                state.increment_vector_current();
-
                 let _ = send_message(
                     peer,
                     MessageInfo::None,
@@ -153,10 +144,6 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
             let clocks = clocks.clone();
 
             let handle = tokio::spawn(async move {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_lamport();
-                state.increment_vector_current();
-
                 let _ = send_message(
                     address.parse().unwrap(),
                     MessageInfo::None,
@@ -181,20 +168,21 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
 }
 
 #[cfg(feature = "server")]
-/// Starts listening for messages from a new peer connection
+/// Starts listening for messages from a new peer
 pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::SocketAddr) {
     log::debug!("Accepted connection from: {}", addr);
 
     tokio::spawn(async move {
-        if let Err(e) = handle_message(stream, addr).await {
+        if let Err(e) = handle_network_message(stream, addr).await {
             log::error!("Error handling connection from {}: {}", addr, e);
         }
     });
 }
 
 #[cfg(feature = "server")]
-/// Handles incoming messages from a peer connection
-pub async fn handle_message(
+/// Handles incoming messages from a peer
+/// Implement our wave diffusion protocol
+pub async fn handle_network_message(
     mut stream: tokio::net::TcpStream,
     addr: std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -287,8 +275,8 @@ pub async fn handle_message(
                         (state.get_site_id().to_string())
                     };
 
-                    use crate::control::handle_command_from_network;
-                    if let Err(e) = handle_command_from_network(
+                    use crate::control::process_network_command;
+                    if let Err(e) = process_network_command(
                         message.info.clone(),
                         message.clock.clone(),
                         &site_id,
@@ -457,11 +445,11 @@ pub async fn handle_message(
             }
             NetworkMessageCode::Disconnect => {
                 log::debug!("Disconnect message received: {:?}", message);
-                let mut state = LOCAL_APP_STATE.lock().await;
-                state.remove_peer(
-                    message.message_initiator_id.as_str(),
-                    message.message_initiator_addr,
-                );
+                // let mut state = LOCAL_APP_STATE.lock().await;
+                // state.remove_peer(
+                //     message.message_initiator_id.as_str(),
+                //     message.message_initiator_addr,
+                // );
             }
             NetworkMessageCode::SnapshotRequest => {
                 let txs = crate::db::get_local_transaction_log()?;
@@ -509,9 +497,10 @@ pub async fn handle_message(
         }
 
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_lamport();
-        state.increment_vector_current();
-        state.update_vector(&message.clock.get_vector());
+        let site_id = state.get_site_id().to_string();
+        state
+            .clocks
+            .update_clock(site_id.as_str(), Some(&message.clock));
     }
 }
 
@@ -588,7 +577,7 @@ pub async fn send_message(
 }
 
 #[cfg(feature = "server")]
-/// Vague de diffusion des messages
+/// Implement our wave diffusion protocol
 pub async fn diffuse_message(
     message: &crate::message::Message,
 ) -> Result<(), Box<dyn std::error::Error>> {

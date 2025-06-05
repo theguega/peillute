@@ -13,7 +13,9 @@ pub struct Clock {
     /// Lamport clock value for total ordering of events
     lamport_clock: i64,
     /// Vector clock mapping site IDs to their clock values
-    vector_clock: std::collections::HashMap<String, i64>, // site_id -> clock value
+    ///
+    /// Site_id -> clock value
+    vector_clock: std::collections::HashMap<String, i64>,
 }
 
 #[cfg(feature = "server")]
@@ -26,47 +28,38 @@ impl Clock {
         }
     }
 
-    /// Adds a new peer to the vector clock
-    #[allow(unused)]
-    pub fn add_peer(&mut self, site_id: &str) {
-        if !self.vector_clock.contains_key(site_id) {
-            self.vector_clock.insert(site_id.to_string(), 0);
+    ///Creates a new Clock instance with initialized clocks, used for testing
+    #[cfg(test)]
+    pub fn new_with_values(lamport: i64, vector: std::collections::HashMap<String, i64>) -> Self {
+        Clock {
+            lamport_clock: lamport,
+            vector_clock: vector,
         }
     }
 
     /// Increments the Lamport clock and returns the new value
-    pub fn increment_lamport(&mut self) -> i64 {
+    fn increment_lamport(&mut self) {
         self.lamport_clock += 1;
-        self.lamport_clock
     }
 
     /// Increments the vector clock for a specific site and returns the new value
-    pub fn increment_vector(&mut self, site_id: &str) -> i64 {
+    fn increment_vector(&mut self, site_id: &str) {
         let clock = self.vector_clock.entry(site_id.to_string()).or_insert(0);
         *clock += 1;
-        *clock
     }
 
-    /// Returns the current Lamport clock value
-    pub fn get_lamport(&self) -> i64 {
-        self.lamport_clock
+    /// Returns a reference to the Lamport clock value
+    pub fn get_lamport(&self) -> &i64 {
+        &self.lamport_clock
     }
 
     /// Returns a reference to the vector clock
-    pub fn get_vector(&self) -> &std::collections::HashMap<String, i64> {
+    pub fn get_vector_clock_map(&self) -> &std::collections::HashMap<String, i64> {
         &self.vector_clock
     }
 
-    /// Updates the vector clock with received values, taking the maximum of local and received values
-    pub fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
-        for (site_id, clock_value) in received_vc {
-            let current_value = self.vector_clock.entry(site_id.clone()).or_insert(0);
-            *current_value = (*current_value).max(*clock_value);
-        }
-    }
-
     /// Returns the vector clock as a list of values
-    pub fn get_vector_clock(&self) -> Vec<i64> {
+    pub fn get_vector_clock_values(&self) -> Vec<i64> {
         let mut vc: Vec<i64> = vec![0; self.vector_clock.len()];
         for (i, clock_value) in self.vector_clock.values().enumerate() {
             vc[i] = *clock_value;
@@ -74,25 +67,28 @@ impl Clock {
         vc
     }
 
-    /// Sets the clock value for a specific site ID
-    pub fn set_site_id(&mut self, site_id: &str) {
-        if !self.vector_clock.contains_key(site_id) {
-            self.vector_clock.insert(site_id.to_string(), 0);
+    /// Updates the vector clock with received values, taking the maximum of local and received values
+    fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
+        for (site_id, clock_value) in received_vc {
+            let current_value = self.vector_clock.entry(site_id.clone()).or_insert(0);
+            *current_value = (*current_value).max(*clock_value);
         }
     }
 
-    #[allow(unused)]
-    /// Updates the site ID in the vector clock while preserving its clock value
-    pub fn change_current_site_id(&mut self, old_site_id: &str, new_site_id: &str) {
-        if let Some(value) = self.vector_clock.remove(old_site_id) {
-            self.vector_clock.insert(new_site_id.to_string(), value);
-        }
-    }
+    /// Update the current clock value with an optional clock
+    ///
+    /// Local lamport clock is incremented
+    ///
+    /// Element of local vector clock is incremented
+    ///
+    /// Then we call update methods to take the maximum of the received clocks if any
+    pub fn update_clock(&mut self, local_site_id: &str, received_clock: Option<&Self>) {
+        self.increment_lamport();
+        self.increment_vector(local_site_id);
 
-    #[allow(unused)]
-    /// Updates the Lamport clock with a received value, taking the maximum
-    pub fn update_lamport(&mut self, received_lamport: i64) {
-        self.lamport_clock = self.lamport_clock.max(received_lamport);
+        if let Some(rc) = received_clock {
+            self.update_vector(rc.get_vector_clock_map());
+        }
     }
 }
 
@@ -102,55 +98,95 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_new_clock_initialization() {
+        let clock = Clock::new();
+        assert_eq!(*clock.get_lamport(), 0);
+        assert!(clock.get_vector_clock_map().is_empty());
+    }
+
+    #[test]
+    fn test_increment_lamport() {
+        let mut clock = Clock::new();
+        clock.increment_lamport();
+        assert_eq!(*clock.get_lamport(), 1);
+        clock.increment_lamport();
+        assert_eq!(*clock.get_lamport(), 2);
+    }
+
+    #[test]
     fn test_increment_vector() {
         let mut clock = Clock::new();
-        let site_id = "A";
-
-        let initial_value = clock.get_vector().get(site_id).cloned().unwrap_or(0);
-        let updated_value = clock.increment_vector(site_id);
-
-        assert_eq!(updated_value, initial_value + 1);
-    }
-
-    #[test]
-    fn test_update_vector() {
-        let mut clock = Clock::new();
-        let mut received_vc = std::collections::HashMap::new();
-        received_vc.insert("A".to_string(), 2);
-        received_vc.insert("B".to_string(), 3);
-
-        clock.update_vector(&received_vc);
-
-        let vector_clock = clock.get_vector();
-        assert_eq!(vector_clock.get("A").cloned().unwrap_or(0), 2);
-        assert_eq!(vector_clock.get("B").cloned().unwrap_or(0), 3);
-    }
-
-    #[test]
-    fn test_increment_lamport_clock() {
-        let mut clock = Clock::new();
-
-        let initial_value = clock.get_lamport();
-        let updated_value = clock.increment_lamport();
-
-        assert_eq!(updated_value, initial_value + 1);
-    }
-
-    #[test]
-    fn test_get_lamport_clock() {
-        let clock = Clock::new();
-
-        assert_eq!(clock.get_lamport(), 0);
-    }
-
-    #[test]
-    fn test_get_vector_clock() {
-        let mut clock = Clock::new();
+        clock.increment_vector("A");
         clock.increment_vector("A");
         clock.increment_vector("B");
 
-        let vector_clock = clock.get_vector_clock();
-        assert_eq!(vector_clock.len(), 2);
-        assert!(vector_clock.contains(&1));
+        let vc = clock.get_vector_clock_map();
+        assert_eq!(vc.get("A"), Some(&2));
+        assert_eq!(vc.get("B"), Some(&1));
+    }
+
+    #[test]
+    fn test_get_vector_clock_values() {
+        let mut clock = Clock::new();
+        clock.increment_vector("A");
+        clock.increment_vector("B");
+        clock.increment_vector("B");
+
+        let mut values = clock.get_vector_clock_values();
+        values.sort(); // Order not guaranteed by HashMap
+        assert_eq!(values, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_update_vector_clock() {
+        let mut local = Clock::new();
+        local.increment_vector("A"); // A:1
+
+        let mut incoming = Clock::new();
+        incoming.increment_vector("A"); // A:1
+        incoming.increment_vector("A"); // A:2
+        incoming.increment_vector("B"); // B:1
+
+        local.update_vector(&incoming.get_vector_clock_map());
+
+        let local_vc = local.get_vector_clock_map();
+        assert_eq!(local_vc.get("A"), Some(&2));
+        assert_eq!(local_vc.get("B"), Some(&1));
+    }
+
+    #[test]
+    fn test_update_clock_with_none() {
+        let mut clock = Clock::new();
+        clock.update_clock("A", None);
+
+        assert_eq!(*clock.get_lamport(), 1);
+        assert_eq!(clock.get_vector_clock_map().get("A"), Some(&1));
+    }
+
+    #[test]
+    fn test_update_clock_with_received_clock() {
+        let mut local = Clock::new();
+        local.increment_vector("A"); // A:1
+        local.increment_vector("A"); // A:2
+        local.increment_lamport(); // lamport: 1
+
+        let mut received = Clock::new();
+        received.increment_vector("A"); // A:1
+        received.increment_vector("B"); // B:1
+        received.increment_lamport(); // lamport: 1
+        received.increment_lamport(); // lamport: 2
+
+        // Here local is A:2 before
+        // Incrementing local to A:3
+        // Then updated with received (A:2)
+        // So should be A:3 after
+        // Lamport was 1 before, so should be 2 after
+        local.update_clock("A", Some(&received));
+
+        // Lamport clock should be max(received, local) + 1
+        assert_eq!(*local.get_lamport(), 2);
+        let vc = local.get_vector_clock_map();
+        assert_eq!(vc.get("A"), Some(&3)); // Incremented locally + merged max
+        assert_eq!(vc.get("B"), Some(&1));
     }
 }

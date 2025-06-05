@@ -283,7 +283,7 @@ pub fn create_transaction(
             from_user,
             to_user,
             amount,
-            *lamport_time,
+            lamport_time,
             vector_clock_id,
             source_node,
             optional_msg
