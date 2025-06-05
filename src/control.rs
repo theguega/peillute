@@ -83,7 +83,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        let _ = state.update_clock(&node, None);
+        let _ = state.update_clock(None);
         let clock = state.get_clock().clone();
         (clock, local_addr, node)
     };

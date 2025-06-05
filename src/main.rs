@@ -61,56 +61,55 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     // Init the logger
     env_logger::init();
 
-    // If no port for local adress is specified, try to find a free one
     let args = Args::parse();
+
     let port_range = LOW_PORT..=HIGH_PORT;
-    let mut selected_port = args.port;
-    if selected_port == 0 {
-        for port in port_range {
-            if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) {
-                selected_port = port;
-                drop(listener);
-                break;
-            }
-        }
-    }
-    let site_ip: &str = &args.ip;
-    let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
-
-    let new_site_id =
-        utils::get_mac_address().unwrap_or_default() + "_" + &std::process::id().to_string();
-
-    let site_id = if args.site_id.is_empty() {
-        new_site_id
+    let selected_port = if args.port == 0 {
+        port_range
+            .into_iter()
+            .find(|port| std::net::TcpListener::bind(("127.0.0.1", *port)).is_ok())
+            .unwrap_or(LOW_PORT)
     } else {
-        args.site_id.clone()
+        args.port
     };
 
-    //Adress for the client-server interaction (for the web app)
+    let site_ip = &args.ip;
+    let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
     let client_server_interaction_addr: SocketAddr =
         format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
 
-    let mut peers_addrs = Vec::new();
-    for peer in args.peers {
-        let peer_addr = peer.parse::<SocketAddr>()?;
-        peers_addrs.push(peer_addr);
+    let peers_addrs: Vec<SocketAddr> = args
+        .peers
+        .into_iter()
+        .filter_map(|peer| peer.parse::<SocketAddr>().ok())
+        .collect();
+
+    let (site_id, clock, needs_sync) = match utils::reload_existing_site().await {
+        Ok((site_id, clock)) => (site_id, clock, true),
+        Err(_) => {
+            let generated_site_id = if args.site_id.is_empty() {
+                utils::get_mac_address().unwrap_or_default() + "_" + &std::process::id().to_string()
+            } else {
+                args.site_id.clone()
+            };
+            (generated_site_id, crate::clock::Clock::new(), false)
+        }
+    };
+
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.site_id = site_id.clone();
+        state.site_addr = peer_interaction_addr;
+        state
+            .parent_addr_for_transaction_wave
+            .insert(site_id.clone(), peer_interaction_addr);
+        state.clocks = clock;
+        state.peer_addrs = peers_addrs;
+        state.update_clock(None).await;
     }
 
-    if !utils::reload_existing_site(peer_interaction_addr, peers_addrs.clone()).await {
-        // Initialize the app state
-        {
-            let mut state = LOCAL_APP_STATE.lock().await;
-            state.site_id = site_id.clone();
-            state.site_addr = peer_interaction_addr;
-            state
-                .parent_addr_for_transaction_wave
-                .insert(site_id.clone(), peer_interaction_addr);
-            state.update_clock(&site_id.clone(), None).await;
-            state.peer_addrs = peers_addrs;
-        }
-        // Save the initial state to the database
-    } else {
-        // this is not used for now but needs to be here
+    if needs_sync {
+        log::info!("Sync request, node connexion reinitiated ");
         network::on_sync().await;
     }
 
@@ -216,7 +215,7 @@ async fn disconnect() {
         // increment the clock for every deconnection
         let clock = {
             let mut state = LOCAL_APP_STATE.lock().await;
-            state.update_clock(&site_id, None).await;
+            state.update_clock(None).await;
             state.get_clock().clone()
         };
 

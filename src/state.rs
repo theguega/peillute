@@ -143,17 +143,17 @@ impl AppState {
         self.nb_connected_neighbours
     }
 
-    pub async fn update_clock(&mut self, site_id: &str, received_vc: Option<&Clock>) {
+    pub async fn update_clock(&mut self, received_vc: Option<&Clock>) {
         // this wrapper is needed to ensure that the clock is saved
         // each time it is updated
         // please DO NOT call the `update_clock` method directly from the clock
-        self.clocks.update_clock(site_id, received_vc);
+        self.clocks.update_clock(&self.site_id, received_vc);
         self.save_local_state().await;
     }
 
     pub async fn save_local_state(&self) {
         // this is likely to be called whenever the clocks are updated
-        let _ = crate::db::update_local_state(&self.site_id.clone(), self.clocks.clone());
+        let _ = crate::db::update_local_state(&self.site_id, self.clocks.clone());
     }
 }
 

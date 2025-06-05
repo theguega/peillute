@@ -1,3 +1,5 @@
+use crate::clock::Clock;
+
 pub fn get_mac_address() -> Option<String> {
     use pnet::datalink;
 
@@ -15,32 +17,16 @@ pub fn get_mac_address() -> Option<String> {
     None
 }
 
-pub async fn reload_existing_site(
-    peer_interaction_addr: std::net::SocketAddr,
-    peers_addrs: Vec<std::net::SocketAddr>,
-) -> bool {
-    use crate::state::LOCAL_APP_STATE;
+pub async fn reload_existing_site() -> Result<(String, Clock), String> {
     use log::info;
-
-    let (site_id, clock) = match crate::db::get_local_state() {
-        Ok((site_id, clock)) => (site_id.clone(), clock),
-        Err(_) => {
-            info!("No existing site state found, creating a new one.");
-            return false;
+    match crate::db::get_local_state() {
+        Ok((site_id, clock)) => {
+            info!("Existing site state reloaded");
+            Ok((site_id.clone(), clock))
         }
-    };
-
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = site_id.clone();
-        state.clocks = clock.clone();
-        state.site_addr = peer_interaction_addr;
-        state
-            .parent_addr_for_transaction_wave
-            .insert(site_id.clone(), peer_interaction_addr);
-        state.peer_addrs = peers_addrs.clone();
+        Err(e) => {
+            info!("No existing site state found, creating a new one.");
+            Err(format!("Failed to reload existing site: {}", e))
+        }
     }
-
-    info!("Existing site state reloaded");
-    true
 }
