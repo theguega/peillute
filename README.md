@@ -126,7 +126,7 @@ RUST_LOG=debug cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002
 # Terminal 5
 RUST_LOG=debug cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4
 # Terminal 6
-RUST_LOG=debug cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10006 --db-id 5
+RUST_LOG=debug cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10009 --db-id 5
 # Terminal 7
 RUST_LOG=debug cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6
 # Terminal 8

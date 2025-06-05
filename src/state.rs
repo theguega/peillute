@@ -110,6 +110,14 @@ impl AppState {
         self.peer_addrs.iter().map(|x| x.to_string()).collect()
     }
 
+    /// Returns a list of conncted neibhours as strings
+    pub fn get_connected_neighbours_string(&self) -> Vec<String> {
+        self.connected_neighbours_addrs
+            .iter()
+            .map(|x| x.to_string())
+            .collect()
+    }
+
     /// Increments the Lamport clock and returns the new value
     pub fn increment_lamport(&mut self) -> i64 {
         self.clocks.increment_lamport()
@@ -174,7 +182,7 @@ impl AppState {
 
     /// Returns the number of deg(1) neighbors connected
     #[allow(unused)]
-    pub fn get_nb_sites_on_network(&self) -> i64 {
+    pub fn get_nb_neighbours(&self) -> i64 {
         self.nb_connected_neighbours
     }
 }
