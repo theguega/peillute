@@ -116,26 +116,52 @@ async fn get_users() -> Result<Vec<String>, ServerFnError> {
 async fn add_user(name: String) -> Result<(), ServerFnError> {
     use crate::control::Command;
     use crate::db;
-    use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-    use crate::network::send_message_to_all_peers;
+    use crate::message::{CreateUser, Message, MessageInfo, NetworkMessageCode};
+    use crate::network::diffuse_message;
 
     if name == "" {
         return Err(ServerFnError::new("User name cannot be empty."));
     }
 
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.increment_vector_current();
+        state.increment_lamport();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
+        let node = state.get_site_id().to_string();
+        (local_clk, local_addr, node)
+    };
+
     db::create_user(&name)?;
 
-    if let Err(e) = send_message_to_all_peers(
-        Some(Command::CreateUser),
-        NetworkMessageCode::Transaction,
-        MessageInfo::CreateUser(CreateUser::new(name.clone())),
-    )
-    .await
+    let msg = Message {
+        command: Some(Command::CreateUser),
+        info: MessageInfo::CreateUser(CreateUser::new(name.clone())),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk.clone(),
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.to_string(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
+    };
+
     {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to diffuse the create user message: {e}"
         )));
     }
+
     Ok(())
 }
 

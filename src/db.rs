@@ -23,6 +23,7 @@ pub struct Transaction {
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
+#[allow(unused)]
 use clap::Parser;
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {

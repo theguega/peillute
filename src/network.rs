@@ -588,42 +588,6 @@ pub async fn send_message(
 }
 
 #[cfg(feature = "server")]
-/// Send a message to all peers
-pub async fn send_message_to_all_peers(
-    command: Option<crate::control::Command>,
-    code: crate::message::NetworkMessageCode,
-    info: crate::message::MessageInfo,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::state::LOCAL_APP_STATE;
-
-    let (local_addr, site_id, peer_addrs, clock) = {
-        let state = LOCAL_APP_STATE.lock().await;
-        (
-            state.get_site_addr(),
-            state.get_site_id().to_string(),
-            state.get_peers_addrs(),
-            state.get_clock().clone(),
-        )
-    };
-
-    for peer_addr in peer_addrs {
-        let peer_addr_str = peer_addr;
-        send_message(
-            peer_addr_str,
-            info.clone(),
-            command.clone(),
-            code.clone(),
-            local_addr.parse().unwrap(),
-            &site_id,
-            &site_id,
-            local_addr.parse().unwrap(),
-            clock.clone(),
-        )
-        .await?;
-    }
-    Ok(())
-}
-
 /// Vague de diffusion des messages
 pub async fn diffuse_message(
     message: &crate::message::Message,
@@ -690,7 +654,6 @@ mod tests {
         let clock = Clock::new();
 
         let _listener = TcpListener::bind(address).await?;
-        // tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         let code = NetworkMessageCode::Discovery;
 

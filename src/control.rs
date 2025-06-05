@@ -494,7 +494,6 @@ pub async fn handle_command_from_network(
         };
     }
 
-    log::debug!("handle and broadcast to other nodes");
     use crate::message::MessageInfo;
     use log;
 

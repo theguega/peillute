@@ -331,13 +331,13 @@ pub fn Refund(name: String) -> Element {
                                                                 .await
                                                             {
                                                                 if let Ok(_) = get_transactions_for_user_server(
-                                                                            name_for_future.to_string(),
-                                                                        )
-                                                                        .await
-                                                                    {
-                                                                        error_signal.set(None);
-                                                                        resource_to_refresh.restart();
-                                                                    }
+                                                                        name_for_future.to_string(),
+                                                                    )
+                                                                    .await
+                                                                {
+                                                                    error_signal.set(None);
+                                                                    resource_to_refresh.restart();
+                                                                }
                                                             }
                                                         }
                                                     },
@@ -637,14 +637,24 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
     if let Err(_e) = crate::db::deposit(
@@ -657,17 +667,35 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         return Err(ServerFnError::new("Error with database"));
     }
 
-    if let Err(e) = crate::network::send_message_to_all_peers(
-        Some(crate::control::Command::Deposit),
-        crate::message::NetworkMessageCode::Transaction,
-        crate::message::MessageInfo::Deposit(crate::message::Deposit::new(user.clone(), amount)),
-    )
-    .await
-    {
-        return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes : {e}"
-        )));
+    use crate::control::Command;
+    use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
+
+    use crate::message::Message;
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: Some(Command::Deposit),
+        info: MessageInfo::Deposit(Deposit::new(user.clone(), amount)),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk.clone(),
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.to_string(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
     };
+    {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
+        return Err(ServerFnError::new(format!(
+            "Failed to diffuse the deposit message: {e}"
+        )));
+    }
 
     Ok(())
 }
@@ -678,14 +706,24 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
     if let Err(e) = crate::db::withdraw(
@@ -698,15 +736,32 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all_peers(
-        Some(crate::control::Command::Withdraw),
-        crate::message::NetworkMessageCode::Transaction,
-        crate::message::MessageInfo::Withdraw(crate::message::Withdraw::new(user.clone(), amount)),
-    )
-    .await
+    use crate::control::Command;
+    use crate::message::{Message, MessageInfo, NetworkMessageCode, Withdraw};
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: Some(Command::Withdraw),
+        info: MessageInfo::Withdraw(Withdraw::new(user.clone(), amount)),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk,
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.to_string(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
+    };
+
     {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to diffuse the withdraw message: {e}"
         )));
     }
 
@@ -719,14 +774,24 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
     if let Err(e) = crate::db::create_transaction(
@@ -741,15 +806,32 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all_peers(
-        Some(crate::control::Command::Pay),
-        crate::message::NetworkMessageCode::Transaction,
-        crate::message::MessageInfo::Pay(crate::message::Pay::new(user.clone(), amount)),
-    )
-    .await
+    use crate::control::Command;
+    use crate::message::{Message, MessageInfo, NetworkMessageCode, Pay};
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: Some(Command::Pay),
+        info: MessageInfo::Pay(Pay::new(user.clone(), amount)),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk,
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.parse().unwrap(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
+    };
+
     {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to diffuse the pay message: {e}"
         )));
     }
 
@@ -767,14 +849,24 @@ async fn transfer_from_user_to_user_server(
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
     if let Err(e) = crate::db::create_transaction(
@@ -789,21 +881,35 @@ async fn transfer_from_user_to_user_server(
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all_peers(
-        Some(crate::control::Command::Transfer),
-        crate::message::NetworkMessageCode::Transaction,
-        crate::message::MessageInfo::Transfer(crate::message::Transfer::new(
-            from_user.clone(),
-            to_user.clone(),
-            amount,
-        )),
-    )
-    .await
+    use crate::control::Command;
+    use crate::message::{Message, MessageInfo, NetworkMessageCode, Transfer};
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: Some(Command::Transfer),
+        info: MessageInfo::Transfer(Transfer::new(from_user.clone(), to_user.clone(), amount)),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk,
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.to_string(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
+    };
+
     {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to diffuse the transfer message: {e}"
         )));
     }
+
     Ok(())
 }
 
@@ -824,14 +930,24 @@ async fn refund_transaction_server(
     lamport_time: i64,
     transac_node: String,
 ) -> Result<(), ServerFnError> {
-    let (local_vc_clock, local_lamport_time, node) = {
-        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+    use crate::state::LOCAL_APP_STATE;
+
+    let (local_vc_clock, local_lamport_time, local_clk, local_addr, node) = {
+        let mut state = LOCAL_APP_STATE.lock().await;
         state.increment_vector_current();
         state.increment_lamport();
         let local_lamport_time = state.get_lamport();
         let local_vc_clock = state.get_vector().clone();
+        let local_clk = state.get_clock().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        (
+            local_vc_clock,
+            local_lamport_time,
+            local_clk,
+            local_addr,
+            node,
+        )
     };
 
     if let Err(e) = crate::db::refund_transaction(
@@ -844,19 +960,32 @@ async fn refund_transaction_server(
         return Err(ServerFnError::new(e.to_string()));
     }
 
-    if let Err(e) = crate::network::send_message_to_all_peers(
-        Some(crate::control::Command::Refund),
-        crate::message::NetworkMessageCode::Transaction,
-        crate::message::MessageInfo::Refund(crate::message::Refund::new(
-            name.clone(),
-            lamport_time,
-            transac_node,
-        )),
-    )
-    .await
+    use crate::control::Command;
+    use crate::message::{Message, MessageInfo, NetworkMessageCode, Refund};
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: Some(Command::Refund),
+        info: MessageInfo::Refund(Refund::new(name, lamport_time, transac_node)),
+        code: NetworkMessageCode::Transaction,
+        clock: local_clk,
+        sender_addr: local_addr.parse().unwrap(),
+        sender_id: node.parse().unwrap(),
+        message_initiator_id: node.to_string(),
+        message_initiator_addr: local_addr.parse().unwrap(),
+    };
+
     {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(node.to_string(), local_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+    }
+
+    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to send message to all nodes: {e}"
+            "Failed to diffuse the refund message: {e}"
         )));
     }
 
