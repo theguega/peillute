@@ -108,6 +108,20 @@ pub fn is_database_initialized() -> rusqlite::Result<bool> {
 }
 
 #[cfg(feature = "server")]
+/// Check if a transaction exists in the database
+pub fn transaction_exists(lamport_time: i64, source_node: &str) -> rusqlite::Result<bool> {
+    use rusqlite::params;
+    {
+        let conn = DB_CONN.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT EXISTS(SELECT 1 FROM Transactions WHERE lamport_time = ?1 AND source_node = ?2)",
+        )?;
+        let exists: bool = stmt.query_row(params![lamport_time, source_node], |row| row.get(0))?;
+        Ok(exists)
+    }
+}
+
+#[cfg(feature = "server")]
 /// Checks if a user exists in the database
 pub fn user_exists(name: &str) -> rusqlite::Result<bool> {
     {
@@ -269,7 +283,7 @@ pub fn create_transaction(
             from_user,
             to_user,
             amount,
-            *lamport_time,
+            lamport_time,
             vector_clock_id,
             source_node,
             optional_msg

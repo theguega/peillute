@@ -30,7 +30,7 @@ impl NetworkManager {
     }
 
     /// Adds a new peer connection to the connection pool
-    pub fn add_connection(
+    fn add_connection(
         &mut self,
         addr: std::net::SocketAddr,
         sender: tokio::sync::mpsc::Sender<Vec<u8>>,
@@ -60,12 +60,6 @@ impl NetworkManager {
         addr: &std::net::SocketAddr,
     ) -> Option<tokio::sync::mpsc::Sender<Vec<u8>>> {
         self.connection_pool.get(addr).map(|p| p.sender.clone())
-    }
-
-    #[allow(unused)]
-    /// Returns a list of all connected peer addresses
-    pub fn get_all_connections(&self) -> Vec<std::net::SocketAddr> {
-        self.connection_pool.keys().cloned().collect()
     }
 }
 
@@ -97,7 +91,8 @@ pub async fn spawn_writer_task(
 
 #[cfg(feature = "server")]
 /// Announces this node's presence to potential peers in the network
-/// If the user gave specific peers, we will only connect to those peers and not scan all the port range
+/// If the user gave peers in args, we will only connect to those peers
+/// If not, we will scan the port range and try connecting to all sockets
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -105,11 +100,11 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     let (local_addr, site_id, clocks, nb_peers, peer_addrs) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
-            state.get_local_addr().to_string(),
+            state.site_addr,
             state.get_site_id().to_string(),
             state.get_clock().clone(),
-            state.get_nb_sites_on_network(),
-            state.get_peers(),
+            state.peer_addrs.clone().len(),
+            state.get_peers_addrs(),
         )
     };
 
@@ -118,23 +113,19 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     if nb_peers > 0 {
         log::debug!("Manually connecting to peers based on args");
         for peer in peer_addrs.clone() {
-            let address = peer.to_string();
-            let local_addr = local_addr.clone();
             let site_id = site_id.clone();
             let clocks = clocks.clone();
 
             let handle = tokio::spawn(async move {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_lamport();
-                state.increment_vector_current();
-
                 let _ = send_message(
-                    &address,
+                    peer,
                     MessageInfo::None,
                     None,
                     NetworkMessageCode::Discovery,
-                    &local_addr,
+                    local_addr,
                     &site_id,
+                    &site_id,
+                    local_addr,
                     clocks,
                 )
                 .await;
@@ -149,22 +140,19 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
                 continue;
             }
             let address = format!("{}:{}", ip, port);
-            let local_addr = local_addr.clone();
             let site_id = site_id.clone();
             let clocks = clocks.clone();
 
             let handle = tokio::spawn(async move {
-                let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-                state.increment_lamport();
-                state.increment_vector_current();
-
                 let _ = send_message(
-                    &address,
+                    address.parse().unwrap(),
                     MessageInfo::None,
                     None,
                     NetworkMessageCode::Discovery,
-                    &local_addr,
+                    local_addr,
                     &site_id,
+                    &site_id,
+                    local_addr,
                     clocks,
                 )
                 .await;
@@ -172,34 +160,29 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
 
             handles.push(handle);
         }
-    }
 
-    for handle in handles {
-        let _ = handle.await;
+        for handle in handles {
+            let _ = handle.await;
+        }
     }
 }
 
 #[cfg(feature = "server")]
-/// Starts listening for messages from a new peer connection
+/// Starts listening for messages from a new peer
 pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::SocketAddr) {
     log::debug!("Accepted connection from: {}", addr);
 
     tokio::spawn(async move {
-        if let Err(e) = handle_message(stream, addr).await {
+        if let Err(e) = handle_network_message(stream, addr).await {
             log::error!("Error handling connection from {}: {}", addr, e);
         }
     });
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct HalfWave {
-    pub id: String,
-    pub origin: String,
-}
-
 #[cfg(feature = "server")]
-/// Handles incoming messages from a peer connection
-pub async fn handle_message(
+/// Handles incoming messages from a peer
+/// Implement our wave diffusion protocol
+pub async fn handle_network_message(
     mut stream: tokio::net::TcpStream,
     addr: std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -209,7 +192,6 @@ pub async fn handle_message(
     use tokio::io::AsyncReadExt;
 
     let mut buf = vec![0; 1024];
-
     loop {
         let n = stream.read(&mut buf).await?;
 
@@ -228,54 +210,246 @@ pub async fn handle_message(
             }
         };
 
+        log::debug!("Message received: {:?}", message);
+
         match message.code {
             NetworkMessageCode::Discovery => {
-                let (local_addr, site_id, clocks) = {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.add_peer(message.sender_id.as_str(), message.sender_addr);
-                    (
-                        state.get_local_addr().to_string(),
-                        state.get_site_id().to_string(),
-                        state.get_clock().clone(),
+                let mut state = LOCAL_APP_STATE.lock().await;
+
+                // return ack message if direct peer
+                if !state
+                    .peer_addrs
+                    .iter()
+                    .find(|addr| addr == &&message.sender_addr)
+                    .is_none()
+                {
+                    if state
+                        .connected_neighbours_addrs
+                        .iter()
+                        .find(|addr| addr == &&message.sender_addr)
+                        .is_none()
+                    {
+                        state.connected_neighbours_addrs.push(message.sender_addr);
+                        state.nb_connected_neighbours += 1;
+                    }
+                    send_message(
+                        message.sender_addr,
+                        MessageInfo::None,
+                        None,
+                        NetworkMessageCode::Acknowledgment,
+                        state.site_addr,
+                        state.get_site_id(),
+                        &message.message_initiator_id,
+                        message.message_initiator_addr,
+                        state.clocks.clone(),
                     )
-                };
-                log::debug!("Sending discovery response to: {}", message.sender_addr);
-                let _ = send_message(
-                    &message.sender_addr.to_string(),
-                    MessageInfo::None,
-                    None,
-                    NetworkMessageCode::Acknowledgment,
-                    &local_addr,
-                    &site_id,
-                    clocks,
-                )
-                .await;
+                    .await?;
+                }
             }
+
+            NetworkMessageCode::Acknowledgment => {
+                let mut state = LOCAL_APP_STATE.lock().await;
+                if message.message_initiator_addr == state.site_addr {
+                    state
+                        .connected_neighbours_addrs
+                        .push(message.sender_addr.clone());
+                    state.nb_connected_neighbours = state.connected_neighbours_addrs.len() as i64;
+                    for (site_id, nb_a_i) in state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .clone()
+                        .iter()
+                    {
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(site_id.clone(), *nb_a_i + 1);
+                    }
+                }
+            }
+
             NetworkMessageCode::Transaction => {
-                log::debug!("Transaction message received: {:?}", message);
-                let clock = message.clock.clone();
-                let site = message.sender_id.clone();
-                if let Some(_) = message.command {
-                    use crate::control::handle_command_from_network;
-                    if let Err(e) = handle_command_from_network(message.info, clock, site).await {
-                        log::error!("Error handling transaction network command:\n{}", e);
+                // messages bleus
+                #[allow(unused)]
+                if message.command.is_some() {
+                    let site_id = {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        (state.get_site_id().to_string())
+                    };
+
+                    use crate::control::process_network_command;
+                    if let Err(e) = process_network_command(
+                        message.info.clone(),
+                        message.clock.clone(),
+                        &site_id,
+                    )
+                    .await
+                    {
+                        log::error!("Error handling command:\n{}", e);
+                    }
+                    // wave diffusion
+                    let mut diffuse = false;
+                    let (local_site_id, local_site_addr) = {
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        let parent_id = state
+                            .parent_addr_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .unwrap_or(&"0.0.0.0:0".parse().unwrap())
+                            .to_string();
+                        if parent_id == "0.0.0.0:0" {
+                            state.set_parent_addr(
+                                message.message_initiator_id.clone(),
+                                message.sender_addr,
+                            );
+
+                            let nb_neighbours = state.nb_connected_neighbours;
+                            let current_value = state
+                                .attended_neighbours_nb_for_transaction_wave
+                                .get(&message.message_initiator_id)
+                                .copied()
+                                .unwrap_or(nb_neighbours);
+
+                            state
+                                .attended_neighbours_nb_for_transaction_wave
+                                .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                            log::debug!("Nombre de voisin : {}", current_value - 1);
+
+                            diffuse = state
+                                .attended_neighbours_nb_for_transaction_wave
+                                .get(&message.message_initiator_id)
+                                .copied()
+                                .unwrap_or(0)
+                                > 0;
+                        }
+                        (state.site_id.clone(), state.site_addr.clone())
+                    };
+
+                    if diffuse {
+                        let mut snd_msg = message.clone();
+                        snd_msg.sender_id = local_site_id.to_string();
+                        snd_msg.sender_addr = local_site_addr;
+                        diffuse_message(&snd_msg).await?;
+                    } else {
+                        let (parent_addr, local_addr, site_id, clock) = {
+                            let state = LOCAL_APP_STATE.lock().await;
+                            (
+                                state.get_parent_addr(message.message_initiator_id.clone()),
+                                &state.get_site_addr(),
+                                &state.get_site_id().to_string(),
+                                state.get_clock().clone(),
+                            )
+                        };
+                        // Acquit message to parent
+                        log::debug!(
+                            "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                            message.sender_addr.to_string().as_str()
+                        );
+                        send_message(
+                            message.sender_addr,
+                            MessageInfo::None,
+                            None,
+                            NetworkMessageCode::TransactionAcknowledgement,
+                            local_addr.parse().unwrap(),
+                            site_id,
+                            &message.message_initiator_id,
+                            message.message_initiator_addr,
+                            message.clock.clone(),
+                        )
+                        .await?;
+
+                        if message.sender_addr == parent_addr {
+                            // réinitialisation s'il s'agit de la remontée après réception des rouges de tous les fils
+                            let mut state = LOCAL_APP_STATE.lock().await;
+                            let peer_count = state.connected_neighbours_addrs.len();
+                            state
+                                .attended_neighbours_nb_for_transaction_wave
+                                .insert(message.message_initiator_id.clone(), peer_count as i64);
+                            state.parent_addr_for_transaction_wave.insert(
+                                message.message_initiator_id.clone(),
+                                "0.0.0.0:0".parse().unwrap(),
+                            );
+                        }
                     }
                 } else {
                     log::error!("Command is None for Transaction message");
                 }
             }
-            NetworkMessageCode::Acknowledgment => {
-                log::debug!("Acknowledgment message received: {:?}", message);
+            NetworkMessageCode::TransactionAcknowledgement => {
+                // Message rouge
                 let mut state = LOCAL_APP_STATE.lock().await;
-                state.add_peer(message.sender_id.as_str(), message.sender_addr);
+
+                let nb_neighbours = state.nb_connected_neighbours;
+                let current_value = state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(nb_neighbours);
+                state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                if state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id.clone())
+                    .copied()
+                    .unwrap_or(-1)
+                    == 0
+                {
+                    if state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id.clone())
+                        .copied()
+                        .unwrap_or("99.99.99.99:0".parse().unwrap())
+                        == state.site_addr
+                    {
+                        // on est chez le parent
+                        // diffusion terminée
+                        // Réinitialisation
+
+                        log::error!("Diffusion terminée et réussie !");
+                    } else {
+                        log::debug!(
+                            "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
+                            state.site_addr.clone().to_string().as_str(),
+                            state
+                                .get_parent_addr(message.message_initiator_id.clone())
+                                .to_string()
+                                .as_str()
+                        );
+                        send_message(
+                            state.get_parent_addr(message.message_initiator_id.clone()),
+                            MessageInfo::None,
+                            None,
+                            NetworkMessageCode::TransactionAcknowledgement,
+                            state.get_site_addr().parse().unwrap(),
+                            &state.get_site_id().to_string(),
+                            &message.message_initiator_id,
+                            message.message_initiator_addr,
+                            state.get_clock().clone(),
+                        )
+                        .await?;
+                    }
+
+                    let peer_count = state.connected_neighbours_addrs.len();
+                    state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                    state.parent_addr_for_transaction_wave.insert(
+                        message.message_initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap(),
+                    );
+                }
             }
+
             NetworkMessageCode::Error => {
                 log::debug!("Error message received: {:?}", message);
             }
             NetworkMessageCode::Disconnect => {
                 log::debug!("Disconnect message received: {:?}", message);
-                let mut state = LOCAL_APP_STATE.lock().await;
-                state.remove_peer(message.sender_addr);
+                // let mut state = LOCAL_APP_STATE.lock().await;
+                // state.remove_peer(
+                //     message.message_initiator_id.as_str(),
+                //     message.message_initiator_addr,
+                // );
             }
             NetworkMessageCode::SnapshotRequest => {
                 let txs = crate::db::get_local_transaction_log()?;
@@ -286,12 +460,12 @@ pub async fn handle_message(
                     (
                         st.get_site_id().to_string(),
                         st.get_clock().clone(),
-                        st.get_local_addr().to_string(),
+                        st.get_site_addr().to_string(),
                     )
                 };
 
                 send_message(
-                    &message.sender_addr.to_string(),
+                    message.sender_addr,
                     MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
                         site_id: site_id.clone(),
                         clock: clock.clone(),
@@ -299,14 +473,16 @@ pub async fn handle_message(
                     }),
                     None,
                     NetworkMessageCode::SnapshotResponse,
-                    &local_addr,
+                    local_addr.parse().unwrap(),
                     &site_id,
+                    &message.message_initiator_id,
+                    message.message_initiator_addr,
                     clock,
                 )
                 .await?;
             }
             NetworkMessageCode::SnapshotResponse => {
-                if let MessageInfo::SnapshotResponse(resp) = message.info {
+                if let MessageInfo::SnapshotResponse(resp) = message.info.clone() {
                     let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
                     if let Some(gs) = mgr.push(resp) {
                         log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
@@ -318,118 +494,31 @@ pub async fn handle_message(
                 log::debug!("Sync message received: {:?}", message);
                 on_sync().await;
             }
-            NetworkMessageCode::HalfWaveBroadcast => {
-                if let MessageInfo::HalfWave { id, payload } = message.info {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-
-                    if state.has_already_received_half_wave(&id) {
-                        log::debug!("Already received HalfWave {}", id);
-                        return Ok(());
-                    }
-
-                    log::info!("Received HalfWave {}: {}", id, payload);
-                    state.mark_half_wave_received(&id);
-                    state.mark_half_wave_sent(&id);
-
-                    let local_addr = state.get_local_addr();
-                    let site_id = state.get_site_id().to_string();
-                    let clock = state.get_clock().clone();
-                    let peers = state.get_peers();
-
-                    drop(state);
-
-                    for peer in peers {
-                        if peer != addr {
-                            let _ = send_message(
-                                &peer.to_string(),
-                                MessageInfo::HalfWave {
-                                    id: id.clone(),
-                                    payload: payload.clone(),
-                                },
-                                None,
-                                NetworkMessageCode::HalfWaveBroadcast,
-                                &local_addr,
-                                &site_id,
-                                clock.clone(),
-                            )
-                            .await;
-                        }
-                    }
-
-                    let _ = send_message(
-                        &addr.to_string(),
-                        MessageInfo::HalfWaveAck { id: id.clone() },
-                        None,
-                        NetworkMessageCode::HalfWaveAck,
-                        &local_addr,
-                        &site_id,
-                        clock.clone(),
-                    )
-                    .await;
-                }
-            }
-
-            NetworkMessageCode::HalfWaveAck => {
-                if let MessageInfo::HalfWaveAck { id } = message.info {
-                    let mut state = LOCAL_APP_STATE.lock().await;
-                    state.mark_half_wave_ack(&id, &addr);
-                }
-            }
         }
 
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_lamport();
-        state.increment_vector_current();
-        state.update_vector(&message.clock.get_vector());
+        let site_id = state.get_site_id().to_string();
+        state
+            .clocks
+            .update_clock(site_id.as_str(), Some(&message.clock));
     }
 }
-#[cfg(feature = "server")]
-/// Starts a half-wave broadcast
-pub async fn start_half_wave_broadcast() {
-    use crate::message::{MessageInfo, NetworkMessageCode};
-    use crate::state::LOCAL_APP_STATE;
-
-    let mut state = LOCAL_APP_STATE.lock().await;
-
-    state.increment_lamport();
-    state.increment_vector_current();
-    let clock = state.get_clock().clone();
-    let site_id = state.get_site_id().to_string();
-    let msg_id = format!("{}-{}", site_id, clock.get_lamport());
-
-    state.mark_half_wave_sent(&msg_id);
-    state.mark_half_wave_received(&msg_id);
-
-    drop(state);
-
-    let _ = send_message_to_all_peers(
-        None,
-        NetworkMessageCode::HalfWaveBroadcast,
-        MessageInfo::HalfWave {
-            id: msg_id.clone(),
-            payload: "Hello from wave!".into(),
-        },
-    )
-    .await;
-
-    log::info!("Sent HalfWave {}", msg_id);
-}
 
 #[cfg(feature = "server")]
+/// Send a message to a specific peer
 pub async fn send_message(
-    address: &str,
+    address: std::net::SocketAddr,
     info: crate::message::MessageInfo,
     command: Option<crate::control::Command>,
     code: crate::message::NetworkMessageCode,
-    local_addr: &str,
+    local_addr: std::net::SocketAddr,
     local_site: &str,
+    initiator_id: &str,
+    initiator_addr: std::net::SocketAddr,
     sender_clock: crate::clock::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::Message;
     use rmp_serde::encode;
-    use std::net::SocketAddr;
-
-    let addr = address.parse::<SocketAddr>()?;
 
     if code == crate::message::NetworkMessageCode::Transaction && command.is_none() {
         log::error!("Command is None for Transaction message");
@@ -437,25 +526,34 @@ pub async fn send_message(
     }
 
     let msg = Message {
-        sender_id: local_site.parse().unwrap(),
-        sender_addr: local_addr.parse().unwrap(),
+        sender_id: local_site.to_string(),
+        sender_addr: local_addr,
+        message_initiator_id: initiator_id.to_string(),
         clock: sender_clock.clone(),
         command,
         info,
         code,
+        message_initiator_addr: initiator_addr,
     };
+
+    if address.ip().is_unspecified() || address.port() == 0 {
+        log::warn!("Skipping invalid peer address {}", address);
+        return Ok(());
+    }
 
     let buf = encode::to_vec(&msg)?;
 
     let mut manager = NETWORK_MANAGER.lock().await;
 
-    let sender = match manager.get_sender(&addr) {
+    let sender = match manager.get_sender(&address) {
         Some(s) => s,
         None => {
-            if let Err(e) = manager.create_connection(addr).await {
-                return Err(format!("error with connection to {}: {}", address, e).into());
+            if let Err(e) = manager.create_connection(address).await {
+                return Err(
+                    format!("error with connection to {}: {}", address.to_string(), e).into(),
+                );
             }
-            match manager.get_sender(&addr) {
+            match manager.get_sender(&address) {
                 Some(s) => s,
                 None => {
                     let err_msg = format!("Sender not found after connecting to {}", address);
@@ -466,76 +564,58 @@ pub async fn send_message(
         }
     };
 
-    sender.send(buf).await?;
-
+    match sender.send(buf).await {
+        Ok(s) => s,
+        Err(e) => {
+            let err_msg = format!("Impossible to send msg to {} due to error : {}", address, e);
+            log::error!("{}", err_msg);
+            return Err(err_msg.into());
+        }
+    };
     log::debug!("Sent message {:?} to {}", &msg, address);
     Ok(())
 }
 
 #[cfg(feature = "server")]
-/// Broadcast a message to all peers received from another node
-pub async fn broadcast_message_to_all_peers(
-    command: Option<crate::control::Command>,
-    code: crate::message::NetworkMessageCode,
-    info: crate::message::MessageInfo,
-    sender_clock: crate::clock::Clock,
-    sender_site_id: String,
+/// Implement our wave diffusion protocol
+pub async fn diffuse_message(
+    message: &crate::message::Message,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_addr, peer_addrs) = {
-        let state = LOCAL_APP_STATE.lock().await;
-        (state.get_local_addr().to_string(), state.get_peers())
-    };
+    log::debug!("debut diffusion");
 
-    for peer_addr in peer_addrs {
-        let peer_addr_str = peer_addr.to_string();
-        send_message(
-            &peer_addr_str,
-            info.clone(),
-            command.clone(),
-            code.clone(),
-            &local_addr,
-            &sender_site_id,
-            sender_clock.clone(),
-        )
-        .await?;
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "server")]
-/// Send a message to all peers
-pub async fn send_message_to_all_peers(
-    command: Option<crate::control::Command>,
-    code: crate::message::NetworkMessageCode,
-    info: crate::message::MessageInfo,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::state::LOCAL_APP_STATE;
-
-    let (local_addr, site_id, peer_addrs, clock) = {
+    let (local_addr, site_id, peer_addrs, parent_address) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
-            state.get_local_addr().to_string(),
+            state.get_site_addr().to_string(),
             state.get_site_id().to_string(),
-            state.get_peers(),
-            state.get_clock().clone(),
+            state.get_peers_addrs(),
+            state.get_parent_addr(message.message_initiator_id.clone()),
         )
     };
 
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
-        send_message(
-            &peer_addr_str,
-            info.clone(),
-            command.clone(),
-            code.clone(),
-            &local_addr,
-            &site_id,
-            clock.clone(),
-        )
-        .await?;
+        if peer_addr != parent_address {
+            log::debug!("Sending message to: {}", peer_addr_str);
+
+            if let Err(e) = send_message(
+                peer_addr,
+                message.info.clone(),
+                message.command.clone(),
+                message.code.clone(),
+                local_addr.parse().unwrap(),
+                &site_id,
+                &message.message_initiator_id,
+                message.message_initiator_addr,
+                message.clock.clone(),
+            )
+            .await
+            {
+                log::error!("❌ Impossible d’envoyer à {} : {}", peer_addr_str, e);
+            }
+        }
     }
     Ok(())
 }
@@ -563,17 +643,18 @@ mod tests {
         let clock = Clock::new();
 
         let _listener = TcpListener::bind(address).await?;
-        // tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         let code = NetworkMessageCode::Discovery;
 
         let send_result = send_message(
-            address,
+            address.parse().unwrap(),
             MessageInfo::None,
             None,
             code,
-            local_addr,
+            local_addr.parse().unwrap(),
             local_site,
+            local_site,
+            local_addr.parse().unwrap(),
             clock,
         )
         .await;

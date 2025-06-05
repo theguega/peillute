@@ -26,6 +26,8 @@ pub enum NetworkMessageCode {
     Discovery,
     /// Message containing a financial transaction
     Transaction,
+    /// Message acknowledging receipt of a previous transaction
+    TransactionAcknowledgement,
     /// Message acknowledging receipt of a previous message
     Acknowledgment,
     /// Message indicating an error condition
@@ -38,10 +40,6 @@ pub enum NetworkMessageCode {
     SnapshotRequest,
     /// Message containing a state snapshot
     SnapshotResponse,
-    /// Broadcast for half-wave propagation
-    HalfWaveBroadcast,
-    /// Acknowledgment for half-wave propagation
-    HalfWaveAck,
 }
 
 #[cfg(feature = "server")]
@@ -52,14 +50,13 @@ impl NetworkMessageCode {
         match self {
             NetworkMessageCode::Discovery => "discovery",
             NetworkMessageCode::Transaction => "transaction",
+            NetworkMessageCode::TransactionAcknowledgement => "transaction_acknowledgement",
             NetworkMessageCode::Acknowledgment => "acknowledgment",
             NetworkMessageCode::Error => "error",
             NetworkMessageCode::Disconnect => "disconnect",
             NetworkMessageCode::Sync => "sync",
             NetworkMessageCode::SnapshotRequest => "snapshot_request",
             NetworkMessageCode::SnapshotResponse => "snapshot_response",
-            NetworkMessageCode::HalfWaveBroadcast => "half_wave_broadcast",
-            NetworkMessageCode::HalfWaveAck => "half_wave_ack",
         }
     }
 
@@ -69,14 +66,13 @@ impl NetworkMessageCode {
         match code {
             "discovery" => Some(NetworkMessageCode::Discovery),
             "transaction" => Some(NetworkMessageCode::Transaction),
+            "transaction_acknowledgement" => Some(NetworkMessageCode::TransactionAcknowledgement),
             "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
             "error" => Some(NetworkMessageCode::Error),
             "disconnect" => Some(NetworkMessageCode::Disconnect),
             "sync" => Some(NetworkMessageCode::Sync),
             "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
             "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
-            "half_wave_broadcast" => Some(NetworkMessageCode::HalfWaveBroadcast),
-            "half_wave_ack" => Some(NetworkMessageCode::HalfWaveAck),
             _ => None,
         }
     }
@@ -88,6 +84,10 @@ impl NetworkMessageCode {
 pub struct Message {
     /// ID of the sending node
     pub sender_id: String,
+    /// ID of the node that initiated the message
+    pub message_initiator_id: String,
+    /// Network address of the node that initiated the message
+    pub message_initiator_addr: std::net::SocketAddr,
     /// Network address of the sending node
     pub sender_addr: std::net::SocketAddr,
     /// Logical clock state of the sending node
@@ -118,10 +118,6 @@ pub enum MessageInfo {
     Refund(Refund),
     /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
-    /// Broadcast payload for half-wave
-    HalfWave { id: String, payload: String },
-    /// Acknowledgment for half-wave completion
-    HalfWaveAck { id: String },
     /// No payload
     None,
 }
@@ -281,6 +277,8 @@ mod tests {
         let message = Message {
             sender_id: "A".to_string(),
             sender_addr: "127.0.0.1:8080".parse().unwrap(),
+            message_initiator_id: "A".to_string(),
+            message_initiator_addr: "127.0.0.1:8080".parse().unwrap(),
             clock: clock,
             command: None,
             info: MessageInfo::None,

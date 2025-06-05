@@ -83,7 +83,7 @@ impl GlobalSnapshot {
 /// Manages the snapshot collection process
 pub struct SnapshotManager {
     /// Number of snapshots expected to be collected
-    pub expected: usize,
+    pub expected: i64,
     /// Vector of received local snapshots
     pub received: Vec<LocalSnapshot>,
 }
@@ -91,7 +91,7 @@ pub struct SnapshotManager {
 #[cfg(feature = "server")]
 impl SnapshotManager {
     /// Creates a new snapshot manager expecting the given number of snapshots
-    pub fn new(expected: usize) -> Self {
+    pub fn new(expected: i64) -> Self {
         Self {
             expected,
             received: Vec::new(),
@@ -108,11 +108,11 @@ impl SnapshotManager {
         log::debug!("Received snapshot from site {}.", resp.site_id);
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
-            vector_clock: resp.clock.get_vector().clone(),
+            vector_clock: resp.clock.get_vector_clock_map().clone(),
             tx_log: resp.tx_log.into_iter().collect(),
         });
 
-        if self.received.len() < self.expected {
+        if (self.received.len() as i64) < self.expected {
             log::debug!("{}/{} sites received.", self.received.len(), self.expected);
             return None;
         }
@@ -203,7 +203,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         (
             st.get_site_id().to_string(),
             st.get_clock().clone(),
-            st.nb_sites_on_network + 1,
+            st.nb_connected_neighbours + 1,
         )
     };
 
@@ -223,12 +223,12 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    crate::network::send_message_to_all_peers(
-        None,
-        crate::message::NetworkMessageCode::SnapshotRequest,
-        crate::message::MessageInfo::None,
-    )
-    .await?;
+    // crate::network::send_message_to_all_peers(
+    //     None,
+    //     crate::message::NetworkMessageCode::SnapshotRequest,
+    //     crate::message::MessageInfo::None,
+    // )
+    // .await?;
 
     Ok(())
 }
@@ -267,12 +267,11 @@ mod tests {
     use super::*;
 
     fn mk_clock(pairs: &[(&str, i64)]) -> crate::clock::Clock {
-        let mut c = crate::clock::Clock::new();
         let mut m = std::collections::HashMap::new();
         for (id, v) in pairs {
             m.insert((*id).to_string(), *v);
         }
-        c.update_vector(&m);
+        let c = crate::clock::Clock::new_with_values(0, m);
         c
     }
 

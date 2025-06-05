@@ -4,12 +4,26 @@
 //! for the Peillute application, including both local and network command processing.
 
 #[cfg(feature = "server")]
-/// Processes a line of input from the CLI and converts it to a Command
-pub fn run_cli(line: Result<Option<String>, std::io::Error>) -> Command {
+/// Parse a line of input from the CLI and converts it to a Command
+pub fn parse_command(line: Result<Option<String>, std::io::Error>) -> Command {
     use log;
     match line {
         Ok(Some(cmd)) => {
-            let command = parse_command(&cmd);
+            let command = match cmd.trim() {
+                "/create_user" => Command::CreateUser,
+                "/user_accounts" => Command::UserAccounts,
+                "/print_user_tsx" => Command::PrintUserTransactions,
+                "/print_tsx" => Command::PrintTransactions,
+                "/deposit" => Command::Deposit,
+                "/withdraw" => Command::Withdraw,
+                "/transfer" => Command::Transfer,
+                "/pay" => Command::Pay,
+                "/refund" => Command::Refund,
+                "/help" => Command::Help,
+                "/info" => Command::Info,
+                "/start_snapshot" => Command::Snapshot,
+                other => Command::Unknown(other.to_string()),
+            };
             command
         }
         Ok(None) => {
@@ -55,44 +69,23 @@ pub enum Command {
     Error(String),
     /// Start a system snapshot
     Snapshot,
-    /// Wave command
-    Wave,
 }
 
 #[cfg(feature = "server")]
-/// Parses a command string into a Command enum variant
-fn parse_command(input: &str) -> Command {
-    match input.trim() {
-        "/create_user" => Command::CreateUser,
-        "/user_accounts" => Command::UserAccounts,
-        "/print_user_tsx" => Command::PrintUserTransactions,
-        "/print_tsx" => Command::PrintTransactions,
-        "/deposit" => Command::Deposit,
-        "/withdraw" => Command::Withdraw,
-        "/transfer" => Command::Transfer,
-        "/pay" => Command::Pay,
-        "/refund" => Command::Refund,
-        "/help" => Command::Help,
-        "/info" => Command::Info,
-        "/start_snapshot" => Command::Snapshot,
-        "/wave" => Command::Wave,
-        other => Command::Unknown(other.to_string()),
-    }
-}
-
-#[cfg(feature = "server")]
-/// Handles commands received from the CLI
-pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
+/// Process commands received from the CLI
+/// Update the clock of the site
+/// Interact with the database
+/// Implement our wave diffusion protocol
+pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_vc_clock, local_lamport_time, node) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.increment_vector_current();
-        state.increment_lamport();
-        let local_lamport_time = state.get_lamport();
-        let local_vc_clock = state.get_vector().clone();
+        let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
-        (local_vc_clock, local_lamport_time, node)
+        let _ = state.clocks.update_clock(&node, None);
+        let clock = state.get_clock().clone();
+        (clock, local_addr, node)
     };
 
     match cmd {
@@ -100,15 +93,29 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             let name = prompt("Username");
             super::db::create_user(&name)?;
 
-            use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-            use crate::network::send_message_to_all_peers;
+            use crate::message::{CreateUser, Message, MessageInfo, NetworkMessageCode};
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::CreateUser),
-                NetworkMessageCode::Transaction,
-                MessageInfo::CreateUser(CreateUser::new(name.clone())),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::CreateUser),
+                info: MessageInfo::CreateUser(CreateUser::new(name.clone())),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::UserAccounts => {
@@ -131,20 +138,35 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             super::db::deposit(
                 &name,
                 amount,
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
             )?;
 
             use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-            use crate::network::send_message_to_all_peers;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::Deposit),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
-            )
-            .await?;
+            use crate::message::Message;
+            use crate::network::diffuse_message;
+
+            let msg = Message {
+                command: Some(Command::Deposit),
+                info: MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::Withdraw => {
@@ -155,20 +177,35 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             super::db::withdraw(
                 &name,
                 amount,
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
             )?;
 
+            use crate::message::Message;
             use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-            use crate::network::send_message_to_all_peers;
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::Withdraw),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::Withdraw),
+                info: MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::Transfer => {
@@ -182,21 +219,40 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
                 &name,
                 &beneficiary,
                 amount,
-                &local_lamport_time,
-                node.as_str(),
+                clock.get_lamport(),
+                site_id.as_str(),
                 "",
-                &local_vc_clock,
+                clock.get_vector_clock_map(),
             )?;
 
+            use crate::message::Message;
             use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-            use crate::network::send_message_to_all_peers;
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::Transfer),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Transfer(Transfer::new(name.clone(), beneficiary.clone(), amount)),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::Transfer),
+                info: MessageInfo::Transfer(Transfer::new(
+                    name.clone(),
+                    beneficiary.clone(),
+                    amount,
+                )),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::Pay => {
@@ -206,21 +262,36 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
                 &name,
                 "NULL",
                 amount,
-                &local_lamport_time,
-                node.as_str(),
+                clock.get_lamport(),
+                site_id.as_str(),
                 "",
-                &local_vc_clock,
+                clock.get_vector_clock_map(),
             )?;
 
+            use crate::message::Message;
             use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-            use crate::network::send_message_to_all_peers;
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::Pay),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Pay(Pay::new(name.clone(), amount)),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::Pay),
+                info: MessageInfo::Pay(Pay::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::Refund => {
@@ -232,20 +303,35 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             super::db::refund_transaction(
                 transac_time,
                 &transac_node.as_str(),
-                &local_lamport_time,
-                node.as_str(),
-                &local_vc_clock,
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
             )?;
 
+            use crate::message::Message;
             use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            use crate::network::send_message_to_all_peers;
+            use crate::network::diffuse_message;
 
-            let _ = send_message_to_all_peers(
-                Some(Command::Refund),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
-            )
-            .await?;
+            let msg = Message {
+                command: Some(Command::Refund),
+                info: MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+
+            {
+                // initialisation des paramètres avant la diffusion d'un message
+                let mut state = LOCAL_APP_STATE.lock().await;
+                let nb_neigh = state.nb_connected_neighbours;
+                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                state.set_number_of_attended_neighbors(site_addr.to_string(), nb_neigh);
+            }
+
+            diffuse_message(&msg).await?;
         }
 
         Command::Help => {
@@ -262,7 +348,6 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("/refund           - Refund a transaction");
             println!("/info             - Show system information");
             println!("/start_snapshot   - Start a snapshot");
-            println!("/wave             - Launch a Half-Wave broadcast");
             println!("/help             - Show this help message");
             println!("----------------------------------------");
         }
@@ -272,20 +357,27 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             super::snapshot::start_snapshot().await?;
         }
 
-        Command::Wave => {
-            println!("Launching Half-Wave Broadcast...");
-            crate::network::start_half_wave_broadcast().await;
-        }
-
         Command::Info => {
-            let (local_addr, site_id, peer_addrs, clock, nb_sites) = {
+            let (
+                local_addr,
+                site_id,
+                peer_addrs,
+                clock,
+                nb_neighbours,
+                in_use_neighbours,
+                parent_addr,
+                nb_of_in_use_neig,
+            ) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
-                    state.get_local_addr(),
+                    state.get_site_addr(),
                     state.get_site_id().to_string(),
-                    state.get_peers_string(),
+                    state.get_peers_addrs_string(),
                     state.get_clock().clone(),
-                    state.nb_sites_on_network,
+                    state.nb_connected_neighbours,
+                    state.connected_neighbours_addrs.clone(),
+                    state.parent_addr_for_transaction_wave.clone(),
+                    state.attended_neighbours_nb_for_transaction_wave.clone(),
                 )
             };
 
@@ -301,11 +393,55 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
             println!("Database : {}", db_path);
             println!("Local Address: {}", local_addr);
             println!("Site ID: {}", site_id);
-            println!("Number of Sites: {}", nb_sites);
+            println!("Number of connected neighbors: {}", nb_neighbours);
             println!("Peers: {:?}", peer_addrs);
-            println!("Vector Clock: {:?}", clock.get_vector());
+            println!("Vector Clock: {:?}", clock.get_vector_clock_map());
             println!("Lamport Clock: {}", clock.get_lamport());
             println!("----------------------------------------");
+            log::info!("ℹ️  Info: This is a distributed banking system.");
+            log::info!("ℹ️  Version: 0.0.1");
+            log::info!(
+                "ℹ️  Authors: Aubin Vert, Théo Guegan, Alexandre Eberhardt, Léopold Chappuis"
+            );
+            log::info!("ℹ️  License: MIT");
+            log::info!("ℹ️  Local address: {}", local_addr);
+            log::info!("ℹ️  Site ID: {}", site_id);
+            log::info!("ℹ️  Peers: {:?}", peer_addrs);
+            log::info!("ℹ️  Number of in use neighbours: {}", nb_neighbours);
+
+            let mut msg: String = " ".to_string();
+            for neig in in_use_neighbours {
+                msg += neig.to_string().as_str();
+                msg += "  ";
+            }
+            log::info!("ℹ️  In use neighbours: {}", msg);
+
+            log::info!("ℹ️  Wave diffusion parameters\n");
+
+            log::info!("ℹ️  Parent addresses\n");
+            let mut msg_parent: String = " ".to_string();
+            for (key, addr) in parent_addr {
+                msg_parent += key.as_str();
+                msg_parent += " ";
+                msg_parent += addr.to_string().as_str();
+                msg_parent += " \n";
+            }
+
+            log::info!("{}", msg_parent);
+
+            log::info!("ℹ️  Nb_of_attended_neighbours\n");
+            let mut msg_nb_a_i: String = " ".to_string();
+            for (init_id, nb) in nb_of_in_use_neig {
+                msg_nb_a_i += init_id.as_str();
+                msg_nb_a_i += " ";
+                msg_nb_a_i += nb.to_string().as_str();
+                msg_nb_a_i += " \n";
+            }
+
+            log::info!("{}", msg_nb_a_i);
+
+            log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
+            log::info!("ℹ️  Vector clock: {:?}", clock.get_vector_clock_map());
         }
 
         Command::Unknown(msg) => {
@@ -321,189 +457,81 @@ pub async fn handle_command_from_cli(cmd: Command) -> Result<(), Box<dyn std::er
 }
 
 #[cfg(feature = "server")]
-/// Handles commands received from the network
-pub async fn handle_command_from_network(
+/// Process commands received from the network
+/// Update the clock of the site
+/// Interact with the database
+pub async fn process_network_command(
     msg: crate::message::MessageInfo,
     received_clock: crate::clock::Clock,
-    site: String,
+    site_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::state::LOCAL_APP_STATE;
-    // at reception, if clock of the site id is greater than our receiver clock, we have to prodcast the message
-    // or if the vector clock for this site id is not present, we have to broadcast the message
-    // else, this message have already been received, we can ignore it
-    let local_clocks = {
-        let state = LOCAL_APP_STATE.lock().await;
-        state.get_clock().clone()
-    };
-    if let Some(local_version_of_received_clock) = local_clocks.get_vector().get(&site) {
-        log::debug! {"local version of received clock: {local_version_of_received_clock}"};
-        log::debug! {"received clock: {}", received_clock.get_lamport()};
-        if local_version_of_received_clock >= &received_clock.get_lamport() {
-            log::debug!("command already received, skipping");
-            return Ok(());
-        };
+    use crate::message::MessageInfo;
+    use log;
+
+    let message_lamport_time = received_clock.get_lamport().clone();
+    let message_vc_clock = received_clock.get_vector_clock_map().clone();
+
+    if crate::db::transaction_exists(message_lamport_time, site_id)? {
+        log::info!("Transaction allready exists, skipping");
+        return Ok(());
     }
 
-    log::debug!("handle and broadcast to other nodes");
-
     match msg {
-        crate::message::MessageInfo::HalfWave { .. } => {
-            // Handle HalfWave message
-        }
-        crate::message::MessageInfo::HalfWaveAck { .. } => {
-            // Handle HalfWaveAck message
-        }
         crate::message::MessageInfo::CreateUser(create_user) => {
             super::db::create_user(&create_user.name)?;
-            use crate::message::{CreateUser, MessageInfo, NetworkMessageCode};
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::CreateUser),
-                NetworkMessageCode::Transaction,
-                MessageInfo::CreateUser(CreateUser::new(create_user.name.clone())),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
         crate::message::MessageInfo::Deposit(deposit) => {
-            use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-            let lamport_time = received_clock.get_lamport();
-            let vc_clock = received_clock.get_vector();
             super::db::deposit(
                 &deposit.name,
                 deposit.amount,
-                &lamport_time,
-                site.as_str(),
-                &vc_clock,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::Deposit),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Deposit(Deposit::new(deposit.name.clone(), deposit.amount)),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
-        crate::message::MessageInfo::Withdraw(withdraw) => {
-            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-            let lamport_time = received_clock.get_lamport();
-            let vc_clock = received_clock.get_vector();
 
+        MessageInfo::Withdraw(withdraw) => {
             super::db::withdraw(
                 &withdraw.name,
                 withdraw.amount,
-                &lamport_time,
-                site.as_str(),
-                &vc_clock,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::Withdraw),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Withdraw(Withdraw::new(withdraw.name.clone(), withdraw.amount)),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
-        crate::message::MessageInfo::Transfer(transfer) => {
-            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-            let lamport_time = received_clock.get_lamport();
-            let vc_clock = received_clock.get_vector();
 
+        MessageInfo::Transfer(transfer) => {
             super::db::create_transaction(
                 &transfer.name,
                 &transfer.beneficiary,
                 transfer.amount,
-                &lamport_time,
-                site.as_str(),
+                &message_lamport_time,
+                site_id,
                 "",
-                &vc_clock,
+                &message_vc_clock,
             )?;
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::Transfer),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Transfer(Transfer::new(
-                    transfer.name.clone(),
-                    transfer.beneficiary.clone(),
-                    transfer.amount,
-                )),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
-        crate::message::MessageInfo::Pay(pay) => {
-            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-            let lamport_time = received_clock.get_lamport();
-            let vc_clock = received_clock.get_vector();
 
+        MessageInfo::Pay(pay) => {
             super::db::create_transaction(
                 &pay.name,
                 "NULL",
                 pay.amount,
-                &lamport_time,
-                site.as_str(),
+                &message_lamport_time,
+                site_id,
                 "",
-                &vc_clock,
+                &message_vc_clock,
             )?;
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::Pay),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Pay(Pay::new(pay.name.clone(), pay.amount)),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
-        crate::message::MessageInfo::Refund(refund) => {
-            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            let lamport_time = received_clock.get_lamport();
-            let vc_clock = received_clock.get_vector();
 
+        MessageInfo::Refund(refund) => {
             super::db::refund_transaction(
                 refund.transac_time,
-                &refund.transac_node.as_str(),
-                &lamport_time,
-                site.as_str(),
-                &vc_clock,
+                &refund.transac_node,
+                &message_lamport_time,
+                site_id,
+                &message_vc_clock,
             )?;
-
-            if let Err(e) = crate::network::broadcast_message_to_all_peers(
-                Some(Command::Refund),
-                NetworkMessageCode::Transaction,
-                MessageInfo::Refund(Refund::new(
-                    refund.name.clone(),
-                    refund.transac_time,
-                    refund.transac_node.clone(),
-                )),
-                received_clock.clone(),
-                site.clone(),
-            )
-            .await
-            {
-                log::error!("Failed to broadcast message to all peers: {e}");
-            }
         }
         crate::message::MessageInfo::SnapshotResponse(_) => {
             // Handle snapshot response

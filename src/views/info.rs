@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 async fn get_local_addr() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_local_addr().to_string())
+    Ok(state.get_site_addr().to_string())
 }
 
 /// Server function to retrieve the current site ID
@@ -26,7 +26,7 @@ async fn get_site_id() -> Result<String, ServerFnError> {
 async fn get_peers() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_peers_string())
+    Ok(state.get_peers_addrs_string())
 }
 
 /// Server function to retrieve the current Lamport clock value
@@ -34,7 +34,7 @@ async fn get_peers() -> Result<Vec<String>, ServerFnError> {
 async fn get_lamport() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_clock().get_lamport())
+    Ok(*state.get_clock().get_lamport())
 }
 
 /// Server function to retrieve the current vector clock state
@@ -42,7 +42,7 @@ async fn get_lamport() -> Result<i64, ServerFnError> {
 async fn get_vector_clock() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    let vector_clock = state.get_clock().get_vector_clock();
+    let vector_clock = state.get_clock().get_vector_clock_values();
     let vector_clock_string = vector_clock
         .iter()
         .map(|x| x.to_string())
@@ -65,7 +65,23 @@ async fn get_db_path() -> Result<String, ServerFnError> {
 async fn get_nb_sites() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.nb_sites_on_network as i64)
+    Ok(state.nb_connected_neighbours as i64)
+}
+
+/// Server function to retrieve the list of connected neighbours
+#[server]
+async fn get_connected_neighbours() -> Result<Vec<String>, ServerFnError> {
+    use crate::state::LOCAL_APP_STATE;
+    let state = LOCAL_APP_STATE.lock().await;
+    Ok(state.get_connected_neighbours_addrs_string())
+}
+
+/// Server function to retrieve the list of peer addresses
+#[server]
+async fn get_peer_addrs() -> Result<Vec<String>, ServerFnError> {
+    use crate::state::LOCAL_APP_STATE;
+    let state = LOCAL_APP_STATE.lock().await;
+    Ok(state.get_peers_addrs_string())
 }
 
 /// Ask for a snapshot
@@ -90,10 +106,11 @@ async fn ask_for_snapshot() -> Result<(), ServerFnError> {
 pub fn Info() -> Element {
     let mut local_addr = use_signal(|| "".to_string());
     let mut site_id = use_signal(|| "".to_string());
-    let mut peers = use_signal(|| Vec::new());
+    let mut peers_addr = use_signal(|| Vec::new());
+    let mut connected_neighbours = use_signal(|| Vec::new());
     let mut lamport = use_signal(|| 0i64);
     let mut vector_clock = use_signal(|| "".to_string());
-    let mut nb_sites = use_signal(|| 0i64);
+    let mut nb_neighbours = use_signal(|| 0i64);
     let mut db_path = use_signal(|| "".to_string());
 
     use_future(move || async move {
@@ -114,8 +131,13 @@ pub fn Info() -> Element {
 
         // Fetch peers
         if let Ok(data) = get_peers().await {
-            peers.set(data);
+            peers_addr.set(data);
         } // else: peers remains empty or you could set an error state if needed
+
+        // Fetch connected neighbours
+        if let Ok(data) = get_connected_neighbours().await {
+            connected_neighbours.set(data);
+        } // else: connected_neighbours remains empty or you could set an error state if needed
 
         // Fetch Lamport clock
         if let Ok(data) = get_lamport().await {
@@ -129,7 +151,7 @@ pub fn Info() -> Element {
 
         // Fetch number of sites
         if let Ok(data) = get_nb_sites().await {
-            nb_sites.set(data);
+            nb_neighbours.set(data);
         } // else: nb_sites remains 0 or handle error
 
         // Fetch database path
@@ -148,7 +170,7 @@ pub fn Info() -> Element {
             }
 
             div { class: "info-item",
-                strong { "🌐 Local Address: " }
+                strong { "🌐 Site Address: " }
                 span { "{local_addr}" }
             }
             div { class: "info-item",
@@ -164,18 +186,31 @@ pub fn Info() -> Element {
                 span { "{vector_clock}" }
             }
             div { class: "info-item",
-                strong { "🌍 Number of Sites in Network: " }
-                span { "{nb_sites}" }
+                strong { "🌍 Number of connected neighbours: " }
+                span { "{nb_neighbours}" }
             }
 
             div { class: "info-item",
-                strong { "🤝 Connected Peers: " }
-                if peers.read().is_empty() {
+                strong { "🤝 Connected Neighbours: " }
+                if connected_neighbours.read().is_empty() {
                     span { "No peers currently connected." }
                 } else {
                     ul { class: "peer-list",
-                        for peer_address in peers.read().iter() {
-                            li { key: "{peer_address}", "{peer_address}" }
+                        for adr in connected_neighbours.read().iter() {
+                            li { key: "{adr}", "{adr}" }
+                        }
+                    }
+                }
+            }
+
+            div { class: "info-item",
+                strong { "🤝 Peers adresses: " }
+                if peers_addr.read().is_empty() {
+                    span { "No peers currently connected." }
+                } else {
+                    ul { class: "peer-list",
+                        for adr in peers_addr.read().iter() {
+                            li { key: "{adr}", "{adr}" }
                         }
                     }
                 }
