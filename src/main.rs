@@ -57,6 +57,8 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     if !db::is_database_initialized()? {
         let _ = db::init_db();
     }
+    
+    crate::control::start_command_worker().await;
 
     // Init the logger
     env_logger::init();

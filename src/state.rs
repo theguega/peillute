@@ -51,6 +51,7 @@ pub struct AppState {
     pub waiting_sc: bool,
     pub in_sc: bool,
     pub notify_sc: std::sync::Arc<tokio::sync::Notify>,
+    pub pending_commands: std::collections::VecDeque<crate::control::Command>,
 }
 
 #[cfg(feature = "server")]
@@ -83,6 +84,7 @@ impl AppState {
             waiting_sc,
             in_sc,
             notify_sc: std::sync::Arc::new(tokio::sync::Notify::new()),
+            pending_commands: std::collections::VecDeque::new(),
         }
     }
 
@@ -176,6 +178,14 @@ impl AppState {
     }
 
     pub fn try_enter_sc(&mut self) {
+        // MUST BE CALLED ONLY AFTER A SUCCESSFUL WAVE AFTER ACQUIRE MUTEX
+        // This function checks if the site can enter the critical section
+        // It checks if the site is waiting for the critical section and if it can enter
+        // based on the FIFO order of requests in the global mutex FIFO.
+
+        // Pour respecter l'algo du poly il faut que la vague soit complete 
+        // c'est à dire que tout le monde ait répondu ACK pour appeller cette fonction
+        // sinon on va entrer en section critique à un moment sans qu'un des peers ait noté notre demande 
         if !self.waiting_sc {
             return;
         }
@@ -185,6 +195,8 @@ impl AppState {
         };
         let me = (my_stamp.date, self.site_id.clone());
 
+        // ici on compara les stamps des autres demandes, est-ce qu'on est le suivant dans la FIFO ?
+        // si oui on peut entrer en section critique
         let ok = self.global_mutex_fifo.iter().all(|(id, stamp)| {
             if id == &self.site_id {
                 true
@@ -200,7 +212,7 @@ impl AppState {
             self.waiting_sc = false;
             self.in_sc = true;
             // All other sites are notified that we are in critical section
-            self.notify_sc.notify_waiters();
+            self.notify_sc.notify_waiters(); // notifies worker to execute pending commands
             // We remove obsolete Releases
             self.global_mutex_fifo
                 .retain(|_, s| s.tag != MutexTag::Release);

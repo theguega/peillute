@@ -3,6 +3,44 @@
 //! This module provides the command-line interface and command handling functionality
 //! for the Peillute application, including both local and network command processing.
 
+
+pub async fn start_command_worker() {
+    use crate::state::LOCAL_APP_STATE;
+    tokio::spawn(async move {
+        loop {
+            // attente passive de la section critique
+            {
+                let st = LOCAL_APP_STATE.lock().await;
+                if !st.in_sc {
+                    let notify = st.notify_sc.clone();
+                    drop(st);
+                    notify.notified().await;
+                    continue;
+                }
+            }
+            loop {
+                let cmd_opt = {
+                    let mut st = LOCAL_APP_STATE.lock().await;
+                    st.pending_commands.pop_front()
+                };
+                match cmd_opt {
+                    Some(c) => {
+                        if let Err(e) = crate::control::execute_command(c).await {
+                            log::error!("cmd error: {}", e);
+                        }
+                    }
+                    None => break,
+                }
+            }
+            let mut st = LOCAL_APP_STATE.lock().await;
+            if let Err(e) = st.release_mutex().await {
+                log::error!("release error: {}", e);
+            }
+        }
+    });
+}
+
+
 #[cfg(feature = "server")]
 /// Parse a line of input from the CLI and converts it to a Command
 pub fn parse_command(line: Result<Option<String>, std::io::Error>) -> Command {
@@ -71,6 +109,18 @@ pub enum Command {
     Snapshot,
 }
 
+fn is_critical(cmd: &Command) -> bool {
+    matches!(
+        cmd,
+        Command::CreateUser
+            | Command::Deposit
+            | Command::Withdraw
+            | Command::Transfer
+            | Command::Pay
+            | Command::Refund
+    )
+}
+
 #[cfg(feature = "server")]
 /// Process commands received from the CLI
 /// Update the clock of the site
@@ -78,41 +128,29 @@ pub enum Command {
 /// Implement our wave diffusion protocol
 pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
-    use tokio::time::{timeout, Duration};
-
-    {
-        // --- request mutex for critical section
-        {
-            let mut st = LOCAL_APP_STATE.lock().await;
-            st.acquire_mutex().await?;
-            drop(st); // explicitly drop the lock to allow other tasks to proceed
-        }
-        let timeout_duration = Duration::from_secs(2); // timeout duration for acquiring the critical section
-        let result = timeout(timeout_duration, async {
-            loop {
-                if LOCAL_APP_STATE.lock().await.in_sc {
-                    break;
-                }
-                // wait for the notification that the (critical section) is released
-                let notify = {
-                    let st = LOCAL_APP_STATE.lock().await;
-                    st.notify_sc.clone()
-                };
-                log::info!("Waiting for critical section to be released...");
-                notify.notified().await;
-            }
-        }).await;
-
-        match result {
-            Ok(_) => {
-                log::info!("Critical section acquired, processing command...");
-            }
-            Err(_) => {
-                log::error!("Timeout while waiting for critical section!");
-                return Err("Timeout while waiting for critical section".into());
-            }
-        }
+    if !is_critical(&cmd) {
+        return execute_command(cmd).await;
     }
+
+    let mut st = LOCAL_APP_STATE.lock().await;
+    st.pending_commands.push_back(cmd);
+
+    if !st.in_sc && !st.waiting_sc {
+        st.acquire_mutex().await?;
+    }
+    Ok(())
+}
+
+
+
+
+#[cfg(feature = "server")]
+/// Execute a command from the CLI
+/// Update the clock of the site
+/// Interact with the database
+/// Implement our wave diffusion protocol
+pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
@@ -488,12 +526,6 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
         }
     }
 
-    {
-        // on relache le mutex global de l'app
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.release_mutex().await?;
-    }
-
     Ok(())
 }
 
@@ -622,4 +654,113 @@ where
             Err(e) => println!("Invalid input: {:?}", e),
         }
     }
+}
+
+#[cfg(feature = "server")]
+#[tokio::test]
+async fn test_mutex_critical_section_high_load() {
+    use crate::state::{AppState, MutexStamp, MutexTag};
+    use std::net::SocketAddr;
+
+    let local_addr: SocketAddr = "127.0.0.1:9000".parse().unwrap();
+    let mut state = AppState::new(
+        "A".to_string(),
+        2,
+        vec!["127.0.0.1:9001".parse().unwrap(), "127.0.0.1:9002".parse().unwrap()],
+        local_addr,
+    );
+
+    // Simulate remote requests in FIFO before our own
+    state.global_mutex_fifo.insert(
+        "B".to_string(),
+        MutexStamp {
+            tag: MutexTag::Request,
+            date: 1,
+        },
+    );
+
+    state.global_mutex_fifo.insert(
+        "C".to_string(),
+        MutexStamp {
+            tag: MutexTag::Request,
+            date: 2,
+        },
+    );
+
+    // Now request our own access with a higher Lamport (should wait)
+    for _ in 0..3 {
+        state.update_clock(None).await;
+    }
+    let _ = state.acquire_mutex().await;
+
+    // Our site should not be in SC yet
+    assert_eq!(state.in_sc, false);
+
+    // Insert ACKs from all peers with lower Lamport (simulate reception)
+    state.global_mutex_fifo.insert(
+        "B".to_string(),
+        MutexStamp {
+            tag: MutexTag::Ack,
+            date: 1,
+        },
+    );
+    state.global_mutex_fifo.insert(
+        "C".to_string(),
+        MutexStamp {
+            tag: MutexTag::Ack,
+            date: 2,
+        },
+    );
+
+    // Manually call try_enter_sc() to simulate triggering by incoming ack
+    state.try_enter_sc();
+
+    // Now we should be in the section critique
+    assert_eq!(state.in_sc, true);
+
+    // Simulate some work and then release
+    let _ = state.release_mutex().await;
+
+    // After release, should no longer be in critical section
+    assert_eq!(state.in_sc, false);
+    assert_eq!(state.waiting_sc, false);
+
+    // All entries should be cleaned up
+    assert!(!state.global_mutex_fifo.contains_key("A"));
+
+    // Simulate again to check order with large number of requests
+    for i in 0..100 {
+        let site = format!("S{}", i);
+        state.global_mutex_fifo.insert(
+            site.clone(),
+            MutexStamp {
+                tag: MutexTag::Request,
+                date: i,
+            },
+        );
+    }
+
+    // Now site A requests with date = 50 (should wait since lower stamps exist)
+    for _ in 0..50 {
+        state.update_clock(None).await;
+    }
+    let _ = state.acquire_mutex().await;
+    state.try_enter_sc();
+    assert_eq!(state.in_sc, false); // can't enter yet
+
+    // Now convert all others to ACK
+    for i in 0..100 {
+        let site = format!("S{}", i);
+        state.global_mutex_fifo.insert(
+            site.clone(),
+            MutexStamp {
+                tag: MutexTag::Ack,
+                date: i,
+            },
+        );
+    }
+
+    // Try entering again
+    state.try_enter_sc();
+    assert_eq!(state.in_sc, true); // should succeed now
 }
