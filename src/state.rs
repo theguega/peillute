@@ -189,12 +189,12 @@ impl AppState {
     }
 
     /// Returns a list of conncted neibhours
-    pub fn get_connected_neighbours_addrs(&self) -> Vec<std::net::SocketAddr> {
+    pub fn get_connected_nei_addr(&self) -> Vec<std::net::SocketAddr> {
         self.connected_neighbours_addrs.clone()
     }
 
     /// Returns a list of conncted neibhours as strings
-    pub fn get_connected_neighbours_addrs_as_string(&self) -> Vec<String> {
+    pub fn get_connected_nei_addr_string(&self) -> Vec<String> {
         self.connected_neighbours_addrs
             .iter()
             .map(|x| x.to_string())
@@ -212,27 +212,25 @@ impl AppState {
     }
 
     /// Set the number of attended neighbors for the wave from initiator_id
-    pub fn set_number_of_attended_neighbors(&mut self, initiator_id: String, n: i64) {
+    pub fn set_nb_nei_for_wave(&mut self, initiator_id: String, n: i64) {
         self.attended_neighbours_nb_for_transaction_wave
             .insert(initiator_id, n);
     }
 
     /// Get the list of attended neighbors for the wave from initiator_id
-    pub fn get_parent_addr_for_transaction_wave(
+    pub fn get_parent_for_wave_map(
         &self,
     ) -> std::collections::HashMap<String, std::net::SocketAddr> {
         self.parent_addr_for_transaction_wave.clone()
     }
 
     /// Get the list of attended neighbors for the wave from initiator_id
-    pub fn get_attended_neighbours_nb_for_transaction_wave(
-        &self,
-    ) -> std::collections::HashMap<String, i64> {
+    pub fn get_nb_nei_for_wave(&self) -> std::collections::HashMap<String, i64> {
         self.attended_neighbours_nb_for_transaction_wave.clone()
     }
 
     /// Get the parent (neighbour deg(1)) address for the wave from initiator_id
-    pub fn get_the_parent_addr_for_wave(&self, initiator_id: String) -> std::net::SocketAddr {
+    pub fn get_parent_addr_for_wave(&self, initiator_id: String) -> std::net::SocketAddr {
         self.parent_addr_for_transaction_wave
             .get(&initiator_id)
             .copied()

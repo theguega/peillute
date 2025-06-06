@@ -679,7 +679,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -738,7 +738,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -799,7 +799,7 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -865,7 +865,7 @@ async fn transfer_from_user_to_user_server(
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {
@@ -935,7 +935,7 @@ async fn refund_transaction_server(
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {

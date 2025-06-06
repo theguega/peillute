@@ -238,13 +238,13 @@ pub async fn handle_network_message(
 
                 // Return ack message if this we are connected to the site
                 if state
-                    .get_connected_neighbours_addrs()
+                    .get_connected_nei_addr()
                     .iter()
                     .find(|addr| addr == &&message.sender_addr)
                     .is_some()
                 {
                     if state
-                        .get_connected_neighbours_addrs()
+                        .get_connected_nei_addr()
                         .iter()
                         .find(|addr| addr == &&message.sender_addr)
                         .is_none()
@@ -268,16 +268,15 @@ pub async fn handle_network_message(
 
             NetworkMessageCode::Acknowledgment => {
                 let mut state = LOCAL_APP_STATE.lock().await;
+                // If the site received an acknoledgement from a site,
+                // It can be a site that is not in the network anymore
                 state.add_incomming_peer(
                     message.sender_addr,
                     socket_of_the_sender,
                     message.clock.clone(),
                 );
                 if message.message_initiator_addr == state.get_site_addr() {
-                    for (site_id, nb_a_i) in state
-                        .get_attended_neighbours_nb_for_transaction_wave()
-                        .iter()
-                    {
+                    for (site_id, nb_a_i) in state.get_nb_nei_for_wave().iter() {
                         state
                             .attended_neighbours_nb_for_transaction_wave
                             .insert(site_id.clone(), *nb_a_i + 1);
@@ -287,11 +286,10 @@ pub async fn handle_network_message(
 
             NetworkMessageCode::Transaction => {
                 // messages bleus
-                #[allow(unused)]
                 if message.command.is_some() {
                     let site_id = {
-                        let mut state = LOCAL_APP_STATE.lock().await;
-                        (state.get_site_id().to_string())
+                        let state = LOCAL_APP_STATE.lock().await;
+                        state.get_site_id()
                     };
 
                     use crate::control::process_network_command;
@@ -348,15 +346,13 @@ pub async fn handle_network_message(
                         snd_msg.sender_addr = local_site_addr;
                         diffuse_message(&snd_msg).await?;
                     } else {
-                        let (parent_addr, local_addr, site_id, clock) = {
+                        let (parent_addr, local_addr, site_id) = {
                             let state = LOCAL_APP_STATE.lock().await;
                             (
-                                state.get_the_parent_addr_for_wave(
-                                    message.message_initiator_id.clone(),
-                                ),
+                                state
+                                    .get_parent_addr_for_wave(message.message_initiator_id.clone()),
                                 state.get_site_addr(),
                                 state.get_site_id().to_string(),
-                                state.get_clock(),
                             )
                         };
                         // Acquit message to parent
@@ -431,13 +427,12 @@ pub async fn handle_network_message(
                             "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr().to_string().as_str(),
                             state
-                                .get_the_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
                                 .to_string()
                                 .as_str()
                         );
                         send_message(
-                            state
-                                .get_the_parent_addr_for_wave(message.message_initiator_id.clone()),
+                            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
                             MessageInfo::None,
                             None,
                             NetworkMessageCode::TransactionAcknowledgement,
@@ -500,7 +495,8 @@ pub async fn handle_network_message(
             NetworkMessageCode::SnapshotResponse => {
                 if let MessageInfo::SnapshotResponse(resp) = message.info {
                     let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
-                    if let Some(gs) = mgr.push(resp) {
+                    // False for now without wave it can never end
+                    if let Some(gs) = mgr.push(resp, false) {
                         log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
                         crate::snapshot::persist(&gs).await.unwrap();
                     }
@@ -610,8 +606,8 @@ pub async fn diffuse_message(
         (
             state.get_site_addr(),
             state.get_site_id(),
-            state.get_connected_neighbours_addrs(),
-            state.get_the_parent_addr_for_wave(message.message_initiator_id.clone()),
+            state.get_connected_nei_addr(),
+            state.get_parent_addr_for_wave(message.message_initiator_id.clone()),
         )
     };
 
@@ -641,9 +637,9 @@ pub async fn diffuse_message(
 }
 
 #[cfg(feature = "server")]
-#[allow(unused)]
 pub async fn on_sync() {
     // TODO: implement sync
+    return;
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ pub struct Transaction {
     pub vector_clock: std::collections::HashMap<String, i64>,
 }
 
-#[allow(unused)]
+#[allow(unused_imports)]
 use clap::Parser;
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {
@@ -453,27 +453,6 @@ pub fn withdraw(
         lamport_time,
         source_node,
         "Withdraw",
-        vector_clock,
-    )
-}
-
-#[cfg(feature = "server")]
-#[allow(unused)]
-pub fn create_user_with_solde(
-    unique_name: &str,
-    solde: f64,
-    lamport_time: &i64,
-    source_node: &str,
-    vector_clock: &std::collections::HashMap<String, i64>,
-) -> rusqlite::Result<()> {
-    create_user(unique_name)?;
-    create_transaction(
-        NULL,
-        unique_name,
-        solde,
-        lamport_time,
-        source_node,
-        "Initial deposit",
         vector_clock,
     )
 }

@@ -82,19 +82,19 @@ impl GlobalSnapshot {
 #[cfg(feature = "server")]
 /// Manages the snapshot collection process
 pub struct SnapshotManager {
-    /// Number of snapshots expected to be collected
-    pub expected: i64,
     /// Vector of received local snapshots
     pub received: Vec<LocalSnapshot>,
+    /// Path to the last snapshot saved
+    pub path: Option<std::path::PathBuf>,
 }
 
 #[cfg(feature = "server")]
 impl SnapshotManager {
     /// Creates a new snapshot manager expecting the given number of snapshots
-    pub fn new(expected: i64) -> Self {
+    pub fn new() -> Self {
         Self {
-            expected,
             received: Vec::new(),
+            path: None,
         }
     }
 
@@ -104,7 +104,12 @@ impl SnapshotManager {
     /// and they are consistent. If the snapshots are inconsistent, it will
     /// attempt to find a consistent subset by backtracking to the minimum
     /// vector clock values.
-    pub fn push(&mut self, resp: crate::message::SnapshotResponse) -> Option<GlobalSnapshot> {
+    /// all_received is defined by the state of our wave diffusion protocol
+    pub fn push(
+        &mut self,
+        resp: crate::message::SnapshotResponse,
+        all_received: bool,
+    ) -> Option<GlobalSnapshot> {
         log::debug!("Received snapshot from site {}.", resp.site_id);
         self.received.push(LocalSnapshot {
             site_id: resp.site_id.clone(),
@@ -112,8 +117,11 @@ impl SnapshotManager {
             tx_log: resp.tx_log.into_iter().collect(),
         });
 
-        if (self.received.len() as i64) < self.expected {
-            log::debug!("{}/{} sites received.", self.received.len(), self.expected);
+        if !all_received {
+            log::debug!(
+                "New snapshot received, collected {} sites.",
+                self.received.len()
+            );
             return None;
         }
 
@@ -194,41 +202,54 @@ impl SnapshotManager {
 /// Initiates a new snapshot process
 ///
 /// Collects the local transaction log and sends snapshot requests to all peers.
-pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_snapshot(alone_on_network: bool) -> Result<(), Box<dyn std::error::Error>> {
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
 
-    let (site_id, clock, expected) = {
+    let (site_id, clock, site_addr) = {
         let st = crate::state::LOCAL_APP_STATE.lock().await;
-        (
-            st.get_site_id().to_string(),
-            st.get_clock(),
-            (st.get_connected_neighbours_addrs().len()) as i64,
-        )
+        (st.get_site_id(), st.get_clock(), st.get_site_addr())
     };
-
-    log::debug!("Expected {} sites for snapshot.", expected);
 
     {
         let mut mgr = LOCAL_SNAPSHOT_MANAGER.lock().await;
-        mgr.expected = expected;
         mgr.received.clear();
-        if let Some(gs) = mgr.push(crate::message::SnapshotResponse {
-            site_id: site_id.clone(),
-            clock: clock.clone(),
-            tx_log: summaries.clone(),
-        }) {
+        if let Some(gs) = mgr.push(
+            crate::message::SnapshotResponse {
+                site_id: site_id.clone(),
+                clock: clock.clone(),
+                tx_log: summaries.clone(),
+            },
+            alone_on_network,
+        ) {
             log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
-            crate::snapshot::persist(&gs).await.unwrap();
+            mgr.path = crate::snapshot::persist(&gs).await.unwrap().parse().ok();
         }
     }
 
-    // crate::network::send_message_to_all_peers(
-    //     None,
-    //     crate::message::NetworkMessageCode::SnapshotRequest,
-    //     crate::message::MessageInfo::None,
-    // )
-    // .await?;
+    use crate::message::{Message, MessageInfo, NetworkMessageCode};
+    use crate::network::diffuse_message;
+
+    let msg = Message {
+        command: None,
+        code: NetworkMessageCode::SnapshotRequest,
+        info: MessageInfo::None,
+        sender_addr: site_addr,
+        sender_id: site_id.to_string(),
+        message_initiator_id: site_id.to_string(),
+        message_initiator_addr: site_addr,
+        clock: clock.clone(),
+    };
+
+    {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = crate::state::LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
+        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
+    }
+
+    diffuse_message(&msg).await?;
 
     Ok(())
 }
@@ -237,7 +258,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
 /// Persists a global snapshot to disk
 ///
 /// Saves the snapshot as a JSON file with a timestamp in the filename.
-pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
+pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<String> {
     use std::io::Write;
 
     let site_id = {
@@ -252,13 +273,14 @@ pub async fn persist(snapshot: &GlobalSnapshot) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(snapshot).unwrap();
     file.write_all(json.as_bytes())?;
     println!("📸 Snapshot completed successfully at {}", filename);
-    Ok(())
+
+    Ok(filename)
 }
 
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref LOCAL_SNAPSHOT_MANAGER: tokio::sync::Mutex<SnapshotManager> =
-        tokio::sync::Mutex::new(SnapshotManager::new(0));
+        tokio::sync::Mutex::new(SnapshotManager::new());
 }
 
 #[cfg(test)]
@@ -315,7 +337,7 @@ mod tests {
 
     #[test]
     fn push_waits_for_expected() {
-        let mut mgr = SnapshotManager::new(2);
+        let mut mgr = SnapshotManager::new();
         let tx = TxSummary {
             lamport_time: 1,
             source_node: "A".into(),
@@ -324,17 +346,17 @@ mod tests {
             amount_in_cent: 100,
         };
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
-        assert!(mgr.push(r1).is_none());
+        assert!(mgr.push(r1, false).is_none());
         assert_eq!(mgr.received.len(), 1);
     }
 
     #[test]
     fn push_detects_incoherence() {
-        let mut mgr = SnapshotManager::new(2);
+        let mut mgr = SnapshotManager::new();
         let bad_r1 = resp("A", &[("A", 2), ("B", 2)], &[]);
         let bad_r2 = resp("B", &[("A", 1), ("B", 1)], &[]);
-        assert!(mgr.push(bad_r1).is_none());
-        let snap = mgr.push(bad_r2).expect("back-tracked snapshot");
+        assert!(mgr.push(bad_r1, false).is_none());
+        let snap = mgr.push(bad_r2, true).expect("back-tracked snapshot");
         assert!(GlobalSnapshot::is_consistent(&[LocalSnapshot {
             site_id: "dummy".into(),
             vector_clock: std::collections::HashMap::new(),
@@ -345,7 +367,7 @@ mod tests {
 
     #[test]
     fn push_computes_missing_and_dedup() {
-        let mut mgr = SnapshotManager::new(2);
+        let mut mgr = SnapshotManager::new();
         let t1 = TxSummary {
             lamport_time: 10,
             source_node: "A".into(),
@@ -364,8 +386,8 @@ mod tests {
         let r1 = resp("A", &[("A", 1)], &[t1.clone()]);
         let r2 = resp("B", &[("B", 1)], &[t1.clone(), t2.clone()]);
 
-        let _ = mgr.push(r1);
-        let gs = mgr.push(r2).expect("snapshot ready");
+        let _ = mgr.push(r1, false);
+        let gs = mgr.push(r2, true).expect("snapshot ready");
 
         assert_eq!(gs.all_transactions.len(), 2);
         assert_eq!(
@@ -392,7 +414,7 @@ mod tests {
 
     #[test]
     fn backtrack_trims_future_transactions() {
-        let mut mgr = SnapshotManager::new(2);
+        let mut mgr = SnapshotManager::new();
 
         let t1 = TxSummary {
             lamport_time: 1,
@@ -424,8 +446,8 @@ mod tests {
 
         let r_b = resp("B", &[("A", 2), ("B", 1)], &[]);
 
-        let _ = mgr.push(r_a);
-        let snap = mgr.push(r_b).expect("snapshot after back-track");
+        let _ = mgr.push(r_a, false);
+        let snap = mgr.push(r_b, true).expect("snapshot after back-track");
 
         assert!(snap.all_transactions.contains(&t1.clone()));
         assert!(!snap.all_transactions.contains(&t5.clone()));
@@ -433,7 +455,7 @@ mod tests {
 
     #[test]
     fn union_is_deduplicated() {
-        let mut mgr = SnapshotManager::new(2);
+        let mut mgr = SnapshotManager::new();
         let tx = TxSummary {
             lamport_time: 7,
             source_node: "A".into(),
@@ -445,8 +467,8 @@ mod tests {
         let r1 = resp("A", &[("A", 1)], &[tx.clone()]);
         let r2 = resp("B", &[("B", 1)], &[tx.clone()]);
 
-        let _ = mgr.push(r1);
-        let gs = mgr.push(r2).expect("snapshot ready");
+        let _ = mgr.push(r1, false);
+        let gs = mgr.push(r2, true).expect("snapshot ready");
         assert_eq!(gs.all_transactions.len(), 1);
     }
 }

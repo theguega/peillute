@@ -152,7 +152,7 @@ async fn add_user(name: String) -> Result<(), ServerFnError> {
         let mut state = LOCAL_APP_STATE.lock().await;
         let nb_neigh = state.get_nb_connected_neighbours();
         state.set_parent_addr(node.to_string(), local_addr);
-        state.set_number_of_attended_neighbors(node.to_string(), nb_neigh);
+        state.set_nb_nei_for_wave(node.to_string(), nb_neigh);
     }
 
     if let Err(e) = diffuse_message(&msg).await {

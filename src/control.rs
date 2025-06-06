@@ -79,13 +79,14 @@ pub enum Command {
 pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    let (clock, site_addr, site_id) = {
+    let (clock, site_addr, site_id, alone_on_net) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr();
         let node = state.get_site_id();
         let _ = state.update_clock(None);
         let clock = state.get_clock();
-        (clock, local_addr, node)
+        let alone_on_network = state.get_connected_nei_addr().len() == 0;
+        (clock, local_addr, node, alone_on_network)
     };
 
     match cmd {
@@ -112,7 +113,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -163,7 +164,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -202,7 +203,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -245,7 +246,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -284,7 +285,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -324,7 +325,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_number_of_attended_neighbors(site_addr.to_string(), nb_neigh);
+                state.set_nb_nei_for_wave(site_addr.to_string(), nb_neigh);
             }
 
             diffuse_message(&msg).await?;
@@ -350,7 +351,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
         Command::Snapshot => {
             println!("📸 Starting snapshot...");
-            super::snapshot::start_snapshot().await?;
+            super::snapshot::start_snapshot(alone_on_net).await?;
         }
 
         Command::Info => {
@@ -371,9 +372,9 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                     state.get_cli_peers_addrs(),
                     state.get_clock(),
                     state.get_nb_connected_neighbours(),
-                    state.get_connected_neighbours_addrs(),
-                    state.get_parent_addr_for_transaction_wave(),
-                    state.get_attended_neighbours_nb_for_transaction_wave(),
+                    state.get_connected_nei_addr(),
+                    state.get_parent_for_wave_map(),
+                    state.get_nb_nei_for_wave(),
                 )
             };
 
