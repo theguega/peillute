@@ -203,7 +203,7 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         (
             st.get_site_id().to_string(),
             st.get_clock(),
-            (st.get_peers_addrs().len() + 1) as i64,
+            (st.get_connected_neighbours_addrs().len()) as i64,
         )
     };
 

@@ -32,26 +32,32 @@ impl NetworkManager {
     /// Adds a new peer connection to the connection pool
     fn add_connection(
         &mut self,
-        addr: std::net::SocketAddr,
+        site_addr: std::net::SocketAddr,
         sender: tokio::sync::mpsc::Sender<Vec<u8>>,
     ) {
-        self.connection_pool.insert(addr, PeerConnection { sender });
+        self.connection_pool
+            .insert(site_addr, PeerConnection { sender });
         self.nb_active_connections += 1;
     }
 
     /// Establishes a new connection to a peer
     pub async fn create_connection(
         &mut self,
-        addr: std::net::SocketAddr,
+        site_addr: std::net::SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use tokio::net::TcpStream;
         use tokio::sync::mpsc;
 
-        let stream = TcpStream::connect(addr).await?;
+        let stream = TcpStream::connect(site_addr).await?;
         let (tx, rx) = mpsc::channel(256);
         spawn_writer_task(stream, rx).await;
-        self.add_connection(addr, tx);
+        self.add_connection(site_addr, tx);
         Ok(())
+    }
+
+    /// Remove and destroy a connection
+    pub fn remove_connection(&mut self, site_addr: &std::net::SocketAddr) {
+        self.connection_pool.remove(site_addr);
     }
 
     /// Returns the message sender for a specific peer address
@@ -103,7 +109,7 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
             state.get_site_addr(),
             state.get_site_id(),
             state.get_clock(),
-            state.get_peers_addrs(),
+            state.get_cli_peers_addrs(),
         )
     };
 
@@ -198,12 +204,11 @@ pub async fn handle_network_message(
             log::warn!("Connection closed by: {}", socket_of_the_sender);
             // Here we should remove the site from the network in the app state
             {
-                log::debug!(
-                    "Trying to remove site {} from the network",
-                    socket_of_the_sender
-                );
+                log::debug!("Removing {} from the peers", socket_of_the_sender);
                 let mut state = LOCAL_APP_STATE.lock().await;
-                state.remove_peer_from_socket_closed(socket_of_the_sender);
+                state
+                    .remove_peer_from_socket_closed(socket_of_the_sender)
+                    .await;
             }
             return Ok(());
         }
@@ -225,16 +230,16 @@ pub async fn handle_network_message(
                 let mut state = LOCAL_APP_STATE.lock().await;
 
                 // Try to add this new site as a new peer
-                state.add_connected_peer(
+                state.add_incomming_peer(
                     &message.message_initiator_id,
                     message.message_initiator_addr,
                     socket_of_the_sender,
                     message.clock.clone(),
                 );
 
-                // Return ack message if this is peer
+                // Return ack message if this we are connected to the site
                 if state
-                    .get_peers_addrs()
+                    .get_connected_neighbours_addrs()
                     .iter()
                     .find(|addr| addr == &&message.sender_addr)
                     .is_some()
@@ -264,8 +269,15 @@ pub async fn handle_network_message(
 
             NetworkMessageCode::Acknowledgment => {
                 let mut state = LOCAL_APP_STATE.lock().await;
+                // If we are a new site that is sending a discovery to new sites
+                // we will get acknoledgement from them and we need to update the state
+                state.add_incomming_peer(
+                    &message.message_initiator_id,
+                    message.sender_addr,
+                    socket_of_the_sender,
+                    message.clock.clone(),
+                );
                 if message.message_initiator_addr == state.get_site_addr() {
-                    state.add_connected_neighbour(message.sender_addr);
                     for (site_id, nb_a_i) in state
                         .get_attended_neighbours_nb_for_transaction_wave()
                         .iter()
@@ -417,7 +429,7 @@ pub async fn handle_network_message(
                         // diffusion terminée
                         // Réinitialisation
 
-                        log::error!("Diffusion terminée et réussie !");
+                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
                     } else {
                         log::debug!(
                             "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
@@ -458,7 +470,7 @@ pub async fn handle_network_message(
             NetworkMessageCode::Disconnect => {
                 {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.remove_peer(message.message_initiator_addr);
+                    state.remove_peer(message.message_initiator_addr).await;
                 }
 
                 log::debug!("Site {} disconnected", message.message_initiator_id);
@@ -602,7 +614,7 @@ pub async fn diffuse_message(
         (
             state.get_site_addr(),
             state.get_site_id(),
-            state.get_peers_addrs(),
+            state.get_connected_neighbours_addrs(),
             state.get_the_parent_addr_for_wave(message.message_initiator_id.clone()),
         )
     };

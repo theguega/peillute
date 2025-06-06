@@ -368,7 +368,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 (
                     state.get_site_addr(),
                     state.get_site_id().to_string(),
-                    state.get_peers_addrs(),
+                    state.get_cli_peers_addrs(),
                     state.get_clock(),
                     state.get_nb_connected_neighbours(),
                     state.get_connected_neighbours_addrs(),
@@ -389,8 +389,8 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
             println!("Database : {}", db_path);
             println!("Local Address: {}", site_addr);
             println!("Site ID: {}", site_id);
-            println!("Number of peers: {}", peer_addrs.len());
-            println!("Peers: {:?}", peer_addrs);
+            println!("Number of CLI peers: {}", peer_addrs.len());
+            println!("CLI peers: {:?}", peer_addrs);
             println!("Number of connected neighbors: {}", nb_connected_neighbours);
             println!(
                 "Number of connected neighbors: {:?}",

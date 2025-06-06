@@ -86,7 +86,7 @@ impl AppState {
     /// This function should be safe to call multiple times
     ///
     /// If a new site appear on the netword, every peers will launch a wave diffusion to announce the presence of this new site
-    pub fn add_connected_peer(
+    pub fn add_incomming_peer(
         &mut self,
         new_site_id: &str,
         new_addr: std::net::SocketAddr,
@@ -97,10 +97,13 @@ impl AppState {
             self.connected_neighbours_addrs.push(new_addr);
             self.clocks
                 .update_clock(self.site_id.clone().as_str(), Some(&received_clock));
-            self.attended_neighbours_nb_for_transaction_wave
-                .insert(new_site_id.to_string(), self.cli_peer_addrs.len() as i64);
+            self.attended_neighbours_nb_for_transaction_wave.insert(
+                new_site_id.to_string(),
+                self.get_nb_connected_neighbours() - 1,
+            );
             self.parent_addr_for_transaction_wave
-                .insert(new_site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+                .insert(new_site_id.to_string(), new_addr);
+            log::debug!("Inserting {} with value {}", new_socket, new_addr);
             self.neighbours_socket.insert(new_socket, new_addr);
         }
     }
@@ -112,7 +115,12 @@ impl AppState {
     /// If a site disappear from the network, every neighbours will detected the closing of the tcp connection and will launch a wave diffusion to announce the disappearance of this site
     ///
     /// If a site is closed properly, it will send a disconnect message to all its neighbours
-    pub fn remove_peer(&mut self, addr_to_remove: std::net::SocketAddr) {
+    pub async fn remove_peer(&mut self, addr_to_remove: std::net::SocketAddr) {
+        {
+            let mut net_manager = crate::network::NETWORK_MANAGER.lock().await;
+            net_manager.remove_connection(&addr_to_remove);
+        }
+
         if let Some(pos) = self
             .connected_neighbours_addrs
             .iter()
@@ -138,20 +146,29 @@ impl AppState {
     /// If a site disappear from the network, every neighbours will detected the closing of the tcp connection and will launch a wave diffusion to announce the disappearance of this site
     ///
     /// If a site is closed properly, it will send a disconnect message to all its neighbours
-    pub fn remove_peer_from_socket_closed(&mut self, socket_to_remove: std::net::SocketAddr) {
+    pub async fn remove_peer_from_socket_closed(&mut self, socket_to_remove: std::net::SocketAddr) {
         // Find the site adress based on the socket
         let Some(addr_to_remove) = self.neighbours_socket.get(&socket_to_remove) else {
+            log::debug!("Site not found in the neighbours socket");
             return;
         };
 
-        // Remove the site from the list of connected neighbours
-        self.connected_neighbours_addrs
-            .retain(|x| x != addr_to_remove);
+        if let Some(pos) = self
+            .connected_neighbours_addrs
+            .iter()
+            .position(|x| *x == *addr_to_remove)
+        {
+            self.connected_neighbours_addrs.remove(pos);
 
-        // TODO: what happend if it occur during a wave diffusion ?
+            // TODO: what happend if it occur during a wave diffusion ?
+            // self.attended_neighbours_nb_for_transaction_wave
+            //     .remove(&site_id_to_remove);
+            // self.parent_addr_for_transaction_wave
+            //     .remove(&site_id_to_remove);
 
-        // We can keep the clock value for the site we want to remove
-        // if the site re-appears, it will be updated with the new clock value
+            // We can keep the clock value for the site we want to remove
+            // if the site re-appears, it will be updated with the new clock value
+        }
     }
 
     /// Returns the local address as a string
@@ -165,7 +182,7 @@ impl AppState {
     }
 
     /// Returns a list of all peer addresses
-    pub fn get_peers_addrs(&self) -> Vec<std::net::SocketAddr> {
+    pub fn get_cli_peers_addrs(&self) -> Vec<std::net::SocketAddr> {
         self.cli_peer_addrs.clone()
     }
 

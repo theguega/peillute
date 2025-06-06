@@ -201,7 +201,7 @@ async fn disconnect() {
         (
             state.get_site_addr(),
             state.get_site_id().to_string(),
-            state.get_peers_addrs(),
+            state.get_connected_neighbours_addrs(),
         )
     };
 

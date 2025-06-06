@@ -26,7 +26,7 @@ async fn get_site_id() -> Result<String, ServerFnError> {
 async fn get_peers() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_peers_addrs())
+    Ok(state.get_cli_peers_addrs())
 }
 
 /// Server function to retrieve the current Lamport clock value
@@ -60,12 +60,20 @@ async fn get_db_path() -> Result<String, ServerFnError> {
     Ok(path.to_string().split("/").last().unwrap().to_string())
 }
 
-/// Server function to retrieve the number of sites in the network
+/// Server function to retrieve the number of neighbours in the network
 #[server]
 async fn get_nb_connected_neighbours() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
     Ok(state.get_nb_connected_neighbours())
+}
+
+/// Server function to retrieve the number of cli peers
+#[server]
+async fn get_nb_cli_peers() -> Result<i64, ServerFnError> {
+    use crate::state::LOCAL_APP_STATE;
+    let state = LOCAL_APP_STATE.lock().await;
+    Ok(state.get_cli_peers_addrs().len() as i64)
 }
 
 /// Server function to retrieve the list of connected neighbours
@@ -81,7 +89,7 @@ async fn get_connected_neighbours() -> Result<Vec<std::net::SocketAddr>, ServerF
 async fn get_peer_addrs() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_peers_addrs())
+    Ok(state.get_cli_peers_addrs())
 }
 
 /// Ask for a snapshot
@@ -111,6 +119,7 @@ pub fn Info() -> Element {
     let mut lamport = use_signal(|| 0i64);
     let mut vector_clock = use_signal(|| "".to_string());
     let mut nb_neighbours = use_signal(|| 0i64);
+    let mut nb_peers = use_signal(|| 0i64);
     let mut db_path = use_signal(|| "".to_string());
 
     use_future(move || async move {
@@ -153,6 +162,11 @@ pub fn Info() -> Element {
         if let Ok(data) = get_nb_connected_neighbours().await {
             nb_neighbours.set(data);
         } // else: nb_sites remains 0 or handle error
+
+        // Fetch number of CLI peers
+        if let Ok(data) = get_nb_cli_peers().await {
+            nb_peers.set(data);
+        } // else : nb_peers remains 0 or handle error
 
         // Fetch database path
         if let Ok(data) = get_db_path().await {
@@ -204,7 +218,12 @@ pub fn Info() -> Element {
             }
 
             div { class: "info-item",
-                strong { "🤝 Peers adresses: " }
+                strong { "🌍 Number of CLI peers: " }
+                span { "{nb_peers}" }
+            }
+
+            div { class: "info-item",
+                strong { "🤝 CLI peers adresses: " }
                 if peers_addr.read().is_empty() {
                     span { "No peers currently connected." }
                 } else {
