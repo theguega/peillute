@@ -79,11 +79,25 @@ pub enum Command {
 pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-
     {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.acquire_mutex().await?;
-        // on attend d'avoir le mutex global de l'app
+        // --- request mutex for critical section
+        {
+            let mut st = LOCAL_APP_STATE.lock().await;
+            st.acquire_mutex().await?;
+            drop(st); // explicitly drop the lock to allow other tasks to proceed
+        }
+        loop {
+            if LOCAL_APP_STATE.lock().await.in_sc {
+                break;
+            }
+            // wait for the notification that the  (critical section) is released
+            let notify = {
+                let st = LOCAL_APP_STATE.lock().await;
+                st.notify_sc.clone()
+            };
+            log::info!("Waiting for critical section to be released...");
+            notify.notified().await;
+        }
     }
 
     let (clock, site_addr, site_id) = {

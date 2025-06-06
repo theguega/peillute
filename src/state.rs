@@ -3,7 +3,6 @@
 //! This module handles the global application state, including site information,
 //! peer management, and logical clock synchronization.
 
-
 #[cfg(feature = "server")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutexTag {
@@ -15,7 +14,7 @@ pub enum MutexTag {
 #[cfg(feature = "server")]
 #[derive(Clone, Copy, Debug)]
 pub struct MutexStamp {
-    pub tag:  MutexTag,
+    pub tag: MutexTag,
     pub date: i64,
 }
 
@@ -47,18 +46,12 @@ pub struct AppState {
     /// Logical clock implementation for distributed synchronization
     pub clocks: crate::clock::Clock,
 
-
-    // GLobal mutex 
-    pub pending_requests: Vec<crate::message::MessageInfo>, // local FIFO
+    // GLobal mutex
     pub global_mutex_fifo: std::collections::HashMap<String, MutexStamp>,
     pub waiting_sc: bool,
     pub in_sc: bool,
     pub notify_sc: std::sync::Arc<tokio::sync::Notify>,
-
 }
-
-
-
 
 #[cfg(feature = "server")]
 impl AppState {
@@ -74,7 +67,6 @@ impl AppState {
         let nb_of_attended_neighbors = std::collections::HashMap::new();
         let in_use_neighbors = Vec::new();
         let gm = std::collections::HashMap::new();
-        let pending_requests = Vec::new();
         let waiting_sc = false;
         let in_sc = false;
 
@@ -88,7 +80,6 @@ impl AppState {
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
             global_mutex_fifo: gm,
-            pending_requests,
             waiting_sc,
             in_sc,
             notify_sc: std::sync::Arc::new(tokio::sync::Notify::new()),
@@ -121,28 +112,34 @@ impl AppState {
     //     }
     // }
 
-
     pub async fn acquire_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
         use crate::network::diffuse_message;
 
+        self.update_clock(None).await;
+
+        // On déclare notre requête locale
+        self.global_mutex_fifo.insert(
+            self.site_id.clone(),
+            MutexStamp {
+                tag: MutexTag::Request,
+                date: self.clocks.get_lamport().clone(),
+            },
+        );
         self.waiting_sc = true;
-        self.global_mutex_fifo.insert(self.site_id.clone(),
-                        MutexStamp { tag: MutexTag::Request, date: self.clocks.get_lamport().clone() });
 
         let msg = Message {
-            sender_id:           self.site_id.clone(),
-            sender_addr:         self.site_addr,
-            message_initiator_id:self.site_id.clone(),
-            message_initiator_addr:self.site_addr,
-            clock:               self.clocks.clone(), // <- on passe quand même l’horloge complète
-            command:             None,
+            sender_id: self.site_id.clone(),
+            sender_addr: self.site_addr,
+            message_initiator_id: self.site_id.clone(),
+            message_initiator_addr: self.site_addr,
+            clock: self.clocks.clone(),
+            command: None,
             info: MessageInfo::AcquireMutex(crate::message::AcquireMutexPayload),
             code: NetworkMessageCode::AcquireMutex,
         };
-        diffuse_message(&msg).await?;
 
-        // Attente passive : on reviendra via handle_network_message
+        diffuse_message(&msg).await?;
         Ok(())
     }
 
@@ -150,42 +147,56 @@ impl AppState {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
         use crate::network::diffuse_message;
 
-        self.global_mutex_fifo.insert(self.site_id.clone(),
-                        MutexStamp { tag: MutexTag::Release, date: self.clocks.get_lamport().clone() });
+        self.update_clock(None).await;
 
         let msg = Message {
-            sender_id:           self.site_id.clone(),
-            sender_addr:         self.site_addr,
-            message_initiator_id:self.site_id.clone(),
-            message_initiator_addr:self.site_addr,
-            clock:               self.clocks.clone(),
-            command:             None,
+            sender_id: self.site_id.clone(),
+            sender_addr: self.site_addr,
+            message_initiator_id: self.site_id.clone(),
+            message_initiator_addr: self.site_addr,
+            clock: self.clocks.clone(),
+            command: None,
             info: MessageInfo::ReleaseMutex(crate::message::ReleaseMutexPayload),
             code: NetworkMessageCode::ReleaseGlobalMutex,
         };
+
         diffuse_message(&msg).await?;
-        self.in_sc    = false;
+
+        self.global_mutex_fifo.remove(&self.site_id);
+        self.in_sc = false;
         self.waiting_sc = false;
         Ok(())
     }
 
-
     pub fn try_enter_sc(&mut self) {
-        if !self.waiting_sc { return; }
+        if !self.waiting_sc {
+            return;
+        }
+        let my_stamp = match self.global_mutex_fifo.get(&self.site_id) {
+            Some(s) => *s,
+            None => return, // No local request found
+        };
+        let me = (my_stamp.date, self.site_id.clone());
 
-        let my = self.global_mutex_fifo.get(&self.site_id).unwrap();
-        let me  = (my.date, self.site_id.clone());
+        let ok = self.global_mutex_fifo.iter().all(|(id, stamp)| {
+            if id == &self.site_id {
+                true
+            } else {
+                match stamp.tag {
+                    MutexTag::Request => me <= (stamp.date, id.clone()),
+                    _ => true,
+                }
+            }
+        });
 
-        if self.global_mutex_fifo.iter()
-           .all(|(k, stamp)| {
-               if k == &self.site_id { true }
-               else { (me <= (stamp.date, k.clone())) }
-           })
-        {
-            // On a le tour !
+        if ok {
             self.waiting_sc = false;
-            self.in_sc      = true;
-            self.notify_sc.notify_waiters();   // Notify tokio::sync::Notify
+            self.in_sc = true;
+            // All other sites are notified that we are in critical section
+            self.notify_sc.notify_waiters();
+            // We remove obsolete Releases
+            self.global_mutex_fifo
+                .retain(|_, s| s.tag != MutexTag::Release);
         }
     }
 

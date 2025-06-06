@@ -190,6 +190,7 @@ pub async fn handle_network_message(
     use crate::state::LOCAL_APP_STATE;
     use rmp_serde::decode;
     use tokio::io::AsyncReadExt;
+    use crate::state::{MutexStamp, MutexTag};
 
     let mut buf = vec![0; 1024];
     loop {
@@ -212,7 +213,6 @@ pub async fn handle_network_message(
 
         log::debug!("Message received: {:?}", message);
 
-
         {
             let mut state = LOCAL_APP_STATE.lock().await;
             state.update_clock(Some(&message.clock)).await;
@@ -220,46 +220,53 @@ pub async fn handle_network_message(
         }
 
         match message.code {
+            NetworkMessageCode::AcquireMutex => {
+                let mut st = LOCAL_APP_STATE.lock().await;
+                st.global_mutex_fifo.insert(
+                    message.sender_id.clone(),
+                    MutexStamp {
+                        tag: MutexTag::Request,
+                        date: message.clock.get_lamport().clone(),
+                    },
+                );
 
-        NetworkMessageCode::AcquireMutex => {
-            let mut st = LOCAL_APP_STATE.lock().await;
-            st.global_mutex_fifo.insert(message.sender_id.clone(),
-                        crate::state::MutexStamp { tag: crate::state::MutexTag::Request,
-                                    date: message.clock.get_lamport().clone() });
+                // Ack immédiat
+                send_message(
+                    message.sender_addr,
+                    MessageInfo::AckMutex(crate::message::AckMutexPayload {
+                        clock: st.clocks.get_lamport().clone(),
+                    }),
+                    None,
+                    NetworkMessageCode::AckGlobalMutex,
+                    st.site_addr,
+                    st.get_site_id(),
+                    &message.message_initiator_id,
+                    message.message_initiator_addr,
+                    st.clocks.clone(),
+                )
+                .await?;
 
-            send_message(
-                message.sender_addr,
-                MessageInfo::AckMutex(crate::message::AckMutexPayload{ clock: st.clocks.get_lamport().clone() }),
-                None,
-                NetworkMessageCode::AckGlobalMutex,
-                st.site_addr,
-                st.get_site_id(),
-                &message.message_initiator_id,
-                message.message_initiator_addr,
-                st.clocks.clone(),
-            ).await?;
+                st.try_enter_sc();
+            }
 
-            st.try_enter_sc();
-        }
+            NetworkMessageCode::AckGlobalMutex => {
+                let mut st = LOCAL_APP_STATE.lock().await;
+                st.global_mutex_fifo.insert(
+                    message.sender_id.clone(),
+                    MutexStamp {
+                        tag: MutexTag::Ack,
+                        date: message.clock.get_lamport().clone(),
+                    },
+                );
+                st.try_enter_sc();
+            }
 
-        NetworkMessageCode::AckGlobalMutex => {
-            let mut st = LOCAL_APP_STATE.lock().await;
-
-            st.global_mutex_fifo.insert(message.sender_id.clone(),
-                        crate::state::MutexStamp { tag: crate::state::MutexTag::Ack,
-                                    date: message.clock.get_lamport().clone() });
-            st.try_enter_sc();
-        }
-
-        NetworkMessageCode::ReleaseGlobalMutex => {
-            let mut st = LOCAL_APP_STATE.lock().await;
-
-            st.global_mutex_fifo.insert(message.sender_id.clone(),
-                        crate::state::MutexStamp{ tag: crate::state::MutexTag::Release,
-                                    date: message.clock.get_lamport().clone() });
-            st.try_enter_sc();
-        }
-
+            NetworkMessageCode::ReleaseGlobalMutex => {
+                let mut st = LOCAL_APP_STATE.lock().await;
+                // On retire toute trace de la requête du voisin
+                st.global_mutex_fifo.remove(&message.sender_id);
+                st.try_enter_sc();
+            }
 
             NetworkMessageCode::Discovery => {
                 let mut state = LOCAL_APP_STATE.lock().await;

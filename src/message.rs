@@ -138,13 +138,14 @@ pub enum MessageInfo {
     None,
 }
 
-
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct AcquireMutexPayload;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ReleaseMutexPayload;
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct AckMutexPayload { pub clock: i64 }
+pub struct AckMutexPayload {
+    pub clock: i64,
+}
 
 #[cfg(feature = "server")]
 /// Response to a state snapshot request
