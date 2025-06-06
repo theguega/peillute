@@ -221,6 +221,7 @@ pub async fn handle_network_message(
 
         match message.code {
             NetworkMessageCode::AcquireMutex => {
+                // A node is requesting to enter the critical section
                 let mut st = LOCAL_APP_STATE.lock().await;
                 st.global_mutex_fifo.insert(
                     message.sender_id.clone(),
@@ -230,7 +231,7 @@ pub async fn handle_network_message(
                     },
                 );
 
-                // Ack immédiat
+                // TODO : add wave diffusion
                 send_message(
                     message.sender_addr,
                     MessageInfo::AckMutex(crate::message::AckMutexPayload {
@@ -250,6 +251,7 @@ pub async fn handle_network_message(
             }
 
             NetworkMessageCode::AckGlobalMutex => {
+                // another node acknowledged our request to enter the critical section
                 let mut st = LOCAL_APP_STATE.lock().await;
                 st.global_mutex_fifo.insert(
                     message.sender_id.clone(),
@@ -262,8 +264,8 @@ pub async fn handle_network_message(
             }
 
             NetworkMessageCode::ReleaseGlobalMutex => {
+                // A node is releasing the critical section
                 let mut st = LOCAL_APP_STATE.lock().await;
-                // On retire toute trace de la requête du voisin
                 st.global_mutex_fifo.remove(&message.sender_id);
                 st.try_enter_sc();
             }

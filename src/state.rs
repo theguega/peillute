@@ -170,6 +170,7 @@ impl AppState {
         diffuse_message_without_lock(&msg, &self.get_site_addr(), &self.get_site_id(), &self.get_peers_addrs(), &self.get_parent_addr(msg.message_initiator_id.clone())).await?;
 
         self.global_mutex_fifo.remove(&self.site_id);
+        // on retire les requêtes locales
         self.in_sc = false;
         self.waiting_sc = false;
         Ok(())
