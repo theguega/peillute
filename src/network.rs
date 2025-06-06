@@ -507,7 +507,7 @@ pub async fn handle_network_message(
                 let mut state = LOCAL_APP_STATE.lock().await;
                 state.connected_neighbours_addrs.retain(|addr| addr != &message.sender_addr);
                 state.nb_connected_neighbours = state.connected_neighbours_addrs.len() as i64;
-                
+
                 // let mut state = LOCAL_APP_STATE.lock().await;
                 // state.remove_peer(
                 //     message.message_initiator_id.as_str(),
@@ -640,8 +640,6 @@ pub async fn diffuse_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    log::debug!("debut diffusion");
-
     let (local_addr, site_id, peer_addrs, parent_address) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
@@ -651,33 +649,17 @@ pub async fn diffuse_message(
             state.get_parent_addr(message.message_initiator_id.clone()),
         )
     };
-
-    for peer_addr in peer_addrs {
-        let peer_addr_str = peer_addr.to_string();
-        if peer_addr != parent_address {
-            log::debug!("Sending message to: {}", peer_addr_str);
-
-            if let Err(e) = send_message(
-                peer_addr,
-                message.info.clone(),
-                message.command.clone(),
-                message.code.clone(),
-                local_addr.parse().unwrap(),
-                &site_id,
-                &message.message_initiator_id,
-                message.message_initiator_addr,
-                message.clock.clone(),
-            )
-            .await
-            {
-                log::error!("❌ Impossible d’envoyer à {} : {}", peer_addr_str, e);
-            }
-        }
-    }
+    diffuse_message_without_lock(
+        message,
+        &local_addr,
+        &site_id,
+        &peer_addrs[..],
+        &parent_address,
+    ).await?;
     Ok(())
 }
 
-
+// flemme de modif l'autre partout donc j'ai modif celle là 
 pub async fn diffuse_message_without_lock(
     message: &crate::message::Message,
     local_addr: &str,
@@ -686,7 +668,7 @@ pub async fn diffuse_message_without_lock(
     parent_address: &std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
-    log::debug!("debut diffusion without lock");
+    log::debug!("debut diffusion");
 
     for peer_addr in peer_addrs {
         let peer_addr_str = peer_addr.to_string();
