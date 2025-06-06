@@ -104,6 +104,8 @@ pub fn init_db() -> rusqlite::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Update the local state of the site◊
 pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite::Result<()> {
     use rusqlite::params;
 
@@ -128,6 +130,8 @@ pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite
     Ok(())
 }
 
+#[cfg(feature = "server")]
+/// Get the local state of the site
 pub fn get_local_state() -> rusqlite::Result<(String, crate::clock::Clock)> {
     use rusqlite::params;
     let conn = DB_CONN.lock().unwrap();

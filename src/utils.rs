@@ -1,8 +1,6 @@
-use crate::clock::Clock;
-
+#[cfg(feature = "server")]
 pub fn get_mac_address() -> Option<String> {
     use pnet::datalink;
-
     let interfaces = datalink::interfaces();
     for iface in interfaces {
         // Ignore loopback et interfaces sans MAC
@@ -16,8 +14,8 @@ pub fn get_mac_address() -> Option<String> {
     }
     None
 }
-
-pub async fn reload_existing_site() -> Result<(String, Clock), String> {
+#[cfg(feature = "server")]
+pub async fn reload_existing_site() -> Result<(String, crate::clock::Clock), String> {
     use log::info;
     match crate::db::get_local_state() {
         Ok((site_id, clock)) => {

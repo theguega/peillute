@@ -230,12 +230,12 @@ pub async fn handle_network_message(
                 let mut state = LOCAL_APP_STATE.lock().await;
 
                 // Try to add this new site as a new peer
-                state.add_incomming_peer(
-                    &message.message_initiator_id,
-                    message.message_initiator_addr,
-                    socket_of_the_sender,
-                    message.clock.clone(),
-                );
+                // state.add_incomming_peer(
+                //     &message.message_initiator_id,
+                //     message.message_initiator_addr,
+                //     socket_of_the_sender,
+                //     message.clock.clone(),
+                // );
 
                 // Return ack message if this we are connected to the site
                 if state
@@ -269,14 +269,6 @@ pub async fn handle_network_message(
 
             NetworkMessageCode::Acknowledgment => {
                 let mut state = LOCAL_APP_STATE.lock().await;
-                // If we are a new site that is sending a discovery to new sites
-                // we will get acknoledgement from them and we need to update the state
-                state.add_incomming_peer(
-                    &message.message_initiator_id,
-                    message.sender_addr,
-                    socket_of_the_sender,
-                    message.clock.clone(),
-                );
                 if message.message_initiator_addr == state.get_site_addr() {
                     for (site_id, nb_a_i) in state
                         .get_attended_neighbours_nb_for_transaction_wave()

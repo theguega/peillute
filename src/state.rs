@@ -176,6 +176,11 @@ impl AppState {
         self.site_addr.clone()
     }
 
+    /// Returns the local address as a string
+    pub fn get_site_addr_as_string(&self) -> String {
+        self.site_addr.to_string()
+    }
+
     /// Returns a reference to the local address as &str
     pub fn get_site_id(&self) -> String {
         self.site_id.clone()
@@ -186,9 +191,22 @@ impl AppState {
         self.cli_peer_addrs.clone()
     }
 
+    /// Returns a list of all peer addresses as strings
+    pub fn get_cli_peers_addrs_as_string(&self) -> Vec<String> {
+        self.cli_peer_addrs.iter().map(|x| x.to_string()).collect()
+    }
+
     /// Returns a list of conncted neibhours
     pub fn get_connected_neighbours_addrs(&self) -> Vec<std::net::SocketAddr> {
         self.connected_neighbours_addrs.clone()
+    }
+
+    /// Returns a list of conncted neibhours as strings
+    pub fn get_connected_neighbours_addrs_as_string(&self) -> Vec<String> {
+        self.connected_neighbours_addrs
+            .iter()
+            .map(|x| x.to_string())
+            .collect()
     }
 
     /// Add a connected neighbour to the list of connected neighbours

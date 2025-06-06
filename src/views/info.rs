@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 async fn get_local_addr() -> Result<String, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_site_addr().to_string())
+    Ok(state.get_site_addr_as_string())
 }
 
 /// Server function to retrieve the current site ID
@@ -23,10 +23,10 @@ async fn get_site_id() -> Result<String, ServerFnError> {
 
 /// Server function to retrieve the list of connected peers
 #[server]
-async fn get_peers() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
+async fn get_peers() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_cli_peers_addrs())
+    Ok(state.get_cli_peers_addrs_as_string())
 }
 
 /// Server function to retrieve the current Lamport clock value
@@ -78,18 +78,18 @@ async fn get_nb_cli_peers() -> Result<i64, ServerFnError> {
 
 /// Server function to retrieve the list of connected neighbours
 #[server]
-async fn get_connected_neighbours() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
+async fn get_connected_neighbours() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_connected_neighbours_addrs())
+    Ok(state.get_connected_neighbours_addrs_as_string())
 }
 
 /// Server function to retrieve the list of peer addresses
 #[server]
-async fn get_peer_addrs() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
+async fn get_peer_addrs() -> Result<Vec<String>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_cli_peers_addrs())
+    Ok(state.get_cli_peers_addrs_as_string())
 }
 
 /// Ask for a snapshot
