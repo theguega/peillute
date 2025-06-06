@@ -202,8 +202,8 @@ pub async fn start_snapshot() -> Result<(), Box<dyn std::error::Error>> {
         let st = crate::state::LOCAL_APP_STATE.lock().await;
         (
             st.get_site_id().to_string(),
-            st.get_clock().clone(),
-            st.nb_connected_neighbours + 1,
+            st.get_clock(),
+            (st.get_peers_addrs().len() + 1) as i64,
         )
     };
 
@@ -338,7 +338,7 @@ mod tests {
         assert!(GlobalSnapshot::is_consistent(&[LocalSnapshot {
             site_id: "dummy".into(),
             vector_clock: std::collections::HashMap::new(),
-            tx_log: snap.all_transactions.clone()
+            tx_log: snap.all_transactions
         }]));
         assert!(snap.missing.is_empty() || !snap.missing.contains_key("A"));
     }
@@ -427,8 +427,8 @@ mod tests {
         let _ = mgr.push(r_a);
         let snap = mgr.push(r_b).expect("snapshot after back-track");
 
-        assert!(snap.all_transactions.contains(&t1));
-        assert!(!snap.all_transactions.contains(&t5));
+        assert!(snap.all_transactions.contains(&t1.clone()));
+        assert!(!snap.all_transactions.contains(&t5.clone()));
     }
 
     #[test]

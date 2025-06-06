@@ -21,23 +21,23 @@ mod utils;
 struct Args {
     /// Unique identifier for this site in the network
     #[arg(long, default_value_t = String::new())]
-    site_id: String,
+    cli_site_id: String,
 
     /// Port number for peer-to-peer communication
     #[arg(long, default_value_t = 0)]
-    port: u16,
+    cli_port: u16,
 
     /// List of peer addresses to connect to
     #[arg(long, value_delimiter = ',')]
-    peers: Vec<String>,
+    cli_peers: Vec<String>,
 
     /// IP address to bind to
     #[arg(long, default_value_t = String::from("127.0.0.1"))]
-    ip: String,
+    cli_ip: String,
 
     /// ID for the batabase path
     #[arg(long, default_value_t = 0)]
-    db_id: u16,
+    cli_db_id: u16,
 }
 
 #[cfg(feature = "server")]
@@ -64,33 +64,32 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let port_range = LOW_PORT..=HIGH_PORT;
-    let selected_port = if args.port == 0 {
+    let selected_port = if args.cli_port == 0 {
         port_range
             .into_iter()
             .find(|port| std::net::TcpListener::bind(("127.0.0.1", *port)).is_ok())
             .unwrap_or(LOW_PORT)
     } else {
-        args.port
+        args.cli_port
     };
 
-    let site_ip = &args.ip;
-    let peer_interaction_addr: SocketAddr = format!("{}:{}", site_ip, selected_port).parse()?;
+    let final_site_addr: SocketAddr = format!("{}:{}", &args.cli_ip, selected_port).parse()?;
     let client_server_interaction_addr: SocketAddr =
-        format!("{}:{}", site_ip, selected_port + PORT_OFFSET).parse()?;
+        format!("{}:{}", &args.cli_ip, selected_port + PORT_OFFSET).parse()?;
 
-    let peers_addrs: Vec<SocketAddr> = args
-        .peers
+    let final_cli_peers_addrs: Vec<SocketAddr> = args
+        .cli_peers
         .into_iter()
         .filter_map(|peer| peer.parse::<SocketAddr>().ok())
         .collect();
 
-    let (site_id, clock, needs_sync) = match utils::reload_existing_site().await {
-        Ok((site_id, clock)) => (site_id, clock, true),
+    let (final_site_id, final_clock, needs_sync) = match utils::reload_existing_site().await {
+        Ok((site_id_from_db, clock_from_db)) => (site_id_from_db, clock_from_db, true),
         Err(_) => {
-            let generated_site_id = if args.site_id.is_empty() {
+            let generated_site_id = if args.cli_site_id.is_empty() {
                 utils::get_mac_address().unwrap_or_default() + "_" + &std::process::id().to_string()
             } else {
-                args.site_id.clone()
+                args.cli_site_id.clone()
             };
             (generated_site_id, crate::clock::Clock::new(), false)
         }
@@ -98,14 +97,11 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
 
     {
         let mut state = LOCAL_APP_STATE.lock().await;
-        state.site_id = site_id.clone();
-        state.site_addr = peer_interaction_addr;
-        state
-            .parent_addr_for_transaction_wave
-            .insert(site_id.clone(), peer_interaction_addr);
-        state.clocks = clock;
-        state.peer_addrs = peers_addrs;
-        state.update_clock(None).await;
+        state.init_site_id(final_site_id.clone());
+        state.init_site_addr(final_site_addr);
+        state.init_clock(final_clock);
+        state.init_parent_addr_for_transaction_wave();
+        state.init_cli_peer_addrs(final_cli_peers_addrs);
     }
 
     if needs_sync {
@@ -114,7 +110,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create the network listener
-    let network_listener_local_addr = peer_interaction_addr.clone();
+    let network_listener_local_addr = final_site_addr.clone();
     let listener: TcpListener = TcpListener::bind(network_listener_local_addr).await?;
     log::debug!("Listening on: {}", network_listener_local_addr);
 
@@ -131,7 +127,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
     let mut lines: tokio_io::Lines<_> = reader.lines();
 
     // Announce our presence to the network
-    network::announce(site_ip, LOW_PORT, HIGH_PORT, selected_port).await;
+    network::announce(&args.cli_ip, LOW_PORT, HIGH_PORT, selected_port).await;
 
     println!(
         "\n\
@@ -188,7 +184,6 @@ async fn main_loop(
             }
             _ = tokio::signal::ctrl_c() => {
                 disconnect().await;
-                println!("👋 Bye !");
                 std::process::exit(0);
             }
         }
@@ -224,10 +219,10 @@ async fn disconnect() {
             MessageInfo::None,
             None,
             NetworkMessageCode::Disconnect,
-            local_addr.parse().unwrap(),
+            local_addr,
             &site_id,
             &site_id,
-            local_addr.parse().unwrap(),
+            local_addr,
             clock.clone(),
         )
         .await
@@ -306,26 +301,32 @@ mod tests {
         use super::Args;
         let args = Args::parse_from(vec![
             "my_program",
-            "--site-id",
+            "--cli-site-id",
             "A",
-            "--port",
+            "--cli-port",
             "8080",
-            "--peers",
+            "--cli-peers",
             "127.0.0.1:8081,127.0.0.1:8082",
         ]);
-        assert_eq!(args.site_id, "A");
-        assert_eq!(args.port, 8080);
-        assert_eq!(args.peers.len(), 2);
-        assert_eq!(args.peers[0], "127.0.0.1:8081");
-        assert_eq!(args.peers[1], "127.0.0.1:8082");
+        assert_eq!(args.cli_site_id, "A");
+        assert_eq!(args.cli_port, 8080);
+        assert_eq!(args.cli_peers.len(), 2);
+        assert_eq!(args.cli_peers[0], "127.0.0.1:8081");
+        assert_eq!(args.cli_peers[1], "127.0.0.1:8082");
     }
 
     #[test]
     fn test_args_parsing_no_peers() {
         use super::Args;
-        let args = Args::parse_from(vec!["my_program", "--site-id", "A", "--port", "8080"]);
-        assert_eq!(args.site_id, "A");
-        assert_eq!(args.port, 8080);
-        assert_eq!(args.peers.len(), 0);
+        let args = Args::parse_from(vec![
+            "my_program",
+            "--cli-site-id",
+            "A",
+            "--cli-port",
+            "8080",
+        ]);
+        assert_eq!(args.cli_site_id, "A");
+        assert_eq!(args.cli_port, 8080);
+        assert_eq!(args.cli_peers.len(), 0);
     }
 }

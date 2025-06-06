@@ -28,7 +28,7 @@ use clap::Parser;
 #[cfg(feature = "server")]
 lazy_static::lazy_static! {
     pub static ref DB_CONN: std::sync::Mutex<rusqlite::Connection> =
-        std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().db_id)).unwrap());
+        std::sync::Mutex::new(rusqlite::Connection::open(format!("peillute_{}.db", super::Args::parse().cli_db_id)).unwrap());
 }
 
 #[cfg(feature = "server")]

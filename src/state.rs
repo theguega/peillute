@@ -4,22 +4,17 @@
 //! peer management, and logical clock synchronization.
 
 #[cfg(feature = "server")]
-use crate::clock::Clock;
-
-#[cfg(feature = "server")]
 /// Represents the global state of a Peillute node
 pub struct AppState {
     // --- Site Info ---
     /// Unique identifier for this site
-    pub site_id: String,
+    site_id: String,
     /// Unique address for this site
-    pub site_addr: std::net::SocketAddr,
-    /// Number of deg(1) neighbours connected
-    pub nb_connected_neighbours: i64,
+    site_addr: std::net::SocketAddr,
     /// List of peer addresses given in arguments at the launch of the application
-    pub peer_addrs: Vec<std::net::SocketAddr>,
+    cli_peer_addrs: Vec<std::net::SocketAddr>,
     /// List of deg(1) neighbours connected addresses
-    pub connected_neighbours_addrs: Vec<std::net::SocketAddr>,
+    connected_neighbours_addrs: Vec<std::net::SocketAddr>,
 
     // --- Message Diffusion Info ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
@@ -29,7 +24,7 @@ pub struct AppState {
 
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
-    pub clocks: crate::clock::Clock,
+    clocks: crate::clock::Clock,
 }
 
 #[cfg(feature = "server")]
@@ -37,7 +32,6 @@ impl AppState {
     /// Creates a new AppState instance with the given configuration
     pub fn new(
         site_id: String,
-        nb_neighbors: i64,
         peer_addrs: Vec<std::net::SocketAddr>,
         local_addr: std::net::SocketAddr,
     ) -> Self {
@@ -48,8 +42,7 @@ impl AppState {
 
         Self {
             site_id,
-            nb_connected_neighbours: nb_neighbors,
-            peer_addrs,
+            cli_peer_addrs: peer_addrs,
             site_addr: local_addr,
             parent_addr_for_transaction_wave: parent_addr,
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
@@ -58,63 +51,105 @@ impl AppState {
         }
     }
 
-    // /// Adds a new peer to the network and updates the logical clock
-    // #[allow(unused)]
-    // pub fn add_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
-    //     if !self.peer_addrs.contains(&addr) {
-    //         self.peer_addrs.push(addr);
-    //         self.clocks.add_peer(site_id);
-    //         self.attended_neighbours_nb_for_transaction_wave
-    //             .insert(site_id.to_string(), self.peer_addrs.len() as i64);
-    //         self.parent_addr_for_transaction_wave
-    //             .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
-    //     }
-    // }
-
-    // /// Removes a peer from the network
-    // #[allow(unused)]
-    // pub fn remove_peer(&mut self, site_id: &str, addr: std::net::SocketAddr) {
-    //     if let Some(pos) = self.peer_addrs.iter().position(|x| *x == addr) {
-    //         self.peer_addrs.remove(pos);
-    //         self.nb_connected_neighbours -= 1;
-    //         self.attended_neighbours_nb_for_transaction_wave
-    //             .insert(site_id.to_string(), self.peer_addrs.len() as i64);
-    //         self.parent_addr_for_transaction_wave
-    //             .insert(site_id.to_string(), "0.0.0.0:0".parse().unwrap());
-    //     }
-    // }
-
-    /// Returns the local address as a string
-    pub fn get_site_addr(&self) -> String {
-        self.site_addr.to_string()
+    /// Sets the site ID at initialization
+    pub fn init_site_id(&mut self, site_id: String) {
+        self.site_id = site_id;
     }
 
-    /// Returns the current site ID as &str
-    pub fn get_site_id(&self) -> &str {
-        self.site_id.as_str()
+    /// Sets the site address at initialization
+    pub fn init_site_addr(&mut self, site_addr: std::net::SocketAddr) {
+        self.site_addr = site_addr;
+    }
+
+    /// Sets the list of CLI peer addresses at initialization
+    pub fn init_cli_peer_addrs(&mut self, cli_peer_addrs: Vec<std::net::SocketAddr>) {
+        self.cli_peer_addrs = cli_peer_addrs;
+    }
+
+    /// Set the clock at initialization
+    pub fn init_clock(&mut self, clock: crate::clock::Clock) {
+        self.clocks = clock;
+    }
+
+    /// Initialize the parent of the current site as self for the wave protocol
+    pub fn init_parent_addr_for_transaction_wave(&mut self) {
+        self.parent_addr_for_transaction_wave
+            .insert(self.site_id.clone(), self.site_addr.clone());
+    }
+
+    /// Adds a new peer to the network and updates the logical clock
+    ///
+    /// This function should be safe to call multiple times
+    ///
+    /// If a new site appear on the netword, every peers will launch a wave diffusion to announce the presence of this new site
+    pub fn add_peer(
+        &mut self,
+        new_site_id: &str,
+        new_addr: std::net::SocketAddr,
+        received_clock: crate::clock::Clock,
+    ) {
+        if !self.connected_neighbours_addrs.contains(&new_addr) {
+            self.connected_neighbours_addrs.push(new_addr);
+            self.clocks
+                .update_clock(self.site_id.clone().as_str(), Some(&received_clock));
+            self.attended_neighbours_nb_for_transaction_wave
+                .insert(new_site_id.to_string(), self.cli_peer_addrs.len() as i64);
+            self.parent_addr_for_transaction_wave
+                .insert(new_site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+        }
+    }
+
+    /// Removes a peer from the network
+    ///
+    /// This function should be safe to call multiple times
+    ///
+    /// If a site disappear from the network, every neighbours will detected the closing of the tcp connection and will launch a wave diffusion to announce the disappearance of this site
+    ///
+    /// If a site is closed properly, it will send a disconnect message to all its neighbours
+    pub fn remove_peer(&mut self, site_id_to_remove: &str, addr_to_remove: std::net::SocketAddr) {
+        if let Some(pos) = self
+            .connected_neighbours_addrs
+            .iter()
+            .position(|x| *x == addr_to_remove)
+        {
+            self.connected_neighbours_addrs.remove(pos);
+            self.attended_neighbours_nb_for_transaction_wave
+                .remove(site_id_to_remove);
+            self.parent_addr_for_transaction_wave
+                .remove(site_id_to_remove);
+            // We can keep the clock value for the site we want to remove
+            // if the site re-appears, it will be updated with the new clock value
+        }
+    }
+
+    /// Returns the local address as a string
+    pub fn get_site_addr(&self) -> std::net::SocketAddr {
+        self.site_addr.clone()
+    }
+
+    /// Returns a reference to the local address as &str
+    pub fn get_site_id(&self) -> String {
+        self.site_id.clone()
     }
 
     /// Returns a list of all peer addresses
     pub fn get_peers_addrs(&self) -> Vec<std::net::SocketAddr> {
-        self.peer_addrs.clone()
+        self.cli_peer_addrs.clone()
     }
 
-    /// Returns a list of peer addresses as strings
-    pub fn get_peers_addrs_string(&self) -> Vec<String> {
-        self.peer_addrs.iter().map(|x| x.to_string()).collect()
+    /// Returns a list of conncted neibhours
+    pub fn get_connected_neighbours_addrs(&self) -> Vec<std::net::SocketAddr> {
+        self.connected_neighbours_addrs.clone()
     }
 
-    /// Returns a list of conncted neibhours as strings
-    pub fn get_connected_neighbours_addrs_string(&self) -> Vec<String> {
-        self.connected_neighbours_addrs
-            .iter()
-            .map(|x| x.to_string())
-            .collect()
+    /// Add a connected neighbour to the list of connected neighbours
+    pub fn add_connected_neighbour(&mut self, addr: std::net::SocketAddr) {
+        self.connected_neighbours_addrs.push(addr);
     }
 
-    /// Returns a reference to the clock of the site
-    pub fn get_clock(&self) -> &crate::clock::Clock {
-        &self.clocks
+    /// Returns the clock of the site
+    pub fn get_clock(&self) -> crate::clock::Clock {
+        self.clocks.clone()
     }
 
     /// Set the number of attended neighbors for the wave from initiator_id
@@ -123,8 +158,22 @@ impl AppState {
             .insert(initiator_id, n);
     }
 
+    /// Get the list of attended neighbors for the wave from initiator_id
+    pub fn get_parent_addr_for_transaction_wave(
+        &self,
+    ) -> std::collections::HashMap<String, std::net::SocketAddr> {
+        self.parent_addr_for_transaction_wave.clone()
+    }
+
+    /// Get the list of attended neighbors for the wave from initiator_id
+    pub fn get_attended_neighbours_nb_for_transaction_wave(
+        &self,
+    ) -> std::collections::HashMap<String, i64> {
+        self.attended_neighbours_nb_for_transaction_wave.clone()
+    }
+
     /// Get the parent (neighbour deg(1)) address for the wave from initiator_id
-    pub fn get_parent_addr(&self, initiator_id: String) -> std::net::SocketAddr {
+    pub fn get_the_parent_addr_for_wave(&self, initiator_id: String) -> std::net::SocketAddr {
         self.parent_addr_for_transaction_wave
             .get(&initiator_id)
             .copied()
@@ -138,12 +187,12 @@ impl AppState {
     }
 
     /// Returns the number of deg(1) neighbors connected
-    #[allow(unused)]
     pub fn get_nb_connected_neighbours(&self) -> i64 {
-        self.nb_connected_neighbours
+        self.connected_neighbours_addrs.len() as i64
     }
 
-    pub async fn update_clock(&mut self, received_vc: Option<&Clock>) {
+    /// Update the clock of the site
+    pub async fn update_clock(&mut self, received_vc: Option<&crate::clock::Clock>) {
         // this wrapper is needed to ensure that the clock is saved
         // each time it is updated
         // please DO NOT call the `update_clock` method directly from the clock
@@ -163,7 +212,6 @@ lazy_static::lazy_static! {
     pub static ref LOCAL_APP_STATE: std::sync::Arc<tokio::sync::Mutex<AppState>> =
         std::sync::Arc::new(tokio::sync::Mutex::new(AppState::new(
             "".to_string(), // empty site id at start
-            0,
             Vec::new(),
             "0.0.0.0:0".parse().unwrap(),
         )));
@@ -176,19 +224,18 @@ mod tests {
 
     #[test]
     fn test_new_state() {
-        let site_id = "A".to_string();
+        let cli_site_id = "A".to_string();
         let num_sites = 2;
         let peer_addrs = vec![
             "127.0.0.1:8081".parse().unwrap(),
             "127.0.0.1:8082".parse().unwrap(),
         ];
         let local_addr: std::net::SocketAddr = format!("127.0.0.1:{}", 8080).parse().unwrap();
-        let shared_state =
-            AppState::new(site_id.clone(), num_sites, peer_addrs.clone(), local_addr);
+        let shared_state = AppState::new(cli_site_id.clone(), peer_addrs.clone(), local_addr);
 
-        assert_eq!(shared_state.site_id, site_id);
-        assert_eq!(shared_state.nb_connected_neighbours, num_sites);
-        assert_eq!(shared_state.peer_addrs, peer_addrs);
+        assert_eq!(shared_state.site_id, cli_site_id);
+        assert_eq!(shared_state.cli_peer_addrs.len() as i64, num_sites);
+        assert_eq!(shared_state.cli_peer_addrs, peer_addrs);
         assert_eq!(shared_state.clocks.get_vector_clock_map().len(), 0); // Initially empty
     }
 }

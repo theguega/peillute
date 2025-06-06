@@ -23,10 +23,10 @@ async fn get_site_id() -> Result<String, ServerFnError> {
 
 /// Server function to retrieve the list of connected peers
 #[server]
-async fn get_peers() -> Result<Vec<String>, ServerFnError> {
+async fn get_peers() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_peers_addrs_string())
+    Ok(state.get_peers_addrs())
 }
 
 /// Server function to retrieve the current Lamport clock value
@@ -62,26 +62,26 @@ async fn get_db_path() -> Result<String, ServerFnError> {
 
 /// Server function to retrieve the number of sites in the network
 #[server]
-async fn get_nb_sites() -> Result<i64, ServerFnError> {
+async fn get_nb_connected_neighbours() -> Result<i64, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.nb_connected_neighbours as i64)
+    Ok(state.get_nb_connected_neighbours())
 }
 
 /// Server function to retrieve the list of connected neighbours
 #[server]
-async fn get_connected_neighbours() -> Result<Vec<String>, ServerFnError> {
+async fn get_connected_neighbours() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_connected_neighbours_addrs_string())
+    Ok(state.get_connected_neighbours_addrs())
 }
 
 /// Server function to retrieve the list of peer addresses
 #[server]
-async fn get_peer_addrs() -> Result<Vec<String>, ServerFnError> {
+async fn get_peer_addrs() -> Result<Vec<std::net::SocketAddr>, ServerFnError> {
     use crate::state::LOCAL_APP_STATE;
     let state = LOCAL_APP_STATE.lock().await;
-    Ok(state.get_peers_addrs_string())
+    Ok(state.get_peers_addrs())
 }
 
 /// Ask for a snapshot
@@ -150,7 +150,7 @@ pub fn Info() -> Element {
         } // else: vector_clock remains 0 or handle error
 
         // Fetch number of sites
-        if let Ok(data) = get_nb_sites().await {
+        if let Ok(data) = get_nb_connected_neighbours().await {
             nb_neighbours.set(data);
         } // else: nb_sites remains 0 or handle error
 

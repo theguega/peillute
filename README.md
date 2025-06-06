@@ -116,25 +116,25 @@ The following commands will create a non-perfect network (schema below) with man
 ```sh
 # Create a non-perfect network with manual peers:
 # Terminal 1
-RUST_LOG=debug cargo run -- --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 0
+RUST_LOG=debug cargo run -- --cli-port 10000 --cli-peers 127.0.0.1:10001,127.0.0.1:10003 --cli-db-id 0
 # Terminal 2
-RUST_LOG=debug cargo run -- --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --db-id 1
+RUST_LOG=debug cargo run -- --cli-port 10001 --cli-peers 127.0.0.1:10000,127.0.0.1:10002,127.0.0.1:10004 --cli-db-id 1
 # Terminal 3
-RUST_LOG=debug cargo run -- --port 10002 --peers 127.0.0.1:10001,127.0.0.1:10003 --db-id 2
+RUST_LOG=debug cargo run -- --cli-port 10002 --cli-peers 127.0.0.1:10001,127.0.0.1:10003 --cli-db-id 2
 # Terminal 4
-RUST_LOG=debug cargo run -- --port 10003 --peers 127.0.0.1:10000,127.0.0.1:10002 --db-id 3
+RUST_LOG=debug cargo run -- --cli-port 10003 --cli-peers 127.0.0.1:10000,127.0.0.1:10002 --cli-db-id 3
 # Terminal 5
-RUST_LOG=debug cargo run -- --port 10004 --peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --db-id 4
+RUST_LOG=debug cargo run -- --cli-port 10004 --cli-peers 127.0.0.1:10001,127.0.0.1:10006,127.0.0.1:10005 --cli-db-id 4
 # Terminal 6
-RUST_LOG=debug cargo run -- --port 10005 --peers 127.0.0.1:10004,127.0.0.1:10009 --db-id 5
+RUST_LOG=debug cargo run -- --cli-port 10005 --cli-peers 127.0.0.1:10004,127.0.0.1:10009 --cli-db-id 5
 # Terminal 7
-RUST_LOG=debug cargo run -- --port 10006 --peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --db-id 6
+RUST_LOG=debug cargo run -- --cli-port 10006 --cli-peers 127.0.0.1:10004,127.0.0.1:10007,127.0.0.1:10008 --cli-db-id 6
 # Terminal 8
-RUST_LOG=debug cargo run -- --port 10007 --peers 127.0.0.1:10006,127.0.0.1:10008 --db-id 7
+RUST_LOG=debug cargo run -- --cli-port 10007 --cli-peers 127.0.0.1:10006,127.0.0.1:10008 --cli-db-id 7
 # Terminal 9
-RUST_LOG=debug cargo run -- --port 10008 --peers 127.0.0.1:10006,127.0.0.1:10007 --db-id 8
+RUST_LOG=debug cargo run -- --cli-port 10008 --cli-peers 127.0.0.1:10006,127.0.0.1:10007 --cli-db-id 8
 # Terminal 10
-RUST_LOG=debug cargo run -- --port 10009 --peers 127.0.0.1:10005 --db-id 9
+RUST_LOG=debug cargo run -- --cli-port 10009 --cli-peers 127.0.0.1:10005 --cli-db-id 9
 ```
 
 ### 2. Compile with Dioxus (Merges Client and Server)
@@ -165,13 +165,13 @@ cd target/dx/peillute/release/web
 
 # Create a non-perfect network with manual peers:
 # Terminal 1:
-RUST_LOG=debug ./server --port 10000 --peers 127.0.0.1:10001,127.0.0.1:10002
+RUST_LOG=debug ./server --cli-port 10000 --cli-peers 127.0.0.1:10001,127.0.0.1:10002
 # Terminal 2:
-RUST_LOG=debug ./server --port 10001 --peers 127.0.0.1:10000,127.0.0.1:10002
+RUST_LOG=debug ./server --cli-port 10001 --cli-peers 127.0.0.1:10000,127.0.0.1:10002
 # Terminal 3:
-RUST_LOG=debug ./server --port 10002 --peers 127.0.0.1:10000,127.0.0.1:10001
+RUST_LOG=debug ./server --cli-port 10002 --cli-peers 127.0.0.1:10000,127.0.0.1:10001
 # Terminal 4:
-RUST_LOG=debug ./server --port 10003 --peers 127.0.0.1:10001,127.0.0.1:10002
+RUST_LOG=debug ./server --cli-port 10003 --cli-peers 127.0.0.1:10001,127.0.0.1:10002
 ```
 
 ## 🛠️ Development and Testing

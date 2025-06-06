@@ -214,7 +214,7 @@ pub fn Pay(name: String) -> Element {
                                     min: "0",
                                     value: "{product_quantities.read()[index]}",
                                     oninput: move |event| {
-                                        let mut pq_signal_for_input = product_quantities.clone();
+                                        let mut pq_signal_for_input = product_quantities;
                                         if let Ok(new_quantity) = event.value().parse::<u32>() {
                                             let mut quantities_writer = pq_signal_for_input.write();
                                             if index < quantities_writer.len() {
@@ -644,7 +644,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         let local_addr = state.get_site_addr().clone();
         let node = state.get_site_id().to_string();
         state.update_clock(None).await;
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -666,19 +666,19 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
 
     let msg = Message {
         command: Some(Command::Deposit),
-        info: MessageInfo::Deposit(Deposit::new(user.clone(), amount)),
+        info: MessageInfo::Deposit(Deposit::new(user, amount)),
         code: NetworkMessageCode::Transaction,
-        clock: clock.clone(),
-        sender_addr: site_addr.parse().unwrap(),
+        clock: clock,
+        sender_addr: site_addr,
         sender_id: site_id.to_string(),
         message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr.parse().unwrap(),
+        message_initiator_addr: site_addr,
     };
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
         state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
@@ -701,10 +701,10 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
+        let local_addr = state.get_site_addr();
         let node = state.get_site_id().to_string();
         state.update_clock(None).await;
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -724,20 +724,20 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
 
     let msg = Message {
         command: Some(Command::Withdraw),
-        info: MessageInfo::Withdraw(Withdraw::new(user.clone(), amount)),
+        info: MessageInfo::Withdraw(Withdraw::new(user, amount)),
         code: NetworkMessageCode::Transaction,
-        clock: clock.clone(),
-        sender_addr: site_addr.parse().unwrap(),
+        clock: clock,
+        sender_addr: site_addr,
         sender_id: site_id.to_string(),
         message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr.parse().unwrap(),
+        message_initiator_addr: site_addr,
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
         state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
@@ -760,10 +760,10 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
+        let local_addr = state.get_site_addr();
         let node = state.get_site_id().to_string();
         state.update_clock(None).await;
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -785,20 +785,20 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
 
     let msg = Message {
         command: Some(Command::Pay),
-        info: MessageInfo::Pay(Pay::new(user.clone(), amount)),
+        info: MessageInfo::Pay(Pay::new(user, amount)),
         code: NetworkMessageCode::Transaction,
-        clock: clock.clone(),
-        sender_addr: site_addr.parse().unwrap(),
+        clock: clock,
+        sender_addr: site_addr,
         sender_id: site_id.to_string(),
         message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr.parse().unwrap(),
+        message_initiator_addr: site_addr,
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
         state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
@@ -826,10 +826,10 @@ async fn transfer_from_user_to_user_server(
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
+        let local_addr = state.get_site_addr();
         let node = state.get_site_id().to_string();
         state.update_clock(None).await;
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -851,20 +851,20 @@ async fn transfer_from_user_to_user_server(
 
     let msg = Message {
         command: Some(Command::Transfer),
-        info: MessageInfo::Transfer(Transfer::new(from_user.clone(), to_user.clone(), amount)),
+        info: MessageInfo::Transfer(Transfer::new(from_user, to_user, amount)),
         code: NetworkMessageCode::Transaction,
-        clock: clock.clone(),
-        sender_addr: site_addr.parse().unwrap(),
+        clock: clock,
+        sender_addr: site_addr,
         sender_id: site_id.to_string(),
         message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr.parse().unwrap(),
+        message_initiator_addr: site_addr,
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
         state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 
@@ -898,10 +898,10 @@ async fn refund_transaction_server(
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
+        let local_addr = state.get_site_addr();
         let node = state.get_site_id().to_string();
         state.update_clock(None).await;
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -923,18 +923,18 @@ async fn refund_transaction_server(
         command: Some(Command::Refund),
         info: MessageInfo::Refund(Refund::new(name, lamport_time, transac_node)),
         code: NetworkMessageCode::Transaction,
-        clock: clock.clone(),
-        sender_addr: site_addr.parse().unwrap(),
+        clock: clock,
+        sender_addr: site_addr,
         sender_id: site_id.to_string(),
         message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr.parse().unwrap(),
+        message_initiator_addr: site_addr,
     };
 
     {
         // initialisation des paramètres avant la diffusion d'un message
         let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.nb_connected_neighbours;
-        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        let nb_neigh = state.get_nb_connected_neighbours();
+        state.set_parent_addr(site_id.to_string(), site_addr);
         state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
     }
 

@@ -22,7 +22,7 @@ pub async fn reload_existing_site() -> Result<(String, Clock), String> {
     match crate::db::get_local_state() {
         Ok((site_id, clock)) => {
             info!("Existing site state reloaded");
-            Ok((site_id.clone(), clock))
+            Ok((site_id, clock))
         }
         Err(e) => {
             info!("No existing site state found, creating a new one.");

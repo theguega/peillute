@@ -81,10 +81,10 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
-        let node = state.get_site_id().to_string();
+        let local_addr = state.get_site_addr();
+        let node = state.get_site_id();
         let _ = state.update_clock(None);
-        let clock = state.get_clock().clone();
+        let clock = state.get_clock();
         (clock, local_addr, node)
     };
 
@@ -98,20 +98,20 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
             let msg = Message {
                 command: Some(Command::CreateUser),
-                info: MessageInfo::CreateUser(CreateUser::new(name.clone())),
+                info: MessageInfo::CreateUser(CreateUser::new(name)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
 
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
             }
 
@@ -150,19 +150,19 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
             let msg = Message {
                 command: Some(Command::Deposit),
-                info: MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
+                info: MessageInfo::Deposit(Deposit::new(name, amount)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
             }
 
@@ -188,20 +188,20 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
             let msg = Message {
                 command: Some(Command::Withdraw),
-                info: MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
+                info: MessageInfo::Withdraw(Withdraw::new(name, amount)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
 
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
             }
 
@@ -231,24 +231,20 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
             let msg = Message {
                 command: Some(Command::Transfer),
-                info: MessageInfo::Transfer(Transfer::new(
-                    name.clone(),
-                    beneficiary.clone(),
-                    amount,
-                )),
+                info: MessageInfo::Transfer(Transfer::new(name, beneficiary, amount)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
 
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
             }
 
@@ -274,20 +270,20 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
             let msg = Message {
                 command: Some(Command::Pay),
-                info: MessageInfo::Pay(Pay::new(name.clone(), amount)),
+                info: MessageInfo::Pay(Pay::new(name, amount)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
 
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
             }
 
@@ -316,18 +312,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 command: Some(Command::Refund),
                 info: MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
                 code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
+                clock: clock,
+                sender_addr: site_addr,
                 sender_id: site_id.to_string(),
                 message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
+                message_initiator_addr: site_addr,
             };
 
             {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+                let nb_neigh = state.get_nb_connected_neighbours();
+                state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_number_of_attended_neighbors(site_addr.to_string(), nb_neigh);
             }
 
@@ -359,25 +355,25 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
         Command::Info => {
             let (
-                local_addr,
+                site_addr,
                 site_id,
                 peer_addrs,
                 clock,
-                nb_neighbours,
-                in_use_neighbours,
-                parent_addr,
-                nb_of_in_use_neig,
+                nb_connected_neighbours,
+                connected_neighbours_addrs,
+                parent_addr_for_transaction_wave,
+                attended_neighbours_nb_for_transaction_wave,
             ) = {
                 let state = LOCAL_APP_STATE.lock().await;
                 (
                     state.get_site_addr(),
                     state.get_site_id().to_string(),
-                    state.get_peers_addrs_string(),
-                    state.get_clock().clone(),
-                    state.nb_connected_neighbours,
-                    state.connected_neighbours_addrs.clone(),
-                    state.parent_addr_for_transaction_wave.clone(),
-                    state.attended_neighbours_nb_for_transaction_wave.clone(),
+                    state.get_peers_addrs(),
+                    state.get_clock(),
+                    state.get_nb_connected_neighbours(),
+                    state.get_connected_neighbours_addrs(),
+                    state.get_parent_addr_for_transaction_wave(),
+                    state.get_attended_neighbours_nb_for_transaction_wave(),
                 )
             };
 
@@ -391,57 +387,27 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
             println!("📊 System Information:");
             println!("----------------------------------------");
             println!("Database : {}", db_path);
-            println!("Local Address: {}", local_addr);
+            println!("Local Address: {}", site_addr);
             println!("Site ID: {}", site_id);
-            println!("Number of connected neighbors: {}", nb_neighbours);
+            println!("Number of peers: {}", peer_addrs.len());
             println!("Peers: {:?}", peer_addrs);
+            println!("Number of connected neighbors: {}", nb_connected_neighbours);
+            println!(
+                "Number of connected neighbors: {:?}",
+                connected_neighbours_addrs
+            );
             println!("Vector Clock: {:?}", clock.get_vector_clock_map());
             println!("Lamport Clock: {}", clock.get_lamport());
-            println!("----------------------------------------");
-            log::info!("ℹ️  Info: This is a distributed banking system.");
-            log::info!("ℹ️  Version: 0.0.1");
-            log::info!(
-                "ℹ️  Authors: Aubin Vert, Théo Guegan, Alexandre Eberhardt, Léopold Chappuis"
+            println!("--------- Wave diffusion info ------------");
+            println!(
+                "Parent addresses for wave (if any): {:?}",
+                parent_addr_for_transaction_wave
             );
-            log::info!("ℹ️  License: MIT");
-            log::info!("ℹ️  Local address: {}", local_addr);
-            log::info!("ℹ️  Site ID: {}", site_id);
-            log::info!("ℹ️  Peers: {:?}", peer_addrs);
-            log::info!("ℹ️  Number of in use neighbours: {}", nb_neighbours);
-
-            let mut msg: String = " ".to_string();
-            for neig in in_use_neighbours {
-                msg += neig.to_string().as_str();
-                msg += "  ";
-            }
-            log::info!("ℹ️  In use neighbours: {}", msg);
-
-            log::info!("ℹ️  Wave diffusion parameters\n");
-
-            log::info!("ℹ️  Parent addresses\n");
-            let mut msg_parent: String = " ".to_string();
-            for (key, addr) in parent_addr {
-                msg_parent += key.as_str();
-                msg_parent += " ";
-                msg_parent += addr.to_string().as_str();
-                msg_parent += " \n";
-            }
-
-            log::info!("{}", msg_parent);
-
-            log::info!("ℹ️  Nb_of_attended_neighbours\n");
-            let mut msg_nb_a_i: String = " ".to_string();
-            for (init_id, nb) in nb_of_in_use_neig {
-                msg_nb_a_i += init_id.as_str();
-                msg_nb_a_i += " ";
-                msg_nb_a_i += nb.to_string().as_str();
-                msg_nb_a_i += " \n";
-            }
-
-            log::info!("{}", msg_nb_a_i);
-
-            log::info!("ℹ️  Lamport clock: {:?}", clock.get_lamport());
-            log::info!("ℹ️  Vector clock: {:?}", clock.get_vector_clock_map());
+            println!(
+                "Attended neighbours for wave (if any): {:?}",
+                attended_neighbours_nb_for_transaction_wave
+            );
+            println!("----------------------------------------");
         }
 
         Command::Unknown(msg) => {
@@ -468,10 +434,10 @@ pub async fn process_network_command(
     use crate::message::MessageInfo;
     use log;
 
-    let message_lamport_time = received_clock.get_lamport().clone();
-    let message_vc_clock = received_clock.get_vector_clock_map().clone();
+    let message_lamport_time = received_clock.get_lamport();
+    let message_vc_clock = received_clock.get_vector_clock_map();
 
-    if crate::db::transaction_exists(message_lamport_time, site_id)? {
+    if crate::db::transaction_exists(*message_lamport_time, site_id)? {
         log::info!("Transaction allready exists, skipping");
         return Ok(());
     }
