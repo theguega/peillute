@@ -502,6 +502,12 @@ pub async fn handle_network_message(
             }
             NetworkMessageCode::Disconnect => {
                 log::debug!("Disconnect message received: {:?}", message);
+                // here we should decrease the number of connected peers
+
+                let mut state = LOCAL_APP_STATE.lock().await;
+                state.connected_neighbours_addrs.retain(|addr| addr != &message.sender_addr);
+                state.nb_connected_neighbours = state.connected_neighbours_addrs.len() as i64;
+                
                 // let mut state = LOCAL_APP_STATE.lock().await;
                 // state.remove_peer(
                 //     message.message_initiator_id.as_str(),

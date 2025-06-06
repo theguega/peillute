@@ -118,7 +118,6 @@ impl AppState {
 
         self.update_clock(None).await;
 
-        // On déclare notre requête locale
         self.global_mutex_fifo.insert(
             self.site_id.clone(),
             MutexStamp {
@@ -131,7 +130,7 @@ impl AppState {
         if self.nb_connected_neighbours == 0 {
             self.waiting_sc = false;
             self.in_sc = true;
-            self.notify_sc.notify_waiters(); // wake up the CLI awaiting SC
+            self.notify_sc.notify_waiters(); // wake up the CLI awaiting critical section
             return Ok(());
         }
 
