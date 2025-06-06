@@ -15,6 +15,8 @@ pub struct AppState {
     cli_peer_addrs: Vec<std::net::SocketAddr>,
     /// List of deg(1) neighbours connected addresses
     connected_neighbours_addrs: Vec<std::net::SocketAddr>,
+    /// Hashmap of sockets for each deg(1) neighbours
+    neighbours_socket: std::collections::HashMap<std::net::SocketAddr, std::net::SocketAddr>,
 
     // --- Message Diffusion Info ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
@@ -39,10 +41,12 @@ impl AppState {
         let parent_addr = std::collections::HashMap::new();
         let nb_of_attended_neighbors = std::collections::HashMap::new();
         let in_use_neighbors = Vec::new();
+        let sockets_for_connected_peers = std::collections::HashMap::new();
 
         Self {
             site_id,
             cli_peer_addrs: peer_addrs,
+            neighbours_socket: sockets_for_connected_peers,
             site_addr: local_addr,
             parent_addr_for_transaction_wave: parent_addr,
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
@@ -82,10 +86,11 @@ impl AppState {
     /// This function should be safe to call multiple times
     ///
     /// If a new site appear on the netword, every peers will launch a wave diffusion to announce the presence of this new site
-    pub fn add_peer(
+    pub fn add_connected_peer(
         &mut self,
         new_site_id: &str,
         new_addr: std::net::SocketAddr,
+        new_socket: std::net::SocketAddr,
         received_clock: crate::clock::Clock,
     ) {
         if !self.connected_neighbours_addrs.contains(&new_addr) {
@@ -96,6 +101,7 @@ impl AppState {
                 .insert(new_site_id.to_string(), self.cli_peer_addrs.len() as i64);
             self.parent_addr_for_transaction_wave
                 .insert(new_site_id.to_string(), "0.0.0.0:0".parse().unwrap());
+            self.neighbours_socket.insert(new_socket, new_addr);
         }
     }
 
@@ -106,20 +112,46 @@ impl AppState {
     /// If a site disappear from the network, every neighbours will detected the closing of the tcp connection and will launch a wave diffusion to announce the disappearance of this site
     ///
     /// If a site is closed properly, it will send a disconnect message to all its neighbours
-    pub fn remove_peer(&mut self, site_id_to_remove: &str, addr_to_remove: std::net::SocketAddr) {
+    pub fn remove_peer(&mut self, addr_to_remove: std::net::SocketAddr) {
         if let Some(pos) = self
             .connected_neighbours_addrs
             .iter()
             .position(|x| *x == addr_to_remove)
         {
             self.connected_neighbours_addrs.remove(pos);
-            self.attended_neighbours_nb_for_transaction_wave
-                .remove(site_id_to_remove);
-            self.parent_addr_for_transaction_wave
-                .remove(site_id_to_remove);
+
+            // TODO: what happend if it occur during a wave diffusion ?
+            // self.attended_neighbours_nb_for_transaction_wave
+            //     .remove(&site_id_to_remove);
+            // self.parent_addr_for_transaction_wave
+            //     .remove(&site_id_to_remove);
+
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value
         }
+    }
+
+    /// Removes a peer from the network with only an address
+    ///
+    /// This function should be safe to call multiple times
+    ///
+    /// If a site disappear from the network, every neighbours will detected the closing of the tcp connection and will launch a wave diffusion to announce the disappearance of this site
+    ///
+    /// If a site is closed properly, it will send a disconnect message to all its neighbours
+    pub fn remove_peer_from_socket_closed(&mut self, socket_to_remove: std::net::SocketAddr) {
+        // Find the site adress based on the socket
+        let Some(addr_to_remove) = self.neighbours_socket.get(&socket_to_remove) else {
+            return;
+        };
+
+        // Remove the site from the list of connected neighbours
+        self.connected_neighbours_addrs
+            .retain(|x| x != addr_to_remove);
+
+        // TODO: what happend if it occur during a wave diffusion ?
+
+        // We can keep the clock value for the site we want to remove
+        // if the site re-appears, it will be updated with the new clock value
     }
 
     /// Returns the local address as a string

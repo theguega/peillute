@@ -97,22 +97,21 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_addr, site_id, clocks, nb_peers, peer_addrs) = {
+    let (local_addr, site_id, clocks, cli_peer) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_site_addr(),
             state.get_site_id(),
             state.get_clock(),
-            state.get_peers_addrs().len(),
             state.get_peers_addrs(),
         )
     };
 
     let mut handles = Vec::new();
 
-    if nb_peers > 0 {
+    if cli_peer.len() > 0 {
         log::debug!("Manually connecting to peers based on args");
-        for peer in peer_addrs {
+        for peer in cli_peer {
             let site_id = site_id.clone();
             let clocks = clocks.clone();
 
@@ -184,7 +183,7 @@ pub async fn start_listening(stream: tokio::net::TcpStream, addr: std::net::Sock
 /// Implement our wave diffusion protocol
 pub async fn handle_network_message(
     mut stream: tokio::net::TcpStream,
-    addr: std::net::SocketAddr,
+    socket_of_the_sender: std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::{Message, MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
@@ -196,13 +195,20 @@ pub async fn handle_network_message(
         let n = stream.read(&mut buf).await?;
 
         if n == 0 {
-            log::warn!("Connection closed by: {}", addr);
+            log::warn!("Connection closed by: {}", socket_of_the_sender);
             // Here we should remove the site from the network in the app state
-            // We should also prevent all neighbours that this site have been removed from the network using the wave diffusion protocol
+            {
+                log::debug!(
+                    "Trying to remove site {} from the network",
+                    socket_of_the_sender
+                );
+                let mut state = LOCAL_APP_STATE.lock().await;
+                state.remove_peer_from_socket_closed(socket_of_the_sender);
+            }
             return Ok(());
         }
 
-        log::debug!("Received {} bytes from {}", n, addr);
+        log::debug!("Received {} bytes from {}", n, socket_of_the_sender);
 
         let message: Message = match decode::from_slice(&buf[..n]) {
             Ok(msg) => msg,
@@ -218,12 +224,20 @@ pub async fn handle_network_message(
             NetworkMessageCode::Discovery => {
                 let mut state = LOCAL_APP_STATE.lock().await;
 
-                // Return ack message if this peer
-                if !state
+                // Try to add this new site as a new peer
+                state.add_connected_peer(
+                    &message.message_initiator_id,
+                    message.message_initiator_addr,
+                    socket_of_the_sender,
+                    message.clock.clone(),
+                );
+
+                // Return ack message if this is peer
+                if state
                     .get_peers_addrs()
                     .iter()
                     .find(|addr| addr == &&message.sender_addr)
-                    .is_none()
+                    .is_some()
                 {
                     if state
                         .get_connected_neighbours_addrs()
@@ -442,15 +456,9 @@ pub async fn handle_network_message(
                 log::debug!("Error message received: {:?}", message);
             }
             NetworkMessageCode::Disconnect => {
-                // Here we should remove the site from the network in the app state
-                // We should also prevent all neighbours that this site have been removed from the network using the wave diffusion protocol
-
                 {
                     let mut state = LOCAL_APP_STATE.lock().await;
-                    state.remove_peer(
-                        message.message_initiator_id.as_str(),
-                        message.message_initiator_addr,
-                    );
+                    state.remove_peer(message.message_initiator_addr);
                 }
 
                 log::debug!("Site {} disconnected", message.message_initiator_id);

@@ -196,7 +196,7 @@ async fn disconnect() {
     use crate::state::LOCAL_APP_STATE;
     use log::{error, info};
 
-    let (local_addr, site_id, peer_addrs) = {
+    let (local_addr, site_id, connected_nei_addr) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_site_addr(),
@@ -206,7 +206,7 @@ async fn disconnect() {
     };
 
     info!("Shutting down site {}.", site_id);
-    for peer_addr in peer_addrs {
+    for peer_addr in connected_nei_addr {
         // increment the clock for every deconnection
         let clock = {
             let mut state = LOCAL_APP_STATE.lock().await;
