@@ -43,42 +43,6 @@ pub enum NetworkMessageCode {
 }
 
 #[cfg(feature = "server")]
-impl NetworkMessageCode {
-    #[allow(unused)]
-    /// Returns the string representation of the message code
-    pub fn code(&self) -> &'static str {
-        match self {
-            NetworkMessageCode::Discovery => "discovery",
-            NetworkMessageCode::Transaction => "transaction",
-            NetworkMessageCode::TransactionAcknowledgement => "transaction_acknowledgement",
-            NetworkMessageCode::Acknowledgment => "acknowledgment",
-            NetworkMessageCode::Error => "error",
-            NetworkMessageCode::Disconnect => "disconnect",
-            NetworkMessageCode::Sync => "sync",
-            NetworkMessageCode::SnapshotRequest => "snapshot_request",
-            NetworkMessageCode::SnapshotResponse => "snapshot_response",
-        }
-    }
-
-    #[allow(unused)]
-    /// Converts a string code to a NetworkMessageCode variant
-    pub fn from_code(code: &str) -> Option<Self> {
-        match code {
-            "discovery" => Some(NetworkMessageCode::Discovery),
-            "transaction" => Some(NetworkMessageCode::Transaction),
-            "transaction_acknowledgement" => Some(NetworkMessageCode::TransactionAcknowledgement),
-            "acknowledgment" => Some(NetworkMessageCode::Acknowledgment),
-            "error" => Some(NetworkMessageCode::Error),
-            "disconnect" => Some(NetworkMessageCode::Disconnect),
-            "sync" => Some(NetworkMessageCode::Sync),
-            "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
-            "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
-            _ => None,
-        }
-    }
-}
-
-#[cfg(feature = "server")]
 /// Represents a message exchanged between nodes in the network
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct Message {
@@ -285,17 +249,5 @@ mod tests {
             code: NetworkMessageCode::Transaction,
         };
         assert!(format!("{:?}", message).contains("Message { sender_id: \"A\""));
-    }
-
-    #[test]
-    fn test_network_message_code_conversion() {
-        let code = NetworkMessageCode::Transaction;
-        assert_eq!(code.code(), "transaction");
-
-        let from_code = NetworkMessageCode::from_code("transaction");
-        assert_eq!(from_code, Some(NetworkMessageCode::Transaction));
-
-        let invalid_code = NetworkMessageCode::from_code("invalid");
-        assert_eq!(invalid_code, None);
     }
 }
