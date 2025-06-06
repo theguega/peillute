@@ -40,6 +40,13 @@ pub enum NetworkMessageCode {
     SnapshotRequest,
     /// Message containing a state snapshot
     SnapshotResponse,
+
+    /// Request to acquire the global mutex
+    AcquireMutex,
+    // / Request to release the global mutex
+    ReleaseGlobalMutex,
+    /// Acknowledgment of the global mutex acquisition
+    AckGlobalMutex,
 }
 
 #[cfg(feature = "server")]
@@ -57,6 +64,9 @@ impl NetworkMessageCode {
             NetworkMessageCode::Sync => "sync",
             NetworkMessageCode::SnapshotRequest => "snapshot_request",
             NetworkMessageCode::SnapshotResponse => "snapshot_response",
+            NetworkMessageCode::AcquireMutex => "acquire_mutex",
+            NetworkMessageCode::ReleaseGlobalMutex => "release_global_mutex",
+            NetworkMessageCode::AckGlobalMutex => "ack_global_mutex",
         }
     }
 
@@ -73,6 +83,9 @@ impl NetworkMessageCode {
             "sync" => Some(NetworkMessageCode::Sync),
             "snapshot_request" => Some(NetworkMessageCode::SnapshotRequest),
             "snapshot_response" => Some(NetworkMessageCode::SnapshotResponse),
+            "acquire_mutex" => Some(NetworkMessageCode::AcquireMutex),
+            "release_global_mutex" => Some(NetworkMessageCode::ReleaseGlobalMutex),
+            "ack_global_mutex" => Some(NetworkMessageCode::AckGlobalMutex),
             _ => None,
         }
     }
@@ -118,9 +131,20 @@ pub enum MessageInfo {
     Refund(Refund),
     /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
+    AcquireMutex(AcquireMutexPayload),
+    ReleaseMutex(ReleaseMutexPayload),
+    AckMutex(AckMutexPayload),
     /// No payload
     None,
 }
+
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AcquireMutexPayload;
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct ReleaseMutexPayload;
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AckMutexPayload { pub clock: i64 }
 
 #[cfg(feature = "server")]
 /// Response to a state snapshot request

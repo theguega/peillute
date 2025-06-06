@@ -79,6 +79,13 @@ pub enum Command {
 pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
+
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.acquire_mutex().await?;
+        // on attend d'avoir le mutex global de l'app
+    }
+
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr().clone();
@@ -453,6 +460,12 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
         }
     }
 
+    {
+        // on relache le mutex global de l'app
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.release_mutex().await?;
+    }
+
     Ok(())
 }
 
@@ -535,6 +548,15 @@ pub async fn process_network_command(
         }
         crate::message::MessageInfo::SnapshotResponse(_) => {
             // Handle snapshot response
+        }
+        crate::message::MessageInfo::AckMutex(_) => {
+            // Handle mutex acknowledgment
+        }
+        crate::message::MessageInfo::AcquireMutex(_) => {
+            // Handle mutex request
+        }
+        crate::message::MessageInfo::ReleaseMutex(_) => {
+            // Handle mutex release
         }
         crate::message::MessageInfo::None => {
             // No action needed

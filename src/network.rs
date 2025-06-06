@@ -212,7 +212,55 @@ pub async fn handle_network_message(
 
         log::debug!("Message received: {:?}", message);
 
+
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.update_clock(Some(&message.clock)).await;
+            drop(state);
+        }
+
         match message.code {
+
+        NetworkMessageCode::AcquireMutex => {
+            let mut st = LOCAL_APP_STATE.lock().await;
+            st.global_mutex_fifo.insert(message.sender_id.clone(),
+                        crate::state::MutexStamp { tag: crate::state::MutexTag::Request,
+                                    date: message.clock.get_lamport().clone() });
+
+            send_message(
+                message.sender_addr,
+                MessageInfo::AckMutex(crate::message::AckMutexPayload{ clock: st.clocks.get_lamport().clone() }),
+                None,
+                NetworkMessageCode::AckGlobalMutex,
+                st.site_addr,
+                st.get_site_id(),
+                &message.message_initiator_id,
+                message.message_initiator_addr,
+                st.clocks.clone(),
+            ).await?;
+
+            st.try_enter_sc();
+        }
+
+        NetworkMessageCode::AckGlobalMutex => {
+            let mut st = LOCAL_APP_STATE.lock().await;
+
+            st.global_mutex_fifo.insert(message.sender_id.clone(),
+                        crate::state::MutexStamp { tag: crate::state::MutexTag::Ack,
+                                    date: message.clock.get_lamport().clone() });
+            st.try_enter_sc();
+        }
+
+        NetworkMessageCode::ReleaseGlobalMutex => {
+            let mut st = LOCAL_APP_STATE.lock().await;
+
+            st.global_mutex_fifo.insert(message.sender_id.clone(),
+                        crate::state::MutexStamp{ tag: crate::state::MutexTag::Release,
+                                    date: message.clock.get_lamport().clone() });
+            st.try_enter_sc();
+        }
+
+
             NetworkMessageCode::Discovery => {
                 let mut state = LOCAL_APP_STATE.lock().await;
 
@@ -495,9 +543,6 @@ pub async fn handle_network_message(
                 on_sync().await;
             }
         }
-
-        let mut state = LOCAL_APP_STATE.lock().await;
-        state.update_clock(Some(&message.clock)).await;
     }
 }
 
