@@ -99,6 +99,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
             notify.notified().await;
         }
     }
+    log::info!("Critical section acquired, processing command...");
 
     let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;

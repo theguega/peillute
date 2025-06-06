@@ -669,6 +669,43 @@ pub async fn diffuse_message(
     Ok(())
 }
 
+
+pub async fn diffuse_message_without_lock(
+    message: &crate::message::Message,
+    local_addr: &str,
+    site_id: &str,
+    peer_addrs: &[std::net::SocketAddr],
+    parent_address: &std::net::SocketAddr,
+) -> Result<(), Box<dyn std::error::Error>> {
+
+    log::debug!("debut diffusion without lock");
+
+    for peer_addr in peer_addrs {
+        let peer_addr_str = peer_addr.to_string();
+        if peer_addr != parent_address {
+            log::debug!("Sending message to: {}", peer_addr_str);
+
+            if let Err(e) = send_message(
+                peer_addr.clone(),
+                message.info.clone(),
+                message.command.clone(),
+                message.code.clone(),
+                local_addr.parse().unwrap(),
+                &site_id,
+                &message.message_initiator_id,
+                message.message_initiator_addr,
+                message.clock.clone(),
+            )
+            .await
+            {
+                log::error!("❌ Impossible d’envoyer à {} : {}", peer_addr_str, e);
+            }
+        }
+    }
+    Ok(())
+}
+
+
 #[cfg(feature = "server")]
 #[allow(unused)]
 pub async fn on_sync() {

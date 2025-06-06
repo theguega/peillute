@@ -114,7 +114,7 @@ impl AppState {
 
     pub async fn acquire_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
-        use crate::network::diffuse_message;
+        use crate::network::diffuse_message_without_lock;
 
         self.update_clock(None).await;
 
@@ -128,6 +128,13 @@ impl AppState {
         );
         self.waiting_sc = true;
 
+        if self.nb_connected_neighbours == 0 {
+            self.waiting_sc = false;
+            self.in_sc = true;
+            self.notify_sc.notify_waiters(); // wake up the CLI awaiting SC
+            return Ok(());
+        }
+
         let msg = Message {
             sender_id: self.site_id.clone(),
             sender_addr: self.site_addr,
@@ -139,13 +146,13 @@ impl AppState {
             code: NetworkMessageCode::AcquireMutex,
         };
 
-        diffuse_message(&msg).await?;
+        diffuse_message_without_lock(&msg, &self.get_site_addr(), &self.get_site_id(), &self.get_peers_addrs(), &self.get_parent_addr(msg.message_initiator_id.clone())).await?;
         Ok(())
     }
 
     pub async fn release_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
-        use crate::network::diffuse_message;
+        use crate::network::diffuse_message_without_lock;
 
         self.update_clock(None).await;
 
@@ -160,7 +167,7 @@ impl AppState {
             code: NetworkMessageCode::ReleaseGlobalMutex,
         };
 
-        diffuse_message(&msg).await?;
+        diffuse_message_without_lock(&msg, &self.get_site_addr(), &self.get_site_id(), &self.get_peers_addrs(), &self.get_parent_addr(msg.message_initiator_id.clone())).await?;
 
         self.global_mutex_fifo.remove(&self.site_id);
         self.in_sc = false;
