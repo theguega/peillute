@@ -88,7 +88,6 @@ impl AppState {
     /// If a new site appear on the netword, every peers will launch a wave diffusion to announce the presence of this new site
     pub fn add_incomming_peer(
         &mut self,
-        new_site_id: &str,
         new_addr: std::net::SocketAddr,
         new_socket: std::net::SocketAddr,
         received_clock: crate::clock::Clock,
@@ -97,13 +96,6 @@ impl AppState {
             self.connected_neighbours_addrs.push(new_addr);
             self.clocks
                 .update_clock(self.site_id.clone().as_str(), Some(&received_clock));
-            self.attended_neighbours_nb_for_transaction_wave.insert(
-                new_site_id.to_string(),
-                self.get_nb_connected_neighbours() - 1,
-            );
-            self.parent_addr_for_transaction_wave
-                .insert(new_site_id.to_string(), new_addr);
-            log::debug!("Inserting {} with value {}", new_socket, new_addr);
             self.neighbours_socket.insert(new_socket, new_addr);
         }
     }
