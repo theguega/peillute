@@ -188,7 +188,6 @@ pub async fn handle_network_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::{Message, MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
-    use crate::state::{MutexStamp, MutexTag};
     use rmp_serde::decode;
     use tokio::io::AsyncReadExt;
 
@@ -221,57 +220,333 @@ pub async fn handle_network_message(
 
         match message.code {
             NetworkMessageCode::AcquireMutex => {
-                // A node is requesting to enter the critical section
-                let mut st = LOCAL_APP_STATE.lock().await;
-                st.global_mutex_fifo.insert(
-                    message.sender_id.clone(),
-                    MutexStamp {
-                        tag: MutexTag::Request,
-                        date: message.clock.get_lamport().clone(),
-                    },
-                );
+                // We store the request
+                {
+                    let mut st = LOCAL_APP_STATE.lock().await;
+                    st.global_mutex_fifo.insert(
+                        message.message_initiator_id.clone(),
+                        crate::state::MutexStamp {
+                            tag: crate::state::MutexTag::Request,
+                            date: message.clock.get_lamport().clone(),
+                        },
+                    );
+                }
+                // wave diffusion
+                let mut diffuse = false;
+                let (local_site_id, local_site_addr) = {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    let parent_id = state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id)
+                        .unwrap_or(&"0.0.0.0:0".parse().unwrap())
+                        .to_string();
+                    if parent_id == "0.0.0.0:0" {
+                        state.set_parent_addr(
+                            message.message_initiator_id.clone(),
+                            message.sender_addr,
+                        );
 
-                // TODO : add wave diffusion
-                send_message(
-                    message.sender_addr,
-                    MessageInfo::AckMutex(crate::message::AckMutexPayload {
-                        clock: st.clocks.get_lamport().clone(),
-                    }),
-                    None,
-                    NetworkMessageCode::AckGlobalMutex,
-                    st.site_addr,
-                    st.get_site_id(),
-                    &message.message_initiator_id,
-                    message.message_initiator_addr,
-                    st.clocks.clone(),
-                )
-                .await?;
+                        let nb_neighbours = state.nb_connected_neighbours;
+                        let current_value = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(nb_neighbours);
 
-                st.try_enter_sc();
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                        log::debug!("Nombre de voisin : {}", current_value - 1);
+
+                        diffuse = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(0)
+                            > 0;
+                    }
+                    (state.site_id.clone(), state.site_addr.clone())
+                };
+
+                if diffuse {
+                    let mut snd_msg = message.clone();
+                    snd_msg.sender_id = local_site_id.to_string();
+                    snd_msg.sender_addr = local_site_addr;
+                    diffuse_message(&snd_msg).await?;
+                } else {
+                    let (parent_addr, local_addr, site_id) = {
+                        let state = LOCAL_APP_STATE.lock().await;
+                        (
+                            state.get_parent_addr(message.message_initiator_id.clone()),
+                            &state.get_site_addr(),
+                            &state.get_site_id().to_string(),
+                        )
+                    };
+                    // Acquit message to parent
+                    log::debug!(
+                            "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                            message.sender_addr.to_string().as_str()
+                        );
+                    send_message(
+                        message.sender_addr,
+                        MessageInfo::AckMutex(crate::message::AckMutexPayload {
+                            clock: message.clock.get_lamport().clone(),
+                        }),
+                        None,
+                        NetworkMessageCode::AckGlobalMutex,
+                        local_addr.parse().unwrap(),
+                        site_id,
+                        &message.message_initiator_id,
+                        message.message_initiator_addr,
+                        message.clock.clone(),
+                    )
+                    .await?;
+
+                    if message.sender_addr == parent_addr {
+                        // réinitialisation s'il s'agit de la remontée après réception des rouges de tous les fils
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        let peer_count = state.connected_neighbours_addrs.len();
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        state.parent_addr_for_transaction_wave.insert(
+                            message.message_initiator_id.clone(),
+                            "0.0.0.0:0".parse().unwrap(),
+                        );
+                    }
+                }
             }
 
             NetworkMessageCode::AckGlobalMutex => {
-                // another node acknowledged our request to enter the critical section
-                let mut st = LOCAL_APP_STATE.lock().await;
-                st.global_mutex_fifo.insert(
-                    message.sender_id.clone(),
-                    MutexStamp {
-                        tag: MutexTag::Ack,
-                        date: message.clock.get_lamport().clone(),
-                    },
-                );
-                st.try_enter_sc();
+                // Message rouge
+                let mut state = LOCAL_APP_STATE.lock().await;
+
+                let nb_neighbours = state.nb_connected_neighbours;
+                let current_value = state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(nb_neighbours);
+                state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                if state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id.clone())
+                    .copied()
+                    .unwrap_or(-1)
+                    == 0
+                {
+                    if state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id.clone())
+                        .copied()
+                        .unwrap_or("99.99.99.99:0".parse().unwrap())
+                        == state.site_addr
+                    {
+                        // on est chez le parent
+                        // diffusion terminée
+                        // Réinitialisation
+
+                        log::error!("Diffusion terminée et réussie !");
+                        state.try_enter_sc();
+                    } else {
+                        log::debug!(
+                            "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
+                            state.site_addr.clone().to_string().as_str(),
+                            state
+                                .get_parent_addr(message.message_initiator_id.clone())
+                                .to_string()
+                                .as_str()
+                        );
+                        send_message(
+                            state.get_parent_addr(message.message_initiator_id.clone()),
+                            MessageInfo::AckMutex(crate::message::AckMutexPayload {
+                                clock: message.clock.get_lamport().clone(),
+                            }),
+                            None,
+                            NetworkMessageCode::AckGlobalMutex,
+                            state.get_site_addr().parse().unwrap(),
+                            &state.get_site_id().to_string(),
+                            &message.message_initiator_id,
+                            message.message_initiator_addr,
+                            state.get_clock().clone(),
+                        )
+                        .await?;
+                    }
+
+                    let peer_count = state.connected_neighbours_addrs.len();
+                    state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                    state.parent_addr_for_transaction_wave.insert(
+                        message.message_initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap(),
+                    );
+                }
             }
 
             NetworkMessageCode::AckReleaseGlobalMutex => {
-                // A node is acknowledging our release of the critical section
+                // Message rouge
+                let mut state = LOCAL_APP_STATE.lock().await;
+
+                let nb_neighbours = state.nb_connected_neighbours;
+                let current_value = state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(nb_neighbours);
+                state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                if state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id.clone())
+                    .copied()
+                    .unwrap_or(-1)
+                    == 0
+                {
+                    if state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id.clone())
+                        .copied()
+                        .unwrap_or("99.99.99.99:0".parse().unwrap())
+                        == state.site_addr
+                    {
+                        // on est chez le parent
+                        // diffusion terminée
+                        // Réinitialisation
+
+                        log::error!("Diffusion terminée et réussie !");
+                        // On vient de release la section critique, on peut essayer d'y entrer à nouveau
+                        state.try_enter_sc();
+                    } else {
+                        log::debug!(
+                            "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
+                            state.site_addr.clone().to_string().as_str(),
+                            state
+                                .get_parent_addr(message.message_initiator_id.clone())
+                                .to_string()
+                                .as_str()
+                        );
+                        send_message(
+                            state.get_parent_addr(message.message_initiator_id.clone()),
+                            MessageInfo::None,
+                            None,
+                            NetworkMessageCode::AckReleaseGlobalMutex,
+                            state.get_site_addr().parse().unwrap(),
+                            &state.get_site_id().to_string(),
+                            &message.message_initiator_id,
+                            message.message_initiator_addr,
+                            state.get_clock().clone(),
+                        )
+                        .await?;
+                    }
+
+                    let peer_count = state.connected_neighbours_addrs.len();
+                    state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                    state.parent_addr_for_transaction_wave.insert(
+                        message.message_initiator_id.clone(),
+                        "0.0.0.0:0".parse().unwrap(),
+                    );
+                }
             }
 
             NetworkMessageCode::ReleaseGlobalMutex => {
                 // A node is releasing the critical section
-                let mut st = LOCAL_APP_STATE.lock().await;
-                st.global_mutex_fifo.remove(&message.sender_id);
-                st.try_enter_sc();
+                {
+                    let mut st = LOCAL_APP_STATE.lock().await;
+                    st.global_mutex_fifo.remove(&message.message_initiator_id);
+                    st.try_enter_sc();
+                }
+                // wave diffusion
+                let mut diffuse = false;
+                let (local_site_id, local_site_addr) = {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    let parent_id = state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id)
+                        .unwrap_or(&"0.0.0.0:0".parse().unwrap())
+                        .to_string();
+                    if parent_id == "0.0.0.0:0" {
+                        state.set_parent_addr(
+                            message.message_initiator_id.clone(),
+                            message.sender_addr,
+                        );
+
+                        let nb_neighbours = state.nb_connected_neighbours;
+                        let current_value = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(nb_neighbours);
+
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                        log::debug!("Nombre de voisin : {}", current_value - 1);
+
+                        diffuse = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(0)
+                            > 0;
+                    }
+                    (state.site_id.clone(), state.site_addr.clone())
+                };
+
+                if diffuse {
+                    let mut snd_msg = message.clone();
+                    snd_msg.sender_id = local_site_id.to_string();
+                    snd_msg.sender_addr = local_site_addr;
+                    diffuse_message(&snd_msg).await?;
+                } else {
+                    let (parent_addr, local_addr, site_id) = {
+                        let state = LOCAL_APP_STATE.lock().await;
+                        (
+                            state.get_parent_addr(message.message_initiator_id.clone()),
+                            &state.get_site_addr(),
+                            &state.get_site_id().to_string(),
+                        )
+                    };
+                    // Acquit message to parent
+                    log::debug!(
+                            "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                            message.sender_addr.to_string().as_str()
+                        );
+                    send_message(
+                        message.sender_addr,
+                        MessageInfo::None,
+                        None,
+                        NetworkMessageCode::AckReleaseGlobalMutex,
+                        local_addr.parse().unwrap(),
+                        site_id,
+                        &message.message_initiator_id,
+                        message.message_initiator_addr,
+                        message.clock.clone(),
+                    )
+                    .await?;
+
+                    if message.sender_addr == parent_addr {
+                        // réinitialisation s'il s'agit de la remontée après réception des rouges de tous les fils
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        let peer_count = state.connected_neighbours_addrs.len();
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        state.parent_addr_for_transaction_wave.insert(
+                            message.message_initiator_id.clone(),
+                            "0.0.0.0:0".parse().unwrap(),
+                        );
+                    }
+                }
             }
 
             NetworkMessageCode::Discovery => {

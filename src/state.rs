@@ -8,6 +8,7 @@
 pub enum MutexTag {
     Request,
     Release,
+    #[allow(dead_code)]
     Ack,
 }
 
@@ -152,7 +153,7 @@ impl AppState {
             &self.get_site_addr(),
             &self.get_site_id(),
             &self.get_peers_addrs(),
-            &self.get_parent_addr(msg.message_initiator_id.clone()),
+            &&self.get_parent_addr(msg.message_initiator_id.clone()),
         )
         .await?;
         Ok(())
@@ -180,7 +181,7 @@ impl AppState {
             &self.get_site_addr(),
             &self.get_site_id(),
             &self.get_peers_addrs(),
-            &self.get_parent_addr(msg.message_initiator_id.clone()),
+            &&self.get_parent_addr(msg.message_initiator_id.clone()),
         )
         .await?;
 
