@@ -47,6 +47,7 @@ pub enum NetworkMessageCode {
     ReleaseGlobalMutex,
     /// Acknowledgment of the global mutex acquisition
     AckGlobalMutex,
+    AckReleaseGlobalMutex,
 }
 
 #[cfg(feature = "server")]
@@ -67,6 +68,7 @@ impl NetworkMessageCode {
             NetworkMessageCode::AcquireMutex => "acquire_mutex",
             NetworkMessageCode::ReleaseGlobalMutex => "release_global_mutex",
             NetworkMessageCode::AckGlobalMutex => "ack_global_mutex",
+            NetworkMessageCode::AckReleaseGlobalMutex => "ack_release_global_mutex",
         }
     }
 
@@ -86,6 +88,7 @@ impl NetworkMessageCode {
             "acquire_mutex" => Some(NetworkMessageCode::AcquireMutex),
             "release_global_mutex" => Some(NetworkMessageCode::ReleaseGlobalMutex),
             "ack_global_mutex" => Some(NetworkMessageCode::AckGlobalMutex),
+            "ack_release_global_mutex" => Some(NetworkMessageCode::AckReleaseGlobalMutex),
             _ => None,
         }
     }

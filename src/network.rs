@@ -263,6 +263,10 @@ pub async fn handle_network_message(
                 st.try_enter_sc();
             }
 
+            NetworkMessageCode::AckReleaseGlobalMutex => {
+                // A node is acknowledging our release of the critical section
+            }
+
             NetworkMessageCode::ReleaseGlobalMutex => {
                 // A node is releasing the critical section
                 let mut st = LOCAL_APP_STATE.lock().await;
