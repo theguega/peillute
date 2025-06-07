@@ -610,9 +610,11 @@ pub async fn handle_network_message(
                                         "Global snapshot ready to save, hold per site : {:#?}",
                                         gs.missing
                                     );
-                                    crate::snapshot::persist(&gs, state.get_site_id())
+                                    mgr.path = crate::snapshot::persist(&gs, state.get_site_id())
                                         .await
-                                        .unwrap();
+                                        .unwrap()
+                                        .parse()
+                                        .ok();
                                 }
                             } else if mgr.mode == crate::snapshot::SnapshotMode::SyncMode {
                                 log::debug!(
