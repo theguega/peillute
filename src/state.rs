@@ -120,11 +120,7 @@ impl AppState {
         {
             self.connected_neighbours_addrs.remove(pos);
 
-            // TODO: what happend if it occur during a wave diffusion ?
-            // self.attended_neighbours_nb_for_transaction_wave
-            //     .remove(&site_id_to_remove);
-            // self.parent_addr_for_transaction_wave
-            //     .remove(&site_id_to_remove);
+            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value
@@ -152,11 +148,7 @@ impl AppState {
         {
             self.connected_neighbours_addrs.remove(pos);
 
-            // TODO: what happend if it occur during a wave diffusion ?
-            // self.attended_neighbours_nb_for_transaction_wave
-            //     .remove(&site_id_to_remove);
-            // self.parent_addr_for_transaction_wave
-            //     .remove(&site_id_to_remove);
+            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value

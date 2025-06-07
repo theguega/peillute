@@ -79,14 +79,13 @@ pub enum Command {
 pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    let (clock, site_addr, site_id, alone_on_net) = {
+    let (clock, site_addr, site_id) = {
         let mut state = LOCAL_APP_STATE.lock().await;
         let local_addr = state.get_site_addr();
         let node = state.get_site_id();
         let _ = state.update_clock(None);
         let clock = state.get_clock();
-        let alone_on_network = state.get_connected_nei_addr().len() == 0;
-        (clock, local_addr, node, alone_on_network)
+        (clock, local_addr, node)
     };
 
     match cmd {
@@ -108,15 +107,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_addr: site_addr,
             };
 
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            }
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::UserAccounts => {
@@ -159,15 +161,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr,
             };
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            }
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::Withdraw => {
@@ -198,15 +203,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_addr: site_addr,
             };
 
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            }
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::Transfer => {
@@ -241,15 +249,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_addr: site_addr,
             };
 
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            }
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::Pay => {
@@ -280,15 +291,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_addr: site_addr,
             };
 
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
                 state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            }
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::Refund => {
@@ -320,15 +334,18 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
                 message_initiator_addr: site_addr,
             };
 
-            {
+            let should_diffuse = {
                 // initialisation des paramètres avant la diffusion d'un message
                 let mut state = LOCAL_APP_STATE.lock().await;
                 let nb_neigh = state.get_nb_connected_neighbours();
                 state.set_parent_addr(site_id.to_string(), site_addr);
-                state.set_nb_nei_for_wave(site_addr.to_string(), nb_neigh);
-            }
+                state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
+                nb_neigh > 0
+            };
 
-            diffuse_message(&msg).await?;
+            if should_diffuse {
+                diffuse_message(&msg).await?;
+            }
         }
 
         Command::Help => {
@@ -351,7 +368,8 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 
         Command::Snapshot => {
             println!("📸 Starting snapshot...");
-            super::snapshot::start_snapshot(alone_on_net).await?;
+            use crate::snapshot;
+            snapshot::start_snapshot(snapshot::SnapshotMode::FileMode).await?;
         }
 
         Command::Info => {
@@ -445,6 +463,10 @@ pub async fn process_network_command(
 
     match msg {
         crate::message::MessageInfo::CreateUser(create_user) => {
+            if crate::db::user_exists(&create_user.name)? {
+                log::info!("User already exists, skipping");
+                return Ok(());
+            }
             super::db::create_user(&create_user.name)?;
         }
         crate::message::MessageInfo::Deposit(deposit) => {

@@ -223,7 +223,11 @@ pub async fn handle_network_message(
             }
         };
 
-        log::debug!("Message received: {:?}", message.clone());
+        log::debug!(
+            "Message received from site {} : {:?}",
+            message.sender_addr,
+            message.clone()
+        );
 
         match message.code {
             NetworkMessageCode::Discovery => {
@@ -287,16 +291,10 @@ pub async fn handle_network_message(
             NetworkMessageCode::Transaction => {
                 // messages bleus
                 if message.command.is_some() {
-                    let site_id = {
-                        let state = LOCAL_APP_STATE.lock().await;
-                        state.get_site_id()
-                    };
-
-                    use crate::control::process_network_command;
-                    if let Err(e) = process_network_command(
+                    if let Err(e) = crate::control::process_network_command(
                         message.info.clone(),
                         message.clock.clone(),
-                        &site_id,
+                        message.message_initiator_id.as_str(),
                     )
                     .await
                     {
@@ -424,7 +422,7 @@ pub async fn handle_network_message(
                         println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
                     } else {
                         log::debug!(
-                            "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
+                            "On est dans le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
                             state.get_site_addr().to_string().as_str(),
                             state
                                 .get_parent_addr_for_wave(message.message_initiator_id.clone())
@@ -467,44 +465,248 @@ pub async fn handle_network_message(
                 log::debug!("Site {} disconnected", message.message_initiator_id);
             }
             NetworkMessageCode::SnapshotRequest => {
-                let txs = crate::db::get_local_transaction_log()?;
-                let summaries: Vec<_> = txs.iter().map(|t| t.into()).collect();
+                // messages bleus
+                // wave diffusion
+                let mut diffuse = false;
+                let (local_site_id, local_site_addr) = {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    let parent_id = state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id.clone())
+                        .unwrap_or(&"0.0.0.0:0".parse().unwrap())
+                        .to_string();
+                    if parent_id == "0.0.0.0:0" {
+                        state.set_parent_addr(
+                            message.message_initiator_id.clone(),
+                            message.sender_addr,
+                        );
 
-                let (site_id, clock, local_addr) = {
-                    let st = LOCAL_APP_STATE.lock().await;
-                    (st.get_site_id(), st.get_clock(), st.get_site_addr())
+                        let nb_neighbours = state.get_nb_connected_neighbours();
+                        let current_value = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id)
+                            .copied()
+                            .unwrap_or(nb_neighbours);
+
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                        log::debug!("Nombre de voisin : {}", current_value - 1);
+
+                        diffuse = state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .get(&message.message_initiator_id.clone())
+                            .copied()
+                            .unwrap_or(0)
+                            > 0;
+                    }
+                    (state.get_site_id(), state.get_site_addr())
                 };
 
-                send_message(
-                    message.sender_addr,
-                    MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
-                        site_id: site_id.clone(),
-                        clock: clock.clone(),
-                        tx_log: summaries,
-                    }),
-                    None,
-                    NetworkMessageCode::SnapshotResponse,
-                    local_addr,
-                    &site_id,
-                    &message.message_initiator_id,
-                    message.message_initiator_addr,
-                    clock.clone(),
-                )
-                .await?;
-            }
-            NetworkMessageCode::SnapshotResponse => {
-                if let MessageInfo::SnapshotResponse(resp) = message.info {
-                    let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
-                    // False for now without wave it can never end
-                    if let Some(gs) = mgr.push(resp, false) {
-                        log::info!("Global snapshot ready, hold per site : {:#?}", gs.missing);
-                        crate::snapshot::persist(&gs).await.unwrap();
+                if diffuse {
+                    let mut snd_msg = message.clone();
+                    snd_msg.sender_id = local_site_id.to_string();
+                    snd_msg.sender_addr = local_site_addr;
+                    // Here we should diffuse the message because we are not on a leaf
+                    // We should also start a snapshot in network mode
+                    // When this snapshot is done, we should send the global snapshot to the parent
+                    log::debug!(
+                        "We are not on a leaf, we start our own global snapshot construction and diffuse the request to other nodes"
+                    );
+                    crate::snapshot::start_snapshot(crate::snapshot::SnapshotMode::NetworkMode)
+                        .await?;
+                    // When can then diffuse the request to other nodes
+                    diffuse_message(&snd_msg).await?;
+                } else {
+                    let parent_addr = {
+                        let state = LOCAL_APP_STATE.lock().await;
+                        state.get_parent_addr_for_wave(message.message_initiator_id.clone())
+                    };
+                    // Acquit message to parent
+                    log::debug!(
+                        "Réception d'une demande de snapshot, on est sur une feuille, on crée un snapshot local, on envoie à {}",
+                        message.sender_addr.to_string().as_str()
+                    );
+                    // Here we are on a leaf, we can crate a local snapshot and send it to the parent
+                    let txs = crate::db::get_local_transaction_log()?;
+                    let summaries: Vec<_> = txs.iter().map(|t| t.into()).collect();
+
+                    let (site_id, clock, local_addr) = {
+                        let st = LOCAL_APP_STATE.lock().await;
+                        (st.get_site_id(), st.get_clock(), st.get_site_addr())
+                    };
+
+                    send_message(
+                        message.sender_addr,
+                        MessageInfo::SnapshotResponse(crate::message::SnapshotResponse {
+                            site_id: site_id.clone(),
+                            clock: clock.clone(),
+                            tx_log: summaries,
+                        }),
+                        None,
+                        NetworkMessageCode::SnapshotResponse,
+                        local_addr,
+                        &site_id,
+                        &message.message_initiator_id,
+                        message.message_initiator_addr,
+                        clock.clone(),
+                    )
+                    .await?;
+
+                    if message.sender_addr == parent_addr {
+                        // réinitialisation s'il s'agit de la remontée après réception des rouges de tous les fils
+                        let mut state = LOCAL_APP_STATE.lock().await;
+                        let peer_count = state.get_nb_connected_neighbours();
+                        state
+                            .attended_neighbours_nb_for_transaction_wave
+                            .insert(message.message_initiator_id.clone(), peer_count as i64);
+                        state
+                            .parent_addr_for_transaction_wave
+                            .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
                     }
                 }
             }
-            NetworkMessageCode::Sync => {
-                log::debug!("Sync message received: {:?}", message);
-                on_sync().await;
+            NetworkMessageCode::SnapshotResponse => {
+                // Message rouge
+                let mut state = LOCAL_APP_STATE.lock().await;
+
+                let nb_neighbours = state.get_nb_connected_neighbours();
+                let current_value = state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(nb_neighbours);
+                state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .insert(message.message_initiator_id.clone(), current_value - 1);
+
+                if state
+                    .attended_neighbours_nb_for_transaction_wave
+                    .get(&message.message_initiator_id)
+                    .copied()
+                    .unwrap_or(-1)
+                    == 0
+                {
+                    if state
+                        .parent_addr_for_transaction_wave
+                        .get(&message.message_initiator_id)
+                        .copied()
+                        .unwrap_or("99.99.99.99:0".parse().unwrap())
+                        == state.get_site_addr()
+                    {
+                        // on est chez le parent
+                        // diffusion terminée
+                        // Réinitialisation
+                        log::debug!(
+                            "L'initiateur à reçu toutes ses snapshots, il devrait créer sa snapshot globale"
+                        );
+                        if let MessageInfo::SnapshotResponse(resp) = message.info {
+                            let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
+                            if mgr.mode == crate::snapshot::SnapshotMode::FileMode {
+                                log::debug!("La snapshot devrait être sauvegardée");
+                                if let Some(gs) = mgr.push(resp) {
+                                    log::info!(
+                                        "Global snapshot ready to save, hold per site : {:#?}",
+                                        gs.missing
+                                    );
+                                    crate::snapshot::persist(&gs, state.get_site_id())
+                                        .await
+                                        .unwrap();
+                                }
+                            } else if mgr.mode == crate::snapshot::SnapshotMode::SyncMode {
+                                log::debug!(
+                                    "La snapshot devrait être utilisée pour la synchronisation"
+                                );
+                                if let Some(gs) = mgr.push(resp) {
+                                    log::info!(
+                                        "Global snapshot ready to be synced, hold per site : {:#?}",
+                                        gs.missing
+                                    );
+                                    println!("Application de la snapshot pour synchroniser");
+                                }
+                            }
+                        }
+
+                        println!("\x1b[1;31mDiffusion terminée et réussie !\x1b[0m");
+                    } else {
+                        log::debug!(
+                            "On est dans le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
+                            state.get_site_addr().to_string().as_str(),
+                            state
+                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .to_string()
+                                .as_str()
+                        );
+                        log::debug!(
+                            "On devrait pouvoir construire une snapshot globale avec tous nos voisins et l'envoyer à l'adresse de notre parent {}",
+                            state
+                                .get_parent_addr_for_wave(message.message_initiator_id.clone())
+                                .to_string()
+                                .as_str()
+                        );
+                        if let MessageInfo::SnapshotResponse(resp) = message.info {
+                            let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
+                            if mgr.mode == crate::snapshot::SnapshotMode::NetworkMode {
+                                log::debug!("La snapshot devrait être envoyés au père");
+                                if let Some(gs) = mgr.push(resp) {
+                                    log::info!(
+                                        "Global snapshot ready to be send to parent, hold per site : {:#?}",
+                                        gs.missing
+                                    );
+                                    send_message(
+                                        state.get_parent_addr_for_wave(
+                                            message.message_initiator_id.clone(),
+                                        ),
+                                        MessageInfo::SnapshotResponse(
+                                            crate::message::SnapshotResponse {
+                                                site_id: state.get_site_id().to_string(),
+                                                clock: state.get_clock(),
+                                                tx_log: gs.all_transactions.into_iter().collect(),
+                                            },
+                                        ),
+                                        None,
+                                        NetworkMessageCode::SnapshotResponse,
+                                        state.get_site_addr(),
+                                        &state.get_site_id().to_string(),
+                                        &message.message_initiator_id,
+                                        message.message_initiator_addr,
+                                        state.get_clock(),
+                                    )
+                                    .await?;
+                                } else {
+                                    log::error!("Le site aurait du récupérer toutes ses snapshots");
+                                }
+                            }
+                        } else {
+                            log::error!("Message de type SnapshotResponse attendu, mais pas reçu");
+                        }
+                    }
+
+                    let peer_count = state.get_nb_connected_neighbours();
+                    state
+                        .attended_neighbours_nb_for_transaction_wave
+                        .insert(message.message_initiator_id.clone(), peer_count as i64);
+                    state
+                        .parent_addr_for_transaction_wave
+                        .insert(message.message_initiator_id, "0.0.0.0:0".parse().unwrap());
+                } else {
+                    log::debug!(
+                        "On a reçu un message rouge d'un des fils mais la vague n'est pas encore terminée"
+                    );
+                    // We should add the Snapshot to our manager
+                    if let MessageInfo::SnapshotResponse(resp) = message.info {
+                        let mut mgr = crate::snapshot::LOCAL_SNAPSHOT_MANAGER.lock().await;
+                        log::debug!("La snapshot devrait être ajoutés à l'état du manager");
+                        if let Some(_) = mgr.push(resp) {
+                            log::error!(
+                                "On ne devrait pas encore pouvoir construire une snapshot globale vu que la vague n'est pas terminée"
+                            );
+                        }
+                    } else {
+                        log::error!("Message de type SnapshotResponse attendu, mais pas reçu");
+                    }
+                }
             }
         }
 
@@ -599,9 +801,12 @@ pub async fn diffuse_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
 
-    log::debug!("debut diffusion");
+    log::debug!(
+        "Début de la diffusion d'un message de type {:?}",
+        message.code
+    );
 
-    let (local_addr, site_id, peer_addrs, parent_address) = {
+    let (local_addr, site_id, connected_nei_addr, parent_address) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_site_addr(),
@@ -611,13 +816,13 @@ pub async fn diffuse_message(
         )
     };
 
-    for peer_addr in peer_addrs {
-        let peer_addr_str = peer_addr.to_string();
-        if peer_addr != parent_address {
+    for connected_nei in connected_nei_addr {
+        let peer_addr_str = connected_nei.to_string();
+        if connected_nei != parent_address {
             log::debug!("Sending message to: {}", peer_addr_str);
 
             if let Err(e) = send_message(
-                peer_addr,
+                connected_nei,
                 message.info.clone(),
                 message.command.clone(),
                 message.code.clone(),

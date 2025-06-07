@@ -95,12 +95,8 @@ async fn get_peer_addrs() -> Result<Vec<String>, ServerFnError> {
 /// Ask for a snapshot
 #[server]
 async fn ask_for_snapshot() -> Result<(), ServerFnError> {
-    use crate::state::LOCAL_APP_STATE;
-    let alone_on_network = {
-        let state = LOCAL_APP_STATE.lock().await;
-        state.get_connected_nei_addr().len() == 0
-    };
-    let _ = crate::snapshot::start_snapshot(alone_on_network).await;
+    use crate::snapshot;
+    let _ = snapshot::start_snapshot(snapshot::SnapshotMode::FileMode).await;
     Ok(())
 }
 

@@ -34,8 +34,6 @@ pub enum NetworkMessageCode {
     Error,
     /// Message for gracefully disconnecting from the network
     Disconnect,
-    /// Message for synchronizing state between nodes
-    Sync,
     /// Message requesting a state snapshot
     SnapshotRequest,
     /// Message containing a state snapshot
