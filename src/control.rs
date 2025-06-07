@@ -15,31 +15,49 @@ pub fn control_worker() {
                 st.notify_sc.clone()
             };
 
-            // ② Attendre la notification (aucun verrou tenu)
+            // réveille dès qu'on a la section critique
             notify.notified().await;
 
-            // ③ Traiter la file
-            loop {
-                let cmd_opt = {
-                    let mut st = LOCAL_APP_STATE.lock().await;
-                    st.pending_commands.pop_front()
+            // Vider la file de tsx en attente
+            {
+                let (in_st, waiting, nb_pending) = {
+                    let st = LOCAL_APP_STATE.lock().await;
+                    (st.in_sc, st.waiting_sc, st.pending_commands.len())
                 };
-                if let Some(cmd) = cmd_opt {
-                    if let Err(e) = crate::control::execute_critical(cmd).await {
-                        log::error!("Erreur exécution commande critique : {}", e);
-                    }
-                } else {
-                    break;
+
+                if !waiting && nb_pending > 0 && !in_st {
+                    let mut st = LOCAL_APP_STATE.lock().await;
+                    let _ = st.acquire_mutex().await;
+                    continue;
                 }
+
+                if in_st && nb_pending > 0 {
+                    log::info!("Début de la section critique");
+                    loop {
+                        let cmd_opt = {
+                            let mut st = LOCAL_APP_STATE.lock().await;
+                            st.pending_commands.pop_front()
+                        };
+                        if let Some(cmd) = cmd_opt {
+                            log::info!("Execute critical command");
+                            if let Err(e) = crate::control::execute_critical(cmd).await {
+                                log::error!("Erreur exécution commande critique : {}", e);
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                log::info!("Fin de la section critique");
             }
 
             // ④ Relâcher le mutex global
-            {
-                let mut st = LOCAL_APP_STATE.lock().await;
-                if let Err(e) = st.release_mutex().await {
-                    log::error!("Erreur release_mutex : {}", e);
-                }
-            }
+            //{
+            //    let mut st = LOCAL_APP_STATE.lock().await;
+            //    if let Err(e) = st.release_mutex().await {
+            //        log::error!("Erreur release_mutex : {}", e);
+            //    }
+            //}
         }
     });
 }

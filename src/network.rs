@@ -742,6 +742,11 @@ pub async fn handle_network_message(
                         // Réinitialisation
 
                         log::error!("Diffusion terminée et réussie !");
+
+                        if state.pending_commands.len() == 0 {
+                            // fin de la section critique on peut notifier les pairs
+                            state.release_mutex().await?;
+                        }
                     } else {
                         log::debug!(
                             "On est de le noeud {}. On a reçu un rouge de tous nos fils: on acquite au parent {}",
