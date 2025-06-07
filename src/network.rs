@@ -188,9 +188,9 @@ pub async fn handle_network_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::{Message, MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
+    use crate::state::{MutexStamp, MutexTag};
     use rmp_serde::decode;
     use tokio::io::AsyncReadExt;
-    use crate::state::{MutexStamp, MutexTag};
 
     let mut buf = vec![0; 1024];
     loop {
@@ -655,11 +655,12 @@ pub async fn diffuse_message(
         &site_id,
         &peer_addrs[..],
         &parent_address,
-    ).await?;
+    )
+    .await?;
     Ok(())
 }
 
-// flemme de modif l'autre partout donc j'ai modif celle là 
+// flemme de modif l'autre partout donc j'ai modif celle là
 pub async fn diffuse_message_without_lock(
     message: &crate::message::Message,
     local_addr: &str,
@@ -667,7 +668,6 @@ pub async fn diffuse_message_without_lock(
     peer_addrs: &[std::net::SocketAddr],
     parent_address: &std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
     log::debug!("debut diffusion");
 
     for peer_addr in peer_addrs {
@@ -694,7 +694,6 @@ pub async fn diffuse_message_without_lock(
     }
     Ok(())
 }
-
 
 #[cfg(feature = "server")]
 #[allow(unused)]

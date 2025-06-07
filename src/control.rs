@@ -3,43 +3,46 @@
 //! This module provides the command-line interface and command handling functionality
 //! for the Peillute application, including both local and network command processing.
 
+#![cfg(feature = "server")]
+pub fn control_worker() {
+    tokio::spawn(async {
+        use crate::state::LOCAL_APP_STATE;
 
-pub async fn start_command_worker() {
-    use crate::state::LOCAL_APP_STATE;
-    tokio::spawn(async move {
         loop {
-            // attente passive de la section critique
-            {
+            // ① Récupérer Notify sans garder le verrou
+            let notify = {
                 let st = LOCAL_APP_STATE.lock().await;
-                if !st.in_sc {
-                    let notify = st.notify_sc.clone();
-                    drop(st);
-                    notify.notified().await;
-                    continue;
-                }
-            }
+                st.notify_sc.clone()
+            };
+
+            // ② Attendre la notification (aucun verrou tenu)
+            notify.notified().await;
+
+            // ③ Traiter la file
             loop {
                 let cmd_opt = {
                     let mut st = LOCAL_APP_STATE.lock().await;
                     st.pending_commands.pop_front()
                 };
-                match cmd_opt {
-                    Some(c) => {
-                        if let Err(e) = crate::control::execute_command(c).await {
-                            log::error!("cmd error: {}", e);
-                        }
+                if let Some(cmd) = cmd_opt {
+                    if let Err(e) = crate::control::execute_critical(cmd).await {
+                        log::error!("Erreur exécution commande critique : {}", e);
                     }
-                    None => break,
+                } else {
+                    break;
                 }
             }
-            let mut st = LOCAL_APP_STATE.lock().await;
-            if let Err(e) = st.release_mutex().await {
-                log::error!("release error: {}", e);
+
+            // ④ Relâcher le mutex global
+            {
+                let mut st = LOCAL_APP_STATE.lock().await;
+                if let Err(e) = st.release_mutex().await {
+                    log::error!("Erreur release_mutex : {}", e);
+                }
             }
         }
     });
 }
-
 
 #[cfg(feature = "server")]
 /// Parse a line of input from the CLI and converts it to a Command
@@ -109,47 +112,52 @@ pub enum Command {
     Snapshot,
 }
 
-fn is_critical(cmd: &Command) -> bool {
-    matches!(
-        cmd,
-        Command::CreateUser
-            | Command::Deposit
-            | Command::Withdraw
-            | Command::Transfer
-            | Command::Pay
-            | Command::Refund
-    )
+#[cfg(feature = "server")]
+pub enum CriticalCommands {
+    CreateUser {
+        name: String,
+    },
+    Deposit {
+        name: String,
+        amount: f64,
+    },
+    Withdraw {
+        name: String,
+        amount: f64,
+    },
+    Transfer {
+        from: String,
+        to: String,
+        amount: f64,
+    },
+    Pay {
+        name: String,
+        amount: f64,
+    },
+    Refund {
+        name: String,
+        lamport: i64,
+        node: String,
+    },
 }
 
 #[cfg(feature = "server")]
-/// Process commands received from the CLI
-/// Update the clock of the site
-/// Interact with the database
-/// Implement our wave diffusion protocol
-pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
+async fn enqueue_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::error::Error>> {
     use crate::state::LOCAL_APP_STATE;
-    if !is_critical(&cmd) {
-        return execute_command(cmd).await;
-    }
-
     let mut st = LOCAL_APP_STATE.lock().await;
+
     st.pending_commands.push_back(cmd);
 
+    // si on n’est ni en SC ni déjà en attente → on déclenche la vague
     if !st.in_sc && !st.waiting_sc {
         st.acquire_mutex().await?;
     }
     Ok(())
 }
 
-
-
-
-#[cfg(feature = "server")]
-/// Execute a command from the CLI
-/// Update the clock of the site
-/// Interact with the database
-/// Implement our wave diffusion protocol
-pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn execute_critical(cmd: CriticalCommands) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::message::{Message, MessageInfo, NetworkMessageCode};
+    use crate::network::diffuse_message;
     use crate::state::LOCAL_APP_STATE;
 
     let (clock, site_addr, site_id) = {
@@ -161,15 +169,13 @@ pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Err
         (clock, local_addr, node)
     };
 
+    let msg;
+
     match cmd {
-        Command::CreateUser => {
-            let name = prompt("Username");
+        CriticalCommands::CreateUser { name } => {
+            use crate::message::CreateUser;
             super::db::create_user(&name)?;
-
-            use crate::message::{CreateUser, Message, MessageInfo, NetworkMessageCode};
-            use crate::network::diffuse_message;
-
-            let msg = Message {
+            msg = Message {
                 command: Some(Command::CreateUser),
                 info: MessageInfo::CreateUser(CreateUser::new(name.clone())),
                 code: NetworkMessageCode::Transaction,
@@ -179,16 +185,145 @@ pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Err
                 message_initiator_id: site_id.to_string(),
                 message_initiator_addr: site_addr.parse().unwrap(),
             };
+        }
+        CriticalCommands::Deposit { name, amount } => {
+            use crate::message::Deposit;
 
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
-            }
+            super::db::deposit(
+                &name,
+                amount,
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
+            )?;
 
-            diffuse_message(&msg).await?;
+            msg = Message {
+                command: Some(Command::Deposit),
+                info: MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+        }
+        CriticalCommands::Withdraw { name, amount } => {
+            use crate::message::Withdraw;
+            super::db::withdraw(
+                &name,
+                amount,
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
+            )?;
+
+            msg = Message {
+                command: Some(Command::Withdraw),
+                info: MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+        }
+        CriticalCommands::Transfer { from, to, amount } => {
+            use crate::message::Transfer;
+            super::db::create_transaction(
+                &from,
+                &to,
+                amount,
+                clock.get_lamport(),
+                site_id.as_str(),
+                "",
+                clock.get_vector_clock_map(),
+            )?;
+            msg = Message {
+                command: Some(Command::Transfer),
+                info: MessageInfo::Transfer(Transfer::new(from.clone(), to.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+        }
+        CriticalCommands::Pay { name, amount } => {
+            use crate::message::Pay;
+            super::db::create_transaction(
+                &name,
+                "NULL",
+                amount,
+                clock.get_lamport(),
+                site_id.as_str(),
+                "",
+                clock.get_vector_clock_map(),
+            )?;
+            msg = Message {
+                command: Some(Command::Pay),
+                info: MessageInfo::Pay(Pay::new(name.clone(), amount)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+        }
+        CriticalCommands::Refund {
+            name,
+            lamport,
+            node,
+        } => {
+            use crate::message::Refund;
+            super::db::refund_transaction(
+                lamport,
+                &node.as_str(),
+                clock.get_lamport(),
+                site_id.as_str(),
+                clock.get_vector_clock_map(),
+            )?;
+            msg = Message {
+                command: Some(Command::Refund),
+                info: MessageInfo::Refund(Refund::new(name, lamport, node)),
+                code: NetworkMessageCode::Transaction,
+                clock: clock.clone(),
+                sender_addr: site_addr.parse().unwrap(),
+                sender_id: site_id.to_string(),
+                message_initiator_id: site_id.to_string(),
+                message_initiator_addr: site_addr.parse().unwrap(),
+            };
+        }
+    }
+
+    {
+        // initialisation des paramètres avant la diffusion d'un message
+        let mut state = LOCAL_APP_STATE.lock().await;
+        let nb_neigh = state.nb_connected_neighbours;
+        state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
+        state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+    }
+
+    diffuse_message(&msg).await?;
+
+    Ok(())
+}
+
+#[cfg(feature = "server")]
+/// Execute a command from the CLI
+/// Update the clock of the site
+/// Interact with the database
+/// Implement our wave diffusion protocol
+pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::state::LOCAL_APP_STATE;
+
+    match cmd {
+        Command::CreateUser => {
+            let name = prompt("Username");
+            enqueue_critical(CriticalCommands::CreateUser { name }).await?;
         }
 
         Command::UserAccounts => {
@@ -206,79 +341,23 @@ pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Err
 
         Command::Deposit => {
             let name = prompt("Username");
-
             let amount = prompt_parse::<f64>("Deposit amount");
-            super::db::deposit(
-                &name,
-                amount,
-                clock.get_lamport(),
-                site_id.as_str(),
-                clock.get_vector_clock_map(),
-            )?;
-
-            use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-
-            use crate::message::Message;
-            use crate::network::diffuse_message;
-
-            let msg = Message {
-                command: Some(Command::Deposit),
-                info: MessageInfo::Deposit(Deposit::new(name.clone(), amount)),
-                code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
-                sender_id: site_id.to_string(),
-                message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
-            };
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
-            }
-
-            diffuse_message(&msg).await?;
+            enqueue_critical(CriticalCommands::Deposit {
+                name: name,
+                amount: amount,
+            })
+            .await?;
         }
 
         Command::Withdraw => {
             let name = prompt("Username");
-
             let amount = prompt_parse::<f64>("Withdraw amount");
             if amount < 0.0 {}
-            super::db::withdraw(
-                &name,
-                amount,
-                clock.get_lamport(),
-                site_id.as_str(),
-                clock.get_vector_clock_map(),
-            )?;
-
-            use crate::message::Message;
-            use crate::message::{MessageInfo, NetworkMessageCode, Withdraw};
-            use crate::network::diffuse_message;
-
-            let msg = Message {
-                command: Some(Command::Withdraw),
-                info: MessageInfo::Withdraw(Withdraw::new(name.clone(), amount)),
-                code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
-                sender_id: site_id.to_string(),
-                message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
-            };
-
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
-            }
-
-            diffuse_message(&msg).await?;
+            enqueue_critical(CriticalCommands::Withdraw {
+                name: name,
+                amount: amount,
+            })
+            .await?;
         }
 
         Command::Transfer => {
@@ -288,83 +367,27 @@ pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Err
             let _ = super::db::print_users();
             let beneficiary = prompt("Beneficiary");
 
-            super::db::create_transaction(
-                &name,
-                &beneficiary,
+            enqueue_critical(CriticalCommands::Transfer {
+                from: name.clone(),
+                to: beneficiary.clone(),
                 amount,
-                clock.get_lamport(),
-                site_id.as_str(),
-                "",
-                clock.get_vector_clock_map(),
-            )?;
-
-            use crate::message::Message;
-            use crate::message::{MessageInfo, NetworkMessageCode, Transfer};
-            use crate::network::diffuse_message;
-
-            let msg = Message {
-                command: Some(Command::Transfer),
-                info: MessageInfo::Transfer(Transfer::new(
-                    name.clone(),
-                    beneficiary.clone(),
-                    amount,
-                )),
-                code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
-                sender_id: site_id.to_string(),
-                message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
-            };
-
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
-            }
-
-            diffuse_message(&msg).await?;
+            })
+            .await?;
         }
 
         Command::Pay => {
             let name = prompt("Username");
             let amount = prompt_parse::<f64>("Payment amount");
-            super::db::create_transaction(
-                &name,
-                "NULL",
-                amount,
-                clock.get_lamport(),
-                site_id.as_str(),
-                "",
-                clock.get_vector_clock_map(),
-            )?;
 
-            use crate::message::Message;
-            use crate::message::{MessageInfo, NetworkMessageCode, Pay};
-            use crate::network::diffuse_message;
-
-            let msg = Message {
-                command: Some(Command::Pay),
-                info: MessageInfo::Pay(Pay::new(name.clone(), amount)),
-                code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
-                sender_id: site_id.to_string(),
-                message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
-            };
-
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_id.to_string(), nb_neigh);
+            if amount <= 0.0 {
+                println!("❌ Amount must be positive");
+                return Ok(());
             }
-
-            diffuse_message(&msg).await?;
+            enqueue_critical(CriticalCommands::Pay {
+                name: name.clone(),
+                amount,
+            })
+            .await?;
         }
 
         Command::Refund => {
@@ -373,38 +396,13 @@ pub async fn execute_command(cmd: Command) -> Result<(), Box<dyn std::error::Err
 
             let transac_time = prompt_parse::<i64>("Lamport time");
             let transac_node = prompt("Node");
-            super::db::refund_transaction(
-                transac_time,
-                &transac_node.as_str(),
-                clock.get_lamport(),
-                site_id.as_str(),
-                clock.get_vector_clock_map(),
-            )?;
 
-            use crate::message::Message;
-            use crate::message::{MessageInfo, NetworkMessageCode, Refund};
-            use crate::network::diffuse_message;
-
-            let msg = Message {
-                command: Some(Command::Refund),
-                info: MessageInfo::Refund(Refund::new(name, transac_time, transac_node)),
-                code: NetworkMessageCode::Transaction,
-                clock: clock.clone(),
-                sender_addr: site_addr.parse().unwrap(),
-                sender_id: site_id.to_string(),
-                message_initiator_id: site_id.to_string(),
-                message_initiator_addr: site_addr.parse().unwrap(),
-            };
-
-            {
-                // initialisation des paramètres avant la diffusion d'un message
-                let mut state = LOCAL_APP_STATE.lock().await;
-                let nb_neigh = state.nb_connected_neighbours;
-                state.set_parent_addr(site_id.to_string(), site_addr.parse().unwrap());
-                state.set_number_of_attended_neighbors(site_addr.to_string(), nb_neigh);
-            }
-
-            diffuse_message(&msg).await?;
+            enqueue_critical(CriticalCommands::Refund {
+                name: name.clone(),
+                lamport: transac_time,
+                node: transac_node.clone(),
+            })
+            .await?;
         }
 
         Command::Help => {
@@ -666,7 +664,10 @@ async fn test_mutex_critical_section_high_load() {
     let mut state = AppState::new(
         "A".to_string(),
         2,
-        vec!["127.0.0.1:9001".parse().unwrap(), "127.0.0.1:9002".parse().unwrap()],
+        vec![
+            "127.0.0.1:9001".parse().unwrap(),
+            "127.0.0.1:9002".parse().unwrap(),
+        ],
         local_addr,
     );
 

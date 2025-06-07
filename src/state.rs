@@ -51,7 +51,7 @@ pub struct AppState {
     pub waiting_sc: bool,
     pub in_sc: bool,
     pub notify_sc: std::sync::Arc<tokio::sync::Notify>,
-    pub pending_commands: std::collections::VecDeque<crate::control::Command>,
+    pub pending_commands: std::collections::VecDeque<crate::control::CriticalCommands>,
 }
 
 #[cfg(feature = "server")]
@@ -147,7 +147,14 @@ impl AppState {
             code: NetworkMessageCode::AcquireMutex,
         };
 
-        diffuse_message_without_lock(&msg, &self.get_site_addr(), &self.get_site_id(), &self.get_peers_addrs(), &self.get_parent_addr(msg.message_initiator_id.clone())).await?;
+        diffuse_message_without_lock(
+            &msg,
+            &self.get_site_addr(),
+            &self.get_site_id(),
+            &self.get_peers_addrs(),
+            &self.get_parent_addr(msg.message_initiator_id.clone()),
+        )
+        .await?;
         Ok(())
     }
 
@@ -168,7 +175,14 @@ impl AppState {
             code: NetworkMessageCode::ReleaseGlobalMutex,
         };
 
-        diffuse_message_without_lock(&msg, &self.get_site_addr(), &self.get_site_id(), &self.get_peers_addrs(), &self.get_parent_addr(msg.message_initiator_id.clone())).await?;
+        diffuse_message_without_lock(
+            &msg,
+            &self.get_site_addr(),
+            &self.get_site_id(),
+            &self.get_peers_addrs(),
+            &self.get_parent_addr(msg.message_initiator_id.clone()),
+        )
+        .await?;
 
         self.global_mutex_fifo.remove(&self.site_id);
         // on retire les requêtes locales
@@ -183,9 +197,9 @@ impl AppState {
         // It checks if the site is waiting for the critical section and if it can enter
         // based on the FIFO order of requests in the global mutex FIFO.
 
-        // Pour respecter l'algo du poly il faut que la vague soit complete 
+        // Pour respecter l'algo du poly il faut que la vague soit complete
         // c'est à dire que tout le monde ait répondu ACK pour appeller cette fonction
-        // sinon on va entrer en section critique à un moment sans qu'un des peers ait noté notre demande 
+        // sinon on va entrer en section critique à un moment sans qu'un des peers ait noté notre demande
         if !self.waiting_sc {
             return;
         }
@@ -213,7 +227,7 @@ impl AppState {
             self.in_sc = true;
             // All other sites are notified that we are in critical section
             self.notify_sc.notify_waiters(); // notifies worker to execute pending commands
-            // We remove obsolete Releases
+                                             // We remove obsolete Releases
             self.global_mutex_fifo
                 .retain(|_, s| s.tag != MutexTag::Release);
         }
