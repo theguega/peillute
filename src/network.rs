@@ -128,22 +128,26 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
     //If there are no peers, we don't need to do anything
     if peer_to_ping.is_empty() {
         return;
-    }
-
-    // Set the number of attended neighbours
-    {
+    } else {
         let mut state = LOCAL_APP_STATE.lock().await;
         state.init_sync(true); // we need to sync with other sites
-        state.init_nb_first_attended_neighbours(peer_to_ping.len() as i64);
     }
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let success_count = Arc::new(AtomicUsize::new(0));
 
     // Send discovery messages after the decision logic
     let mut handles = Vec::new();
     for addr in peer_to_ping {
         let site_id = site_id.clone();
         let clocks = clocks.clone();
+        let local_addr = local_addr.clone();
+        let success_count = Arc::clone(&success_count);
+
         let handle = tokio::spawn(async move {
-            let _ = send_message(
+            let result = send_message(
                 addr,
                 MessageInfo::None,
                 None,
@@ -155,11 +159,20 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
                 clocks,
             )
             .await;
+
+            if result.is_ok() {
+                success_count.fetch_add(1, Ordering::SeqCst);
+            }
         });
         handles.push(handle);
     }
 
-    // Await all tasks
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
+    }
+
+    // Await all task
     for handle in handles {
         let _ = handle.await;
     }
@@ -285,7 +298,7 @@ pub async fn handle_network_message(
                     // We can start the sync process by starting a snapshot with sync mode
                     state.get_sync()
                         && state.get_nb_first_attended_neighbours()
-                            == state.get_nb_connected_neighbours()
+                            <= state.get_nb_connected_neighbours()
                 };
                 if ready_to_sync {
                     log::info!("All neighbours have responded, starting synchronization");

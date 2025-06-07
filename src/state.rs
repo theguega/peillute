@@ -82,11 +82,11 @@ impl AppState {
     }
 
     /// Set the sync boolean at initialization
-    pub fn init_sync(&mut self, sync: bool) {
-        if sync {
+    pub fn init_sync(&mut self, sync_needed: bool) {
+        if sync_needed {
             log::info!("Local site need to be in synchronized");
         }
-        self.sync_needed = sync;
+        self.sync_needed = sync_needed;
     }
 
     /// Get the sync boolean
@@ -96,6 +96,7 @@ impl AppState {
 
     /// Set the number of attended neighbours at initialization
     pub fn init_nb_first_attended_neighbours(&mut self, nb: i64) {
+        log::debug!("We will wait for {} attended neighbours", nb);
         self.nb_first_attended_neighbours = nb;
     }
 
