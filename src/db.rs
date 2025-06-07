@@ -105,7 +105,7 @@ pub fn init_db() -> rusqlite::Result<()> {
 }
 
 #[cfg(feature = "server")]
-/// Update the local state of the site◊
+/// Update the local state of the site
 pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite::Result<()> {
     use rusqlite::params;
 
@@ -128,6 +128,36 @@ pub fn update_local_state(site_id: &str, clock: crate::clock::Clock) -> rusqlite
         params![site_id, lamport_time, vector_clock_id],
     )?;
     Ok(())
+}
+
+#[cfg(feature = "server")]
+/// Update the database with a snapshot
+pub fn update_db_with_snapshot(
+    snapshot: &crate::snapshot::GlobalSnapshot,
+    vector_clock: &std::collections::HashMap<String, i64>,
+) {
+    log::info!("Applying snapshot to database");
+
+    if snapshot.missing.is_empty() {
+        log::info!("No missing transactions, nothing to do");
+        return;
+    }
+
+    for txs in snapshot.missing.values() {
+        for tx in txs {
+            let optional_msg = "";
+
+            let _ = crate::db::create_transaction(
+                &tx.from_user,
+                &tx.to_user,
+                (tx.amount_in_cent as f64) / 100.0,
+                &tx.lamport_time,
+                &tx.source_node,
+                &optional_msg,
+                vector_clock,
+            );
+        }
+    }
 }
 
 #[cfg(feature = "server")]

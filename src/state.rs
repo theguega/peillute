@@ -17,6 +17,10 @@ pub struct AppState {
     connected_neighbours_addrs: Vec<std::net::SocketAddr>,
     /// Hashmap of sockets for each deg(1) neighbours
     neighbours_socket: std::collections::HashMap<std::net::SocketAddr, std::net::SocketAddr>,
+    /// Synchronization boolean
+    sync_needed: bool,
+    /// Number of attended neighbours at launch, for the discovery phase
+    nb_first_attended_neighbours: i64,
 
     // --- Message Diffusion Info ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
@@ -52,6 +56,8 @@ impl AppState {
             attended_neighbours_nb_for_transaction_wave: nb_of_attended_neighbors,
             connected_neighbours_addrs: in_use_neighbors,
             clocks,
+            sync_needed: false,
+            nb_first_attended_neighbours: 0,
         }
     }
 
@@ -73,6 +79,29 @@ impl AppState {
     /// Set the clock at initialization
     pub fn init_clock(&mut self, clock: crate::clock::Clock) {
         self.clocks = clock;
+    }
+
+    /// Set the sync boolean at initialization
+    pub fn init_sync(&mut self, sync: bool) {
+        if sync {
+            log::info!("Local site need to be in synchronized");
+        }
+        self.sync_needed = sync;
+    }
+
+    /// Get the sync boolean
+    pub fn get_sync(&self) -> bool {
+        self.sync_needed
+    }
+
+    /// Set the number of attended neighbours at initialization
+    pub fn init_nb_first_attended_neighbours(&mut self, nb: i64) {
+        self.nb_first_attended_neighbours = nb;
+    }
+
+    /// Get the number of attended neighbours
+    pub fn get_nb_first_attended_neighbours(&self) -> i64 {
+        self.nb_first_attended_neighbours
     }
 
     /// Initialize the parent of the current site as self for the wave protocol

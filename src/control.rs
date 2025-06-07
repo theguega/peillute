@@ -448,7 +448,7 @@ pub async fn process_cli_command(cmd: Command) -> Result<(), Box<dyn std::error:
 pub async fn process_network_command(
     msg: crate::message::MessageInfo,
     received_clock: crate::clock::Clock,
-    site_id: &str,
+    sender_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::message::MessageInfo;
     use log;
@@ -456,7 +456,7 @@ pub async fn process_network_command(
     let message_lamport_time = received_clock.get_lamport();
     let message_vc_clock = received_clock.get_vector_clock_map();
 
-    if crate::db::transaction_exists(*message_lamport_time, site_id)? {
+    if crate::db::transaction_exists(*message_lamport_time, sender_id)? {
         log::info!("Transaction allready exists, skipping");
         return Ok(());
     }
@@ -474,7 +474,7 @@ pub async fn process_network_command(
                 &deposit.name,
                 deposit.amount,
                 &message_lamport_time,
-                site_id,
+                sender_id,
                 &message_vc_clock,
             )?;
         }
@@ -484,7 +484,7 @@ pub async fn process_network_command(
                 &withdraw.name,
                 withdraw.amount,
                 &message_lamport_time,
-                site_id,
+                sender_id,
                 &message_vc_clock,
             )?;
         }
@@ -495,7 +495,7 @@ pub async fn process_network_command(
                 &transfer.beneficiary,
                 transfer.amount,
                 &message_lamport_time,
-                site_id,
+                sender_id,
                 "",
                 &message_vc_clock,
             )?;
@@ -507,7 +507,7 @@ pub async fn process_network_command(
                 "NULL",
                 pay.amount,
                 &message_lamport_time,
-                site_id,
+                sender_id,
                 "",
                 &message_vc_clock,
             )?;
@@ -518,15 +518,15 @@ pub async fn process_network_command(
                 refund.transac_time,
                 &refund.transac_node,
                 &message_lamport_time,
-                site_id,
+                sender_id,
                 &message_vc_clock,
             )?;
         }
         crate::message::MessageInfo::SnapshotResponse(_) => {
-            // Handle snapshot response
+            log::error!("Should not process snapshot response");
         }
         crate::message::MessageInfo::None => {
-            // No action needed
+            log::error!("Should not process None message");
         }
     }
 

@@ -102,11 +102,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         state.init_clock(final_clock);
         state.init_parent_addr_for_transaction_wave();
         state.init_cli_peer_addrs(final_cli_peers_addrs);
-    }
-
-    if needs_sync {
-        log::info!("Sync request, node connexion reinitiated ");
-        network::on_sync().await;
+        state.init_sync(needs_sync);
     }
 
     // Create the network listener

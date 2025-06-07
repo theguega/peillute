@@ -96,14 +96,14 @@ pub async fn spawn_writer_task(
 }
 
 #[cfg(feature = "server")]
-/// Announces this node's presence to potential peers in the network
-/// If the user gave peers in args, we will only connect to those peers
-/// If not, we will scan the port range and try connecting to all sockets
+/// Announces this node's presence to potential peers in the network.
+/// If the user gave peers in args, we will only connect to those peers.
+/// If not, we will scan the port range and try connecting to all sockets.
 pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u16) {
     use crate::message::{MessageInfo, NetworkMessageCode};
     use crate::state::LOCAL_APP_STATE;
 
-    let (local_addr, site_id, clocks, cli_peer) = {
+    let (local_addr, site_id, clocks, cli_peers) = {
         let state = LOCAL_APP_STATE.lock().await;
         (
             state.get_site_addr(),
@@ -113,62 +113,55 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
         )
     };
 
-    let mut handles = Vec::new();
-
-    if cli_peer.len() > 0 {
+    // Collect all peers to contact
+    let peer_to_ping: Vec<std::net::SocketAddr> = if !cli_peers.is_empty() {
         log::debug!("Manually connecting to peers based on args");
-        for peer in cli_peer {
-            let site_id = site_id.clone();
-            let clocks = clocks.clone();
-
-            let handle = tokio::spawn(async move {
-                let _ = send_message(
-                    peer,
-                    MessageInfo::None,
-                    None,
-                    NetworkMessageCode::Discovery,
-                    local_addr,
-                    &site_id,
-                    &site_id,
-                    local_addr,
-                    clocks,
-                )
-                .await;
-            });
-
-            handles.push(handle);
-        }
+        cli_peers
     } else {
         log::debug!("Looking for all ports to find potential peers");
-        for port in start_port..=end_port {
-            if port == selected_port {
-                continue;
-            }
-            let address: std::net::SocketAddr = format!("{}:{}", ip, port).parse().unwrap();
-            let site_id = site_id.clone();
-            let clocks = clocks.clone();
+        (start_port..=end_port)
+            .filter(|&port| port != selected_port)
+            .map(|port| format!("{}:{}", ip, port).parse().unwrap())
+            .collect()
+    };
 
-            let handle = tokio::spawn(async move {
-                let _ = send_message(
-                    address,
-                    MessageInfo::None,
-                    None,
-                    NetworkMessageCode::Discovery,
-                    local_addr,
-                    &site_id,
-                    &site_id,
-                    local_addr,
-                    clocks,
-                )
-                .await;
-            });
+    //If there are no peers, we don't need to do anything
+    if peer_to_ping.is_empty() {
+        return;
+    }
 
-            handles.push(handle);
-        }
+    // Set the number of attended neighbours
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.init_sync(true); // we need to sync with other sites
+        state.init_nb_first_attended_neighbours(peer_to_ping.len() as i64);
+    }
 
-        for handle in handles {
-            let _ = handle.await;
-        }
+    // Send discovery messages after the decision logic
+    let mut handles = Vec::new();
+    for addr in peer_to_ping {
+        let site_id = site_id.clone();
+        let clocks = clocks.clone();
+        let handle = tokio::spawn(async move {
+            let _ = send_message(
+                addr,
+                MessageInfo::None,
+                None,
+                NetworkMessageCode::Discovery,
+                local_addr,
+                &site_id,
+                &site_id,
+                local_addr,
+                clocks,
+            )
+            .await;
+        });
+        handles.push(handle);
+    }
+
+    // Await all tasks
+    for handle in handles {
+        let _ = handle.await;
     }
 }
 
@@ -271,20 +264,33 @@ pub async fn handle_network_message(
             }
 
             NetworkMessageCode::Acknowledgment => {
-                let mut state = LOCAL_APP_STATE.lock().await;
-                // If the site received an acknoledgement from a site,
-                // It can be a site that is not in the network anymore
-                state.add_incomming_peer(
-                    message.sender_addr,
-                    socket_of_the_sender,
-                    message.clock.clone(),
-                );
-                if message.message_initiator_addr == state.get_site_addr() {
-                    for (site_id, nb_a_i) in state.get_nb_nei_for_wave().iter() {
-                        state
-                            .attended_neighbours_nb_for_transaction_wave
-                            .insert(site_id.clone(), *nb_a_i + 1);
+                let ready_to_sync = {
+                    let mut state = LOCAL_APP_STATE.lock().await;
+                    // If the site received an acknoledgement from a site,
+                    // It can be a site that is not in the network anymore
+                    state.add_incomming_peer(
+                        message.sender_addr,
+                        socket_of_the_sender,
+                        message.clock.clone(),
+                    );
+                    if message.message_initiator_addr == state.get_site_addr() {
+                        for (site_id, nb_a_i) in state.get_nb_nei_for_wave().iter() {
+                            state
+                                .attended_neighbours_nb_for_transaction_wave
+                                .insert(site_id.clone(), *nb_a_i + 1);
+                        }
                     }
+                    // If we are in sync mode, we can start the sync process
+                    // And we have received all the responses from the first attended neighbours counter
+                    // We can start the sync process by starting a snapshot with sync mode
+                    state.get_sync()
+                        && state.get_nb_first_attended_neighbours()
+                            == state.get_nb_connected_neighbours()
+                };
+                if ready_to_sync {
+                    log::info!("All neighbours have responded, starting synchronization");
+                    crate::snapshot::start_snapshot(crate::snapshot::SnapshotMode::SyncMode)
+                        .await?;
                 }
             }
 
@@ -625,7 +631,10 @@ pub async fn handle_network_message(
                                         "Global snapshot ready to be synced, hold per site : {:#?}",
                                         gs.missing
                                     );
-                                    println!("Application de la snapshot pour synchroniser");
+                                    crate::db::update_db_with_snapshot(
+                                        &gs,
+                                        state.get_clock().get_vector_clock_map(),
+                                    );
                                 }
                             }
                         }
@@ -841,12 +850,6 @@ pub async fn diffuse_message(
         }
     }
     Ok(())
-}
-
-#[cfg(feature = "server")]
-pub async fn on_sync() {
-    // TODO: implement sync
-    return;
 }
 
 #[cfg(test)]

@@ -259,9 +259,11 @@ pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error
                     .unwrap()
                     .parse()
                     .ok();
+            } else if mode.clone() == SnapshotMode::SyncMode {
+                log::info!("No other site, synchronization done");
             } else {
                 log::error!(
-                    "Start snapshot is not supposed to be called when there is no neighbours with anything other than a file mode"
+                    "Start snapshot is not supposed to be called when there is no neighbours with network mode"
                 );
             }
         }
@@ -273,7 +275,7 @@ pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error
         use crate::message::{Message, MessageInfo, NetworkMessageCode};
         use crate::network::diffuse_message;
 
-        log::debug!("Snapshot request, should only appear on the initiator");
+        log::debug!("Snapshot request, this log should only appear on the initiator");
         let msg = Message {
             command: None,
             code: NetworkMessageCode::SnapshotRequest,
