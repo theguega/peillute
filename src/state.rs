@@ -4,6 +4,22 @@
 //! peer management, and logical clock synchronization.
 
 #[cfg(feature = "server")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MutexTag {
+    Request,
+    Release,
+    #[allow(dead_code)]
+    Ack,
+}
+
+#[cfg(feature = "server")]
+#[derive(Clone, Copy, Debug)]
+pub struct MutexStamp {
+    pub tag: MutexTag,
+    pub date: i64,
+}
+
+#[cfg(feature = "server")]
 /// Represents the global state of a Peillute node
 pub struct AppState {
     // --- Site Info ---
@@ -22,7 +38,7 @@ pub struct AppState {
     /// Number of attended neighbours at launch, for the discovery phase
     nb_first_attended_neighbours: i64,
 
-    // --- Message Diffusion Info ---
+    // --- Message Diffusion Info for Transaction ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
     pub parent_addr_for_transaction_wave: std::collections::HashMap<String, std::net::SocketAddr>,
     /// Number of response expected from our direct neighbours (deg(1) neighbours for this site) = nb of connected neighbours - 1 (parent) for a specific wave initiator id
@@ -31,6 +47,13 @@ pub struct AppState {
     // --- Logical Clocks ---
     /// Logical clock implementation for distributed synchronization
     clocks: crate::clock::Clock,
+
+    // GLobal mutex
+    pub global_mutex_fifo: std::collections::HashMap<String, MutexStamp>,
+    pub waiting_sc: bool,
+    pub in_sc: bool,
+    pub notify_sc: std::sync::Arc<tokio::sync::Notify>,
+    pub pending_commands: std::collections::VecDeque<crate::control::CriticalCommands>,
 }
 
 #[cfg(feature = "server")]
@@ -46,6 +69,9 @@ impl AppState {
         let nb_of_attended_neighbors = std::collections::HashMap::new();
         let in_use_neighbors = Vec::new();
         let sockets_for_connected_peers = std::collections::HashMap::new();
+        let gm = std::collections::HashMap::new();
+        let waiting_sc = false;
+        let in_sc = false;
 
         Self {
             site_id,
@@ -58,6 +84,11 @@ impl AppState {
             clocks,
             sync_needed: false,
             nb_first_attended_neighbours: 0,
+            global_mutex_fifo: gm,
+            waiting_sc,
+            in_sc,
+            notify_sc: std::sync::Arc::new(tokio::sync::Notify::new()),
+            pending_commands: std::collections::VecDeque::new(),
         }
     }
 
@@ -190,6 +221,145 @@ impl AppState {
         self.site_addr.clone()
     }
 
+    pub async fn acquire_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::message::{Message, MessageInfo, NetworkMessageCode};
+        use crate::network::diffuse_message_without_lock;
+
+        self.update_clock(None).await;
+
+        self.global_mutex_fifo.insert(
+            self.site_id.clone(),
+            MutexStamp {
+                tag: MutexTag::Request,
+                date: self.clocks.get_lamport().clone(),
+            },
+        );
+
+        let msg = Message {
+            sender_id: self.site_id.clone(),
+            sender_addr: self.site_addr,
+            message_initiator_id: self.site_id.clone(),
+            message_initiator_addr: self.site_addr,
+            clock: self.clocks.clone(),
+            command: None,
+            info: MessageInfo::AcquireMutex(crate::message::AcquireMutexPayload),
+            code: NetworkMessageCode::AcquireMutex,
+        };
+
+        let should_diffuse = {
+            // initialisation des paramètres avant la diffusion d'un message
+            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
+            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
+            self.get_nb_connected_neighbours() > 0
+        };
+
+        if should_diffuse {
+            self.notify_sc.notify_waiters();
+            self.in_sc = false;
+            self.waiting_sc = true;
+            log::info!("Début de la diffusion d'une acquisition de mutex");
+            diffuse_message_without_lock(
+                &msg,
+                self.get_site_addr(),
+                self.get_site_id().as_str(),
+                self.get_connected_nei_addr(),
+                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+            )
+            .await?;
+        } else {
+            log::info!("Il n'y a pas de voisins, on prends la section critique");
+            self.in_sc = true;
+            self.waiting_sc = false;
+            self.notify_sc.notify_waiters();
+        }
+
+        Ok(())
+    }
+
+    pub async fn release_mutex(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::message::{Message, MessageInfo, NetworkMessageCode};
+        use crate::network::diffuse_message_without_lock;
+
+        self.update_clock(None).await;
+
+        let msg = Message {
+            sender_id: self.site_id.clone(),
+            sender_addr: self.site_addr,
+            message_initiator_id: self.site_id.clone(),
+            message_initiator_addr: self.site_addr,
+            clock: self.clocks.clone(),
+            command: None,
+            info: MessageInfo::ReleaseMutex(crate::message::ReleaseMutexPayload),
+            code: NetworkMessageCode::ReleaseGlobalMutex,
+        };
+
+        self.global_mutex_fifo.remove(&self.site_id);
+        self.in_sc = false;
+        self.waiting_sc = false;
+
+        let should_diffuse = {
+            // initialisation des paramètres avant la diffusion d'un message
+            self.set_parent_addr(self.site_id.to_string(), self.site_addr);
+            self.set_nb_nei_for_wave(self.site_id.to_string(), self.get_nb_connected_neighbours());
+            self.get_nb_connected_neighbours() > 0
+        };
+
+        if should_diffuse {
+            log::info!("Début de la diffusion d'un relachement de mutex");
+            diffuse_message_without_lock(
+                &msg,
+                self.get_site_addr(),
+                self.get_site_id().as_str(),
+                self.get_connected_nei_addr(),
+                self.get_parent_addr_for_wave(msg.message_initiator_id.clone()),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub fn try_enter_sc(&mut self) {
+        // MUST BE CALLED ONLY AFTER A SUCCESSFUL WAVE AFTER ACQUIRE MUTEX
+        // This function checks if the site can enter the critical section
+        // It checks if the site is waiting for the critical section and if it can enter
+        // based on the FIFO order of requests in the global mutex FIFO.
+
+        // Pour respecter l'algo du poly il faut que la vague soit complete
+        // c'est à dire que tout le monde ait répondu ACK pour appeller cette fonction
+        // sinon on va entrer en section critique à un moment sans qu'un des peers ait noté notre demande
+        if !self.waiting_sc {
+            return;
+        }
+        let my_stamp = match self.global_mutex_fifo.get(&self.site_id) {
+            Some(s) => *s,
+            None => return, // No local request found
+        };
+        let me = (my_stamp.date, self.site_id.clone());
+
+        // ici on compara les stamps des autres demandes, est-ce qu'on est le suivant dans la FIFO ?
+        // si oui on peut entrer en section critique
+        let ok = self.global_mutex_fifo.iter().all(|(id, stamp)| {
+            if id == &self.site_id {
+                true
+            } else {
+                match stamp.tag {
+                    MutexTag::Request => me <= (stamp.date, id.clone()),
+                    _ => true,
+                }
+            }
+        });
+
+        if ok {
+            self.waiting_sc = false;
+            self.in_sc = true;
+            // All other sites are notified that we are in critical section
+            self.notify_sc.notify_waiters(); // notifies worker to execute pending commands
+            // We remove obsolete Releases
+            self.global_mutex_fifo
+                .retain(|_, s| s.tag != MutexTag::Release);
+        }
+    }
+
     /// Returns the local address as a string
     pub fn get_site_addr_as_string(&self) -> String {
         self.site_addr.to_string()
@@ -282,6 +452,17 @@ impl AppState {
     pub async fn save_local_state(&self) {
         // this is likely to be called whenever the clocks are updated
         let _ = crate::db::update_local_state(&self.site_id, self.clocks.clone());
+    }
+
+    /// For tokyo test, set manually the number of connected neighbours
+    /// DO NOT USE IN PRODUCTION
+    #[cfg(test)]
+    pub fn set_nb_connected_neighbours(&mut self, nb: i64) {
+        self.connected_neighbours_addrs.clear();
+        for _ in 0..nb {
+            self.connected_neighbours_addrs
+                .push("127.0.0.1:8081".parse().unwrap());
+        }
     }
 }
 

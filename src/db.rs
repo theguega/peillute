@@ -242,6 +242,7 @@ pub fn create_user(unique_name: &str) -> rusqlite::Result<()> {
     }
 
     {
+        log::debug!("Ajout de l'utilisateur {}", unique_name);
         let conn = DB_CONN.lock().unwrap();
         conn.execute(
             "INSERT INTO User (unique_name, solde) VALUES (?1, 0)",

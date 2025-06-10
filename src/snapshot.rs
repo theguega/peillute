@@ -217,7 +217,7 @@ pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error
     let local_txs = crate::db::get_local_transaction_log()?;
     let summaries: Vec<TxSummary> = local_txs.iter().map(|t| t.into()).collect();
 
-    let (site_id, clock, expected, site_addr) = {
+    let (site_id, clock, expected) = {
         let st = crate::state::LOCAL_APP_STATE.lock().await;
         // We expect a snapshot from all connected peers
         // + 1 for self
@@ -231,12 +231,7 @@ pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error
                 st.get_connected_nei_addr().len() + 1
             }
         };
-        (
-            st.get_site_id(),
-            st.get_clock(),
-            expected_peers,
-            st.get_site_addr(),
-        )
+        (st.get_site_id(), st.get_clock(), expected_peers)
     };
 
     {
@@ -266,38 +261,6 @@ pub async fn start_snapshot(mode: SnapshotMode) -> Result<(), Box<dyn std::error
                     "Start snapshot is not supposed to be called when there is no neighbours with network mode"
                 );
             }
-        }
-    }
-
-    // Should not diffuse in the network with this mode
-    // Already done during network interaction
-    if mode != SnapshotMode::NetworkMode {
-        use crate::message::{Message, MessageInfo, NetworkMessageCode};
-        use crate::network::diffuse_message;
-
-        log::debug!("Snapshot request, this log should only appear on the initiator");
-        let msg = Message {
-            command: None,
-            code: NetworkMessageCode::SnapshotRequest,
-            info: MessageInfo::None,
-            sender_addr: site_addr,
-            sender_id: site_id.to_string(),
-            message_initiator_id: site_id.to_string(),
-            message_initiator_addr: site_addr,
-            clock: clock.clone(),
-        };
-
-        let should_diffuse = {
-            // initialisation des paramètres avant la diffusion d'un message
-            let mut state = crate::state::LOCAL_APP_STATE.lock().await;
-            let nb_neigh = state.get_nb_connected_neighbours();
-            state.set_parent_addr(site_id.to_string(), site_addr);
-            state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-            nb_neigh > 0
-        };
-
-        if should_diffuse {
-            diffuse_message(&msg).await?;
         }
     }
 

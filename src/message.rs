@@ -38,6 +38,14 @@ pub enum NetworkMessageCode {
     SnapshotRequest,
     /// Message containing a state snapshot
     SnapshotResponse,
+    /// Request to acquire the global mutex
+    AcquireMutex,
+    /// Request to release the global mutex
+    ReleaseGlobalMutex,
+    /// Acknowledgment of the global mutex acquisition
+    AckGlobalMutex,
+    /// Acknowledgment of the global mutex acquisition
+    AckReleaseGlobalMutex,
 }
 
 #[cfg(feature = "server")]
@@ -80,8 +88,33 @@ pub enum MessageInfo {
     Refund(Refund),
     /// Response to a snapshot request
     SnapshotResponse(SnapshotResponse),
+    /// Initiate a critical section
+    AcquireMutex(AcquireMutexPayload),
+    /// Release a critical section
+    ReleaseMutex(ReleaseMutexPayload),
+    /// Acknowledge a critical section
+    AckMutex(AckMutexPayload),
     /// No payload
     None,
+}
+
+#[cfg(feature = "server")]
+/// Payload for the AcquireMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AcquireMutexPayload;
+
+#[cfg(feature = "server")]
+/// Payload for the ReleaseMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[cfg(feature = "server")]
+/// Payload for the AckMutex message
+pub struct ReleaseMutexPayload;
+
+#[cfg(feature = "server")]
+/// Payload for the AckMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AckMutexPayload {
+    pub clock: i64,
 }
 
 #[cfg(feature = "server")]
@@ -96,6 +129,7 @@ pub struct SnapshotResponse {
     pub tx_log: Vec<crate::snapshot::TxSummary>,
 }
 
+#[cfg(feature = "server")]
 /// Request to create a new user
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct CreateUser {

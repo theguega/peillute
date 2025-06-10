@@ -58,6 +58,7 @@ async fn main() -> rusqlite::Result<(), Box<dyn std::error::Error>> {
         let _ = db::init_db();
     }
 
+    control::control_worker();
     // Init the logger
     env_logger::init();
 

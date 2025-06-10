@@ -68,19 +68,6 @@ pub fn Home() -> Element {
                     placeholder: "New user name",
                     value: user_input,
                     oninput: move |event| user_input.set(event.value()),
-                    onkeydown: move |event: dioxus::events::KeyboardEvent| {
-                        if let dioxus::events::Key::Enter = event.key() {
-                            let user_input_clone = user_input.clone();
-                            spawn(async move {
-                                if let Ok(_) = add_user(user_input_clone.to_string()).await {
-                                    user_input.set("".to_string());
-                                }
-                                if let Ok(data) = get_users().await {
-                                    users.set(data);
-                                }
-                            });
-                        }
-                    },
                 }
                 button {
                     id: "submit",
@@ -114,48 +101,15 @@ async fn get_users() -> Result<Vec<String>, ServerFnError> {
 /// to all nodes in the network.
 #[server]
 async fn add_user(name: String) -> Result<(), ServerFnError> {
-    use crate::control::Command;
-    use crate::db;
-    use crate::message::{CreateUser, Message, MessageInfo, NetworkMessageCode};
-    use crate::network::diffuse_message;
-
     if name == "" {
         return Err(ServerFnError::new("User name cannot be empty."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
-    let (local_clk, local_addr, node) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr();
-        let node = state.get_site_id().to_string();
-        let _ = state.update_clock(None);
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    db::create_user(&name)?;
-
-    let msg = Message {
-        command: Some(Command::CreateUser),
-        info: MessageInfo::CreateUser(CreateUser::new(name)),
-        code: NetworkMessageCode::Transaction,
-        clock: local_clk,
-        sender_addr: local_addr,
-        sender_id: node.to_string(),
-        message_initiator_id: node.to_string(),
-        message_initiator_addr: local_addr,
-    };
-
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::CreateUser {
+        name: name,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(node.to_string(), local_addr);
-        state.set_nb_nei_for_wave(node.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
             "Failed to diffuse the create user message: {e}"
         )));

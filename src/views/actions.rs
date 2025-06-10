@@ -637,52 +637,12 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
-    let (clock, site_addr, site_id) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr().clone();
-        let node = state.get_site_id().to_string();
-        state.update_clock(None).await;
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    if let Err(_e) = crate::db::deposit(
-        &user,
-        amount,
-        clock.get_lamport(),
-        site_id.as_str(),
-        clock.get_vector_clock_map(),
-    ) {
-        return Err(ServerFnError::new("Error with database"));
-    }
-
-    use crate::control::Command;
-    use crate::message::{Deposit, MessageInfo, NetworkMessageCode};
-
-    use crate::message::Message;
-    use crate::network::diffuse_message;
-
-    let msg = Message {
-        command: Some(Command::Deposit),
-        info: MessageInfo::Deposit(Deposit::new(user, amount)),
-        code: NetworkMessageCode::Transaction,
-        clock: clock,
-        sender_addr: site_addr,
-        sender_id: site_id.to_string(),
-        message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr,
-    };
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::Deposit {
+        name: user,
+        amount: amount,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
             "Failed to diffuse the deposit message: {e}"
         )));
@@ -697,53 +657,14 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
-    let (clock, site_addr, site_id) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr();
-        let node = state.get_site_id().to_string();
-        state.update_clock(None).await;
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    if let Err(e) = crate::db::withdraw(
-        &user,
-        amount,
-        clock.get_lamport(),
-        site_id.as_str(),
-        clock.get_vector_clock_map(),
-    ) {
-        return Err(ServerFnError::new(e.to_string()));
-    }
-
-    use crate::control::Command;
-    use crate::message::{Message, MessageInfo, NetworkMessageCode, Withdraw};
-    use crate::network::diffuse_message;
-
-    let msg = Message {
-        command: Some(Command::Withdraw),
-        info: MessageInfo::Withdraw(Withdraw::new(user, amount)),
-        code: NetworkMessageCode::Transaction,
-        clock: clock,
-        sender_addr: site_addr,
-        sender_id: site_id.to_string(),
-        message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr,
-    };
-
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::Withdraw {
+        name: user,
+        amount: amount,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to diffuse the withdraw message: {e}"
+            "Failed to enqueue the withdraw message: {e}"
         )));
     }
 
@@ -756,55 +677,14 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
-    let (clock, site_addr, site_id) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr();
-        let node = state.get_site_id().to_string();
-        state.update_clock(None).await;
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    if let Err(e) = crate::db::create_transaction(
-        &user,
-        "NULL",
-        amount,
-        clock.get_lamport(),
-        site_id.as_str(),
-        "",
-        clock.get_vector_clock_map(),
-    ) {
-        return Err(ServerFnError::new(e.to_string()));
-    }
-
-    use crate::control::Command;
-    use crate::message::{Message, MessageInfo, NetworkMessageCode, Pay};
-    use crate::network::diffuse_message;
-
-    let msg = Message {
-        command: Some(Command::Pay),
-        info: MessageInfo::Pay(Pay::new(user, amount)),
-        code: NetworkMessageCode::Transaction,
-        clock: clock,
-        sender_addr: site_addr,
-        sender_id: site_id.to_string(),
-        message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr,
-    };
-
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::Pay {
+        name: user,
+        amount: amount,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
-            "Failed to diffuse the pay message: {e}"
+            "Failed to enqueue the pay message: {e}"
         )));
     }
 
@@ -816,59 +696,19 @@ async fn transfer_from_user_to_user_server(
     from_user: String,
     to_user: String,
     amount: f64,
-    optional_message: String,
+    _optional_message: String,
 ) -> Result<(), ServerFnError> {
     if amount < 0.0 {
         return Err(ServerFnError::new("Amount cannot be negative."));
     }
 
-    use crate::state::LOCAL_APP_STATE;
-
-    let (clock, site_addr, site_id) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr();
-        let node = state.get_site_id().to_string();
-        state.update_clock(None).await;
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    if let Err(e) = crate::db::create_transaction(
-        &from_user,
-        &to_user,
-        amount,
-        clock.get_lamport(),
-        site_id.as_str(),
-        optional_message.as_str(),
-        clock.get_vector_clock_map(),
-    ) {
-        return Err(ServerFnError::new(e.to_string()));
-    }
-
-    use crate::control::Command;
-    use crate::message::{Message, MessageInfo, NetworkMessageCode, Transfer};
-    use crate::network::diffuse_message;
-
-    let msg = Message {
-        command: Some(Command::Transfer),
-        info: MessageInfo::Transfer(Transfer::new(from_user, to_user, amount)),
-        code: NetworkMessageCode::Transaction,
-        clock: clock,
-        sender_addr: site_addr,
-        sender_id: site_id.to_string(),
-        message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr,
-    };
-
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::Transfer {
+        from: from_user,
+        to: to_user,
+        amount: amount,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
             "Failed to diffuse the transfer message: {e}"
         )));
@@ -894,51 +734,13 @@ async fn refund_transaction_server(
     lamport_time: i64,
     transac_node: String,
 ) -> Result<(), ServerFnError> {
-    use crate::state::LOCAL_APP_STATE;
-
-    let (clock, site_addr, site_id) = {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let local_addr = state.get_site_addr();
-        let node = state.get_site_id().to_string();
-        state.update_clock(None).await;
-        let clock = state.get_clock();
-        (clock, local_addr, node)
-    };
-
-    if let Err(e) = crate::db::refund_transaction(
-        lamport_time,
-        transac_node.as_str(),
-        clock.get_lamport(),
-        site_id.as_str(),
-        clock.get_vector_clock_map(),
-    ) {
-        return Err(ServerFnError::new(e.to_string()));
-    }
-
-    use crate::control::Command;
-    use crate::message::{Message, MessageInfo, NetworkMessageCode, Refund};
-    use crate::network::diffuse_message;
-
-    let msg = Message {
-        command: Some(Command::Refund),
-        info: MessageInfo::Refund(Refund::new(name, lamport_time, transac_node)),
-        code: NetworkMessageCode::Transaction,
-        clock: clock,
-        sender_addr: site_addr,
-        sender_id: site_id.to_string(),
-        message_initiator_id: site_id.to_string(),
-        message_initiator_addr: site_addr,
-    };
-
+    if let Err(e) = crate::control::enqueue_critical(crate::control::CriticalCommands::Refund {
+        name: name,
+        lamport: lamport_time,
+        node: transac_node,
+    })
+    .await
     {
-        // initialisation des paramètres avant la diffusion d'un message
-        let mut state = LOCAL_APP_STATE.lock().await;
-        let nb_neigh = state.get_nb_connected_neighbours();
-        state.set_parent_addr(site_id.to_string(), site_addr);
-        state.set_nb_nei_for_wave(site_id.to_string(), nb_neigh);
-    }
-
-    if let Err(e) = diffuse_message(&msg).await {
         return Err(ServerFnError::new(format!(
             "Failed to diffuse the refund message: {e}"
         )));
