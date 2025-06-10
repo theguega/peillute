@@ -167,18 +167,15 @@ pub async fn announce(ip: &str, start_port: u16, end_port: u16, selected_port: u
         handles.push(handle);
     }
 
-    {
-        let mut state = LOCAL_APP_STATE.lock().await;
-        log::info!(
-            "Attended neighbours : {}",
-            success_count.load(Ordering::SeqCst)
-        );
-        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
-    }
-
     // Await all task
     for handle in handles {
         let _ = handle.await;
+    }
+
+    // Update the number of attended neighbours
+    {
+        let mut state = LOCAL_APP_STATE.lock().await;
+        state.init_nb_first_attended_neighbours(success_count.load(Ordering::SeqCst) as i64);
     }
 }
 
@@ -306,7 +303,7 @@ pub async fn handle_network_message(
                     };
                     // Acquit message to parent
                     log::debug!(
-                        "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                        "Réception d'un message de d'acquisition de mutex, on est sur une feuille, on acquite, envoie à {}",
                         message.sender_addr.to_string().as_str()
                     );
                     send_message(
@@ -539,7 +536,7 @@ pub async fn handle_network_message(
                     };
                     // Acquit message to parent
                     log::debug!(
-                        "Réception d'un message de transaction, on est sur une feuille, on acquite, envoie à {}",
+                        "Réception d'un message de relachement de mutex global, on est sur une feuille, on acquite, envoie à {}",
                         message.sender_addr.to_string().as_str()
                     );
                     send_message(
