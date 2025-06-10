@@ -95,8 +95,13 @@ async fn get_peer_addrs() -> Result<Vec<String>, ServerFnError> {
 /// Ask for a snapshot
 #[server]
 async fn ask_for_snapshot() -> Result<(), ServerFnError> {
-    use crate::snapshot;
-    let _ = snapshot::start_snapshot(snapshot::SnapshotMode::FileMode).await;
+    if let Err(e) =
+        crate::control::enqueue_critical(crate::control::CriticalCommands::FileSnapshot).await
+    {
+        return Err(ServerFnError::new(format!(
+            "[SERVER] Failed make the local snapshot: {e}"
+        )));
+    }
     Ok(())
 }
 

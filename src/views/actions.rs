@@ -615,16 +615,6 @@ async fn get_random_message_server() -> Result<String, ServerFnError> {
 }
 
 #[server]
-async fn debug_print(input: bool) -> Result<(), ServerFnError> {
-    if input {
-        println!("debug print triggered");
-        Ok(())
-    } else {
-        return Err(ServerFnError::new("debug with error"));
-    }
-}
-
-#[server]
 async fn get_users_server() -> Result<Vec<String>, ServerFnError> {
     use crate::db;
     let users = db::get_users()?;
@@ -644,7 +634,7 @@ async fn deposit_for_user_server(user: String, amount: f64) -> Result<(), Server
     .await
     {
         return Err(ServerFnError::new(format!(
-            "Failed to diffuse the deposit message: {e}"
+            "[SERVER] Failed to diffuse deposit : {e}"
         )));
     }
 
@@ -664,7 +654,7 @@ async fn withdraw_for_user_server(user: String, amount: f64) -> Result<(), Serve
     .await
     {
         return Err(ServerFnError::new(format!(
-            "Failed to enqueue the withdraw message: {e}"
+            "[SERVER] Failed to withdraw : {e}"
         )));
     }
 
@@ -683,9 +673,7 @@ async fn pay_for_user_server(user: String, amount: f64) -> Result<(), ServerFnEr
     })
     .await
     {
-        return Err(ServerFnError::new(format!(
-            "Failed to enqueue the pay message: {e}"
-        )));
+        return Err(ServerFnError::new(format!("[SERVER] Failed to pay : {e}")));
     }
 
     Ok(())
@@ -710,7 +698,7 @@ async fn transfer_from_user_to_user_server(
     .await
     {
         return Err(ServerFnError::new(format!(
-            "Failed to diffuse the transfer message: {e}"
+            "[SERVER] Failed to make the transfer: {e}"
         )));
     }
 
@@ -742,7 +730,7 @@ async fn refund_transaction_server(
     .await
     {
         return Err(ServerFnError::new(format!(
-            "Failed to diffuse the refund message: {e}"
+            "[SERVER] Failed to refund : {e}"
         )));
     }
 
