@@ -236,6 +236,14 @@ pub async fn handle_network_message(
             message.clone()
         );
 
+        {
+            let mut state = LOCAL_APP_STATE.lock().await;
+            state.add_site_id(
+                message.message_initiator_id.clone(),
+                message.message_initiator_addr.clone(),
+            );
+        }
+
         match message.code {
             NetworkMessageCode::AcquireMutex => {
                 // We store the request

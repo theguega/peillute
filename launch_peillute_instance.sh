@@ -135,8 +135,8 @@ run_demo() {
         osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10009 --cli-peers 127.0.0.1:10005 --cli-db-id 9\""
         sleep 0.2
         osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10007 --cli-peers 127.0.0.1:10006,127.0.0.1:10008 --cli-db-id 7\""
-        sleep 0.2
-        osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10003 --cli-peers 127.0.0.1:10000,127.0.0.1:10002 --cli-db-id 3\""
+        #sleep 0.2
+        #osascript -e "tell app \"Terminal\" to do script \"cd $(pwd) && RUST_LOG=$LOG_LEVEL ./server --cli-port 10003 --cli-peers 127.0.0.1:10000,127.0.0.1:10002 --cli-db-id 3\""
     else
         # Linux
         sleep 0.2

@@ -4,6 +4,7 @@
 //! peer management, and logical clock synchronization.
 
 #[cfg(feature = "server")]
+#[cfg(feature = "server")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutexTag {
     Request,
@@ -37,6 +38,8 @@ pub struct AppState {
     sync_needed: bool,
     /// Number of attended neighbours at launch, for the discovery phase
     nb_first_attended_neighbours: i64,
+
+    pub site_ids_to_adr: std::collections::HashMap<std::net::SocketAddr, String>,
 
     // --- Message Diffusion Info for Transaction ---
     /// Adress of the parent (deg(1) neighbour for this site) for a specific wave from initiator id
@@ -89,6 +92,13 @@ impl AppState {
             in_sc,
             notify_sc: std::sync::Arc::new(tokio::sync::Notify::new()),
             pending_commands: std::collections::VecDeque::new(),
+            site_ids_to_adr: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn add_site_id(&mut self, site_id: String, addr: std::net::SocketAddr) {
+        if !self.site_ids_to_adr.contains_key(&addr) {
+            self.site_ids_to_adr.insert(addr, site_id);
         }
     }
 
@@ -180,6 +190,11 @@ impl AppState {
             .position(|x| *x == addr_to_remove)
         {
             self.connected_neighbours_addrs.remove(pos);
+            let site_id = self.site_ids_to_adr.get(&addr_to_remove);
+            if let Some(site_id) = site_id {
+                self.global_mutex_fifo.remove(site_id);
+                self.site_ids_to_adr.remove(&addr_to_remove);
+            }
 
             // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
@@ -208,7 +223,11 @@ impl AppState {
             .position(|x| *x == *addr_to_remove)
         {
             self.connected_neighbours_addrs.remove(pos);
-
+            let site_id = self.site_ids_to_adr.get(&addr_to_remove);
+            if let Some(site_id) = site_id {
+                self.global_mutex_fifo.remove(site_id);
+                self.site_ids_to_adr.remove(&addr_to_remove);
+            }
             // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
