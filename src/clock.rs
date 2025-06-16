@@ -81,8 +81,13 @@ impl Clock {
     fn update_vector(&mut self, received_vc: &std::collections::HashMap<String, i64>) {
         for (site_id, clock_value) in received_vc {
             let current_value = self.vector_clock.entry(site_id.clone()).or_insert(0);
-            *current_value = (*current_value).max(*clock_value);
+            *current_value = (*current_value).max(*clock_value) + 1;
         }
+    }
+
+    /// Updates the lamport clock with received value, taking the maximum of local and received values
+    fn update_lamport(&mut self, received_lc: &i64) {
+        self.lamport_clock = (self.lamport_clock).max(*received_lc) + 1;
     }
 
     /// Update the current clock value with an optional clock
@@ -93,11 +98,13 @@ impl Clock {
     ///
     /// Then we call update methods to take the maximum of the received clocks if any
     pub fn update_clock(&mut self, local_site_id: &str, received_clock: Option<&Self>) {
-        self.increment_lamport();
-        self.increment_vector(local_site_id);
-
         if let Some(rc) = received_clock {
             self.update_vector(rc.get_vector_clock_map());
+            self.update_lamport(rc.get_lamport());
+        } else {
+            // If the received clock is None, we increment the local lamport clock and the local vector clock
+            self.increment_lamport();
+            self.increment_vector(local_site_id);
         }
     }
 }
@@ -160,8 +167,8 @@ mod tests {
         local.update_vector(&incoming.get_vector_clock_map());
 
         let local_vc = local.get_vector_clock_map();
-        assert_eq!(local_vc.get("A"), Some(&2));
-        assert_eq!(local_vc.get("B"), Some(&1));
+        assert_eq!(local_vc.get("A"), Some(&3));
+        assert_eq!(local_vc.get("B"), Some(&2));
     }
 
     #[test]
@@ -194,9 +201,9 @@ mod tests {
         local.update_clock("A", Some(&received));
 
         // Lamport clock should be max(received, local) + 1
-        assert_eq!(*local.get_lamport(), 2);
+        assert_eq!(*local.get_lamport(), 3);
         let vc = local.get_vector_clock_map();
         assert_eq!(vc.get("A"), Some(&3)); // Incremented locally + merged max
-        assert_eq!(vc.get("B"), Some(&1));
+        assert_eq!(vc.get("B"), Some(&2));
     }
 }
