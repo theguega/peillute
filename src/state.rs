@@ -4,8 +4,7 @@
 //! peer management, and logical clock synchronization.
 
 #[cfg(feature = "server")]
-#[cfg(feature = "server")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutexTag {
     Request,
     Release,
@@ -14,7 +13,7 @@ pub enum MutexTag {
 }
 
 #[cfg(feature = "server")]
-#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Copy, Clone, Debug)]
 pub struct MutexStamp {
     pub tag: MutexTag,
     pub date: i64,
@@ -94,6 +93,20 @@ impl AppState {
             pending_commands: std::collections::VecDeque::new(),
             site_ids_to_adr: std::collections::HashMap::new(),
         }
+    }
+
+    pub fn get_global_mutex_fifo(&self) -> &std::collections::HashMap<String, MutexStamp> {
+        &self.global_mutex_fifo
+    }
+
+    pub fn set_global_mutex_fifo(
+        &mut self,
+        global_mutex_fifo: std::collections::HashMap<String, MutexStamp>,
+    ) {
+        if self.global_mutex_fifo.len() >= global_mutex_fifo.len() {
+            return; // Do not overwrite if the new FIFO is smaller or equal
+        }
+        self.global_mutex_fifo = global_mutex_fifo;
     }
 
     pub fn add_site_id(&mut self, site_id: String, addr: std::net::SocketAddr) {
@@ -193,10 +206,11 @@ impl AppState {
             let site_id = self.site_ids_to_adr.get(&addr_to_remove);
             if let Some(site_id) = site_id {
                 self.global_mutex_fifo.remove(site_id);
+                self.attended_neighbours_nb_for_transaction_wave
+                    .remove(site_id);
+                self.parent_addr_for_transaction_wave.remove(site_id);
                 self.site_ids_to_adr.remove(&addr_to_remove);
             }
-
-            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value
@@ -226,9 +240,11 @@ impl AppState {
             let site_id = self.site_ids_to_adr.get(&addr_to_remove);
             if let Some(site_id) = site_id {
                 self.global_mutex_fifo.remove(site_id);
+                self.attended_neighbours_nb_for_transaction_wave
+                    .remove(site_id);
+                self.parent_addr_for_transaction_wave.remove(site_id);
                 self.site_ids_to_adr.remove(&addr_to_remove);
             }
-            // TODO: what happend if it occur during a wave diffusion ? - hard to simulate
 
             // We can keep the clock value for the site we want to remove
             // if the site re-appears, it will be updated with the new clock value

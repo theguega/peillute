@@ -642,6 +642,9 @@ pub async fn process_network_command(
         crate::message::MessageInfo::None => {
             log::error!("Should not process None message");
         }
+        crate::message::MessageInfo::Acknowledge(_) => {
+            log::error!("Should not process Acknowledge message");
+        }
     }
 
     Ok(())

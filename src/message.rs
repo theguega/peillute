@@ -74,6 +74,8 @@ pub struct Message {
 /// Types of message payloads for different operations
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub enum MessageInfo {
+    /// Acknowledgment of a new connection
+    Acknowledge(AcknowledgePayload),
     /// Create a new user
     CreateUser(CreateUser),
     /// Deposit money into an account
@@ -96,6 +98,14 @@ pub enum MessageInfo {
     AckMutex(AckMutexPayload),
     /// No payload
     None,
+}
+
+#[cfg(feature = "server")]
+/// Payload for the AcquireMutex message
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct AcknowledgePayload {
+    /// Logical clock state of the acknowledging node
+    pub global_fifo: std::collections::HashMap<String, crate::state::MutexStamp>,
 }
 
 #[cfg(feature = "server")]

@@ -3,3 +3,4 @@
 target
 *.db
 snapshot*.json
+.source_hash
