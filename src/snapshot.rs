@@ -138,6 +138,18 @@ impl SnapshotManager {
 
         log::debug!("All local snapshots received, processing snapshot.");
 
+        // In Sync and Network modes we simply aggregate all received
+        // transactions without enforcing snapshot consistency. This prevents
+        // dropping valid transactions when a node joins and requests a global
+        // snapshot or when an intermediate node aggregates snapshots from its
+        // children
+        if matches!(
+            self.mode,
+            SnapshotMode::SyncMode | SnapshotMode::NetworkMode
+        ) {
+            return Some(self.build_snapshot(&self.received));
+        }
+
         if GlobalSnapshot::is_consistent(&self.received) {
             return Some(self.build_snapshot(&self.received));
         }

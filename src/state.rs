@@ -391,6 +391,13 @@ impl AppState {
                 .retain(|_, s| s.tag != MutexTag::Release);
         } else {
             println!("\x1b[1;31mSECTION CRITIQUE REFUSEE !\x1b[0m");
+            // print fifo order
+            println!("FIFO order:");
+            for (id, stamp) in &self.global_mutex_fifo {
+                println!("{}: {:?} - {:?}", id, stamp.tag, stamp.date);
+            }
+            // print my stamp
+            println!("{}: {:?} - {:?}", self.site_id, my_stamp.tag, my_stamp.date);
         }
     }
 

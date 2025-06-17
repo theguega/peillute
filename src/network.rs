@@ -843,8 +843,10 @@ pub async fn handle_network_message(
                     let mut state = LOCAL_APP_STATE.lock().await;
                     state.remove_peer(message.message_initiator_addr).await;
                 }
-
-                log::debug!("Site {} disconnected", message.message_initiator_id);
+                println!(
+                    "\x1b[1;31mSITE {} DISCONNECTED !\x1b[0m",
+                    message.message_initiator_id
+                );
             }
             NetworkMessageCode::SnapshotRequest => {
                 // messages bleus
