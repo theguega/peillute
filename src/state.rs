@@ -362,9 +362,6 @@ impl AppState {
         // Pour respecter l'algo du poly il faut que la vague soit complete
         // c'est à dire que tout le monde ait répondu ACK pour appeller cette fonction
         // sinon on va entrer en section critique à un moment sans qu'un des peers ait noté notre demande
-        if !self.waiting_sc {
-            return;
-        }
         let my_stamp = match self.global_mutex_fifo.get(&self.site_id) {
             Some(s) => *s,
             None => return, // No local request found
@@ -392,6 +389,8 @@ impl AppState {
             // We remove obsolete Releases
             self.global_mutex_fifo
                 .retain(|_, s| s.tag != MutexTag::Release);
+        } else {
+            println!("\x1b[1;31mSECTION CRITIQUE REFUSEE !\x1b[0m");
         }
     }
 
