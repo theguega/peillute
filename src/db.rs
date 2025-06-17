@@ -143,20 +143,26 @@ pub fn update_db_with_snapshot(
         return;
     }
 
-    for txs in snapshot.missing.values() {
-        for tx in txs {
-            let optional_msg = "";
+    // sort tsx actions by lamport time
+    let mut sorted_txs: Vec<_> = snapshot
+        .missing
+        .values()
+        .flat_map(|txs| txs.iter())
+        .collect();
+    sorted_txs.sort_by_key(|tx| tx.lamport_time);
 
-            let _ = crate::db::create_transaction(
-                &tx.from_user,
-                &tx.to_user,
-                (tx.amount_in_cent as f64) / 100.0,
-                &tx.lamport_time,
-                &tx.source_node,
-                &optional_msg,
-                vector_clock,
-            );
-        }
+    for tx in sorted_txs {
+        let optional_msg = "";
+
+        let _ = crate::db::create_transaction(
+            &tx.from_user,
+            &tx.to_user,
+            (tx.amount_in_cent as f64) / 100.0,
+            &tx.lamport_time,
+            &tx.source_node,
+            &optional_msg,
+            vector_clock,
+        );
     }
 }
 
