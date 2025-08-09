@@ -1,120 +1,162 @@
-# Peillute - A Distributed Cross-Platform Payment App in Rust
+<p align="center">
+  <a href="https://github.com/guegathe/peillute">
+    <img src="assets/icon.png" alt="Logo" width="80" height="80">
+  </a>
+</p>
 
-This project aims to recreate "Pay'UTC" as a distributed application in Rust using TCP for communication between nodes. The goal is to maintain a common database on each node using what we learned through the course "SR05" at Université de Technologie de Compiègne.
+<h1 align="center">Peillute</h1>
 
-Each node can be launched independently; they will automatically connect to other instances present in the network and start exchanging data. We use vector clocks to ensure that transactions are processed in the right order, and we also use a snapshot mechanism to ensure that the database is always consistent.
+<p align="center">
+  A Distributed Cross-Platform Payment App in Rust
+  <br />
+  <a href="https://guegathe.gitlab.utc.fr/peillute/doc/peillute/"><strong>Explore the docs »</strong></a>
+  <br />
+  <br />
+  <a href="https://gitlab.utc.fr/guegathe/peillute/-/pipelines">
+    <img src="https://gitlab.utc.fr/guegathe/peillute/badges/main/pipeline.svg" alt="CI/CD Pipeline">
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+  </a>
+  <a href="https://www.rust-lang.org/">
+    <img src="https://img.shields.io/badge/Made%20with-Rust-orange?logo=rust" alt="Made with Rust">
+  </a>
+</p>
 
-Through this project, we also wanted to create a "production-like" application with all the learning from our internship. That's why we implemented automatic tests, documentation generation, and CI/CD pipelines.
+## 📖 About The Project
 
-Peillute is available as a terminal application but can also be accessed as a web app using [Dioxus](https://dioxuslabs.com/).
+Peillute is a distributed, cross-platform payment application built with Rust. It's inspired by "Pay'UTC" and designed to explore concepts of distributed systems from the SR05 course at the Université de Technologie de Compiègne.
 
-Dioxus allows us to create a web application with a single binary that contains both the server (database, networking, etc.) and the client (UI).
+The core of Peillute is a peer-to-peer network where each node maintains a synchronized database. Communication happens over TCP, and data consistency is ensured using vector clocks and a snapshot mechanism.
 
-[TOC]
+This project also emphasizes a "production-like" development workflow, incorporating automatic testing, documentation generation, and CI/CD pipelines.
+
+**Key Features:**
+
+- **Distributed Database:** Each node holds a copy of the database.
+- **P2P Networking:** Nodes automatically discover and connect to peers on the network.
+- **Data Consistency:** Vector clocks for ordering transactions and snapshots for state consistency.
+- **Cross-Platform:** Runs on the command line or as a web application thanks to the [Dioxus](https://dioxuslabs.com/) framework.
+- **Modern Workflow:** Includes CI/CD, unit tests, and automated documentation.
 
 <p align="center">
   <img src="assets/doc/peillute_pay_page.jpeg" alt="Pay page" width="49%">
   <img src="assets/doc/peillute_system_info.jpeg" alt="System Info" width="49%">
 </p>
 
-## Project Documentation
+---
 
-The project documentation is automatically generated using `cargo doc` and deployed using the CI/CD pipeline. You can find it here: [peillute](https://guegathe.gitlab.utc.fr/peillute/doc/peillute/)
-
-## 🚀 Installation
+## 🚀 Getting Started
 
 ### Prerequisites
 
-Make sure you have the following installed on your system:
-- Rust
-- Cargo
-- Dioxus
+- **Rust & Cargo:** [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
+- **Dioxus CLI:** Needed for web and desktop builds.
+  ```sh
+  cargo install dioxus-cli
+  ```
+- **Browser:** For the web interface, a Chromium-based browser or Safari is recommended as Dioxus may have issues with Firefox.
 
-#### Chromium
+### Installation & Launch
 
-Dioxus seems to have some problems running on Firefox, please use a Chromium based browser.
-Safari seems to work fine as well.
+The easiest way to get started is to use the provided launch script.
 
-e.g. Google Chrome
+1.  **Clone the repository:**
+    ```sh
+    git clone https://gitlab.utc.fr/guegathe/peillute.git
+    cd peillute
+    ```
+2.  **Run the launch script:**
+    The script can install system dependencies (on Linux) and run the application with various flags.
 
-### 1. Clone the Repository
+    ```sh
+    # Run with web UI (default)
+    ./launch_peillute_instance.sh
 
-```sh
-git clone https://gitlab.utc.fr/guegathe/peillute.git -j8
-```
+    # Run in CLI mode
+    ./launch_peillute_instance.sh -cli
 
-### 2. Automatically Install Dependencies and Run Peillute Instance
+    # Run a demo with pre-filled data
+    ./launch_peillute_instance.sh -demo
 
-```sh
-# the install flag is only necessary on Linux (debian or fedora based) to install some apt packages needed for Dioxus
-./launch_peillute_instance.sh -install
+    # For more options, see the script or use a potential -help flag
+    ```
 
-# To be more verbose:
-./launch_peillute_instance.sh -debug
+<details>
+<summary>Manual Installation</summary>
 
-# To run in CLI mode without UI:
-./launch_peillute_instance.sh -cli
+If you prefer a manual setup:
 
-# To run in CLI mode with debug logs:
-./launch_peillute_instance.sh -debug -cli
+1.  **Install Rust:**
+    ```sh
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+2.  **Install `cargo-binstall` (for faster Dioxus CLI installation):**
+    ```sh
+    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+    ```
+3.  **Install Dioxus CLI:**
+    ```sh
+    cargo binstall dioxus-cli
+    ```
+4.  **For Linux/Windows:** Check the [Dioxus Getting Started Guide](https://dioxuslabs.com/learn/0.6/getting_started/#) for any extra dependencies.
 
-# To run a demo using Dioxus:
-./launch_peillute_instance.sh -demo
+</details>
 
-# To run a demo using Dioxus with debug logs:
-./launch_peillute_instance.sh -debug -demo
+---
 
-# To run a demo using CLI mode:
-./launch_peillute_instance.sh -demo_cli
+## 🛠️ Usage
 
-# To run a demo using CLI mode with debug logs:
-./launch_peillute_instance.sh -debug -demo_cli
-```
+Peillute can be run as a web application or a command-line tool.
 
-### 3. Manually Install Dependencies
+### Web Application
 
-If you prefer to install dependencies manually, follow these steps:
-
-#### Install Rust
-
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-#### Install Cargo bin-install
-
-```sh
-curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-```
-
-#### Install Dioxus
-
-```sh
-cargo binstall dioxus-cli
-```
-
-#### For Linux and Windows Users
-
-Refer to the [Dioxus Getting Started Guide](https://dioxuslabs.com/learn/0.6/getting_started/#) for additional setup instructions.
-
-## 🚀 Compile and Run
-
-### 1. Compile and Run Without the UI
+The default `cargo run` command will start the web server.
 
 ```sh
+# Start the web server
 cargo run
 ```
 
-### Demonstration of Imperfect Network
+You can also build a release version with Dioxus:
 
-The following commands will create a non-perfect network (schema below) with manual peers:
+```sh
+# Bundle the app for web
+dx bundle --release --platform web
+
+# Run the bundled server
+cd target/dx/peillute/release/web
+./server
+```
+
+### Command-Line Interface (CLI)
+
+Use the `-cli` flag with the launch script for the CLI mode.
+
+```sh
+./launch_peillute_instance.sh -cli
+```
+
+To run the CLI mode manually, you will need to pass arguments to the application. You can likely see the available options with a help flag.
+
+```sh
+cargo run -- --help
+```
+
+### Advanced: Simulating a Network
+
+You can simulate a distributed network by running multiple instances and manually specifying their peers.
 
 <p align="center">
   <img src="assets/doc/peillute_network.png" alt="Network" width="80%">
 </p>
 
+<details>
+<summary>Click to see commands for simulating the network above</summary>
+
+Open multiple terminals and run the following commands:
+
 ```sh
-# Create a non-perfect network with manual peers:
 # Terminal 1
 RUST_LOG=debug cargo run -- --cli-port 10000 --cli-peers 127.0.0.1:10001,127.0.0.1:10003 --cli-db-id 0
 # Terminal 2
@@ -137,65 +179,27 @@ RUST_LOG=debug cargo run -- --cli-port 10008 --cli-peers 127.0.0.1:10006,127.0.0
 RUST_LOG=debug cargo run -- --cli-port 10009 --cli-peers 127.0.0.1:10005 --cli-db-id 9
 ```
 
-### 2. Compile with Dioxus (Merges Client and Server)
+</details>
 
-Dioxus is a full-stack cross-platform framework, so Peillute can be deployed on:
+---
 
-- Linux (Desktop)
-- MacOS (Desktop)
-- Windows (Desktop)
-- Web (Browser)
-- Android (Mobile)
-- iOS (Mobile)
+## 🔬 Development & Testing
 
-To compile Peillute with Dioxus, run the following command:
+- **Run all tests:**
+  ```sh
+  cargo test --all-features
+  ```
+- **Format code:**
+  ```sh
+  cargo fmt
+  ```
+- **Generate and open documentation:**
+  ```sh
+  cargo doc --open
+  ```
 
-```sh
-dx bundle --release --platform web
-```
-
-### 3. Run the Binary
-
-Manually run the server:
-
-```sh
-# One instance
-cd target/dx/peillute/release/web
-./server
-
-# Create a non-perfect network with manual peers:
-# Terminal 1:
-RUST_LOG=debug ./server --cli-port 10000 --cli-peers 127.0.0.1:10001,127.0.0.1:10002
-# Terminal 2:
-RUST_LOG=debug ./server --cli-port 10001 --cli-peers 127.0.0.1:10000,127.0.0.1:10002
-# Terminal 3:
-RUST_LOG=debug ./server --cli-port 10002 --cli-peers 127.0.0.1:10000,127.0.0.1:10001
-# Terminal 4:
-RUST_LOG=debug ./server --cli-port 10003 --cli-peers 127.0.0.1:10001,127.0.0.1:10002
-```
-
-## 🛠️ Development and Testing
-
-Unit tests are made to ensure the correctness of the code; they are automatically run using the CI/CD pipeline at each commit.
-
-### Run Unit Tests
-
-```sh
-cargo test --all-features
-```
-
-### Format the Code
-
-```sh
-cargo fmt
-```
-
-### Generate the Documentation
-
-```sh
-cargo doc
-```
+---
 
 ## 📜 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+Distributed under the MIT License. See `LICENSE` file for more information.
